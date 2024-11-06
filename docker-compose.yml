@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  php:
+    image: php:8.1-fpm
+    container_name: php_container
+    volumes:
+      - ./src:/var/www
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx_container
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates
+      - ./src:/var/www
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+    depends_on:
+      - php
+    networks:
+      - app-network
+
+  update_hosts:
+    build:
+      context: .
+      dockerfile: ./docker_files/update_host.Dockerfile
+    privileged: true  # Cần quyền root để sửa file hosts
+
+networks:
+  app-network:
+    driver: bridge
