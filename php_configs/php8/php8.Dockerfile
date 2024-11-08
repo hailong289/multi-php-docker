@@ -1,5 +1,5 @@
 # Chọn image PHP (ví dụ: php:7.4-fpm hoặc php:8.1-fpm)
-FROM php:8.1-fpm
+FROM php:8.3-fpm
 
 # Cài đặt các thư viện phụ thuộc cho các extension PHP
 RUN apt-get update && apt-get install -y \
@@ -18,7 +18,7 @@ RUN pecl install xdebug \
     && docker-php-ext-enable xdebug
 
 # Cấu hình PHP (nếu cần thiết)
-COPY ./php_configs/php8.1/php.ini /usr/local/etc/php/
+COPY ./php_configs/php8/php.ini /usr/local/etc/php/
 
 # Khởi động PHP-FPM
 CMD ["php-fpm"]
