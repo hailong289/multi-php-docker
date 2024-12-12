@@ -7,46 +7,51 @@ services:
       dockerfile: php_configs/php8/php8.Dockerfile
     container_name: php8-container
     volumes:
-      - ../www:/var/www/app
+      - ./web/hola-framework:/var/www/hola-framework
+      - ./web/spa-fnb-retail:/var/www/spa-fnb-retail
+      - ./composer-cache:/root/.composer  # cache Composer và tránh phải cài lại mỗi lần
+    working_dir: /var/www
+    command: >
+      bash -c "
+        composer install --working-dir=/var/www/hola-framework && 
+        php-fpm
+      "
     networks:
       - app-network
 
-  php-7:
-    build:
-      context: .
-      dockerfile: php_configs/php7.4/php7.Dockerfile
-    container_name: php7-container
-    volumes:
-      - ../www:/var/www/app
+  # php-7:
+  #   build:
+  #     context: .
+  #     dockerfile: php_configs/php7.4/php7.Dockerfile
+  #   container_name: php7-container
+  #   volumes:
+  #     - ../www:/var/www/app
+  #   networks:
+  #     - app-network
+
+  redis:
+    image: redis:alpine
+    container_name: redis_container
+    ports:
+      - "6379:6379"
     networks:
       - app-network
-
-#  angular-app:
-#    build:
-#      context: ./docker_files
-#      dockerfile: node.Dockerfile
-#    ports:
-#      - "4201:4200"
-#    volumes:
-#      - ../www/spa-fnb-retail-frontend-sale:/var/www/spa-fnb-retail-frontend-sale
-#    environment:
-#      - NODE_ENV=development
 
   nginx:
-    image: nginx:latest
+    build:
+        context: .
+        dockerfile: nginx/Dockerfile
     container_name: nginx_container
-    volumes:
-      - ./nginx/templates:/etc/nginx/templates
-      - ./nginx/templates:/etc/nginx/templates
-      - ../www:/var/www
-    working_dir: /var/www
     env_file:
       - .env
+    volumes:
+      - ./web/hola-framework:/var/www/hola-framework
+      - ./web/spa-fnb-retail:/var/www/spa-fnb-retail
     ports:
       - "80:80"
     depends_on:
       - php-8
-      - php-7
+#      - php-7
     networks:
       - app-network
 

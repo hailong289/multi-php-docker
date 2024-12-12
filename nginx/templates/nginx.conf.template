@@ -1,0 +1,16 @@
+# Nginx main configuration
+
+worker_processes auto;
+
+# Sử dụng phần 'events' bắt buộc
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    # Bao gồm các tệp cấu hình server
+    include /etc/nginx/conf.d/*.conf;
+}
