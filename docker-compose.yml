@@ -7,8 +7,7 @@ services:
       dockerfile: php_configs/php8/php8.Dockerfile
     container_name: php8-container
     volumes:
-      - ./web/hola-framework:/var/www/hola-framework
-      - ./web/spa-fnb-retail:/var/www/spa-fnb-retail
+      - ./web:/var/www
       - ./composer-cache:/root/.composer  # cache Composer và tránh phải cài lại mỗi lần
     working_dir: /var/www
     command: >
@@ -42,11 +41,13 @@ services:
         context: .
         dockerfile: nginx/Dockerfile
     container_name: nginx_container
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - .env
     volumes:
-      - ./web/hola-framework:/var/www/hola-framework
-      - ./web/spa-fnb-retail:/var/www/spa-fnb-retail
+      - ./web:/var/www
     ports:
       - "80:80"
     depends_on:
@@ -54,6 +55,24 @@ services:
 #      - php-7
     networks:
       - app-network
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_container
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
+      MYSQL_ROOT_PASSWORD: "1"
+    ports:
+      - "3306:3306"  # Ánh xạ cổng 3306
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/my.cnf
+    networks:
+      - app-network
+
+volumes:
+  mysql-data:  # Khai báo volume mysql-data
+    driver: local  # Dùng driver local (mặc định)
+    name: mysql-data  # Tên volume
 
 networks:
   app-network:

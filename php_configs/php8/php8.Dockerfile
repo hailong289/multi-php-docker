@@ -26,7 +26,7 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 COPY ./php_configs/php8/php.ini /usr/local/etc/php/
 # Copy source code vào container
 COPY ./web/spa-fnb-retail /var/www/spa-fnb-retail
-COPY ./web/hola-framework /var/www/package-php-framework
+COPY ./web/package-php-framework /var/www/package-php-framework
 COPY ./web/hola-framework /var/www/hola-framework
 # Cài đặt các thư viện phụ thuộc (không cần nữa do chạy ở bên ngoài file docker compose)
 # RUN composer install --working-dir=/var/www/hola-framework
