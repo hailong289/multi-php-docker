@@ -13,6 +13,7 @@ services:
     command: >
       bash -c "
         composer install --working-dir=/var/www/hola-framework && 
+        composer update --working-dir=/var/www/posapp-yii-backend && 
         php-fpm
       "
     networks:

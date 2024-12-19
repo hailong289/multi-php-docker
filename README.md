@@ -49,3 +49,8 @@ docker run --rm \
     alpine \
     tar xzf /backup/mysql-data.tar.gz -C /data
 ```
+
+### 8 rebuild container
+```cmd
+  docker-compose build <container>
+```

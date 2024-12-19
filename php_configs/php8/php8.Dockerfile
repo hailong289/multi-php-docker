@@ -10,24 +10,29 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     libxml2-dev \
     unzip \
-    && rm -rf /var/lib/apt/lists/*
+    libz-dev \
+    libssl-dev \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && pecl install grpc \
+    && docker-php-ext-enable grpc
 
 # Cài đặt các extension PHP cần thiết
 RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets
-# Cài đặt Redis extension
-RUN pecl install redis \
-    && docker-php-ext-enable redis
 # Nếu bạn cần sử dụng Xdebug, cài đặt qua PECL
 #RUN pecl install xdebug \
 #    && docker-php-ext-enable xdebug \
 # cài dặt composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+# Dọn dẹp bộ nhớ cache sau khi cài đặt
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 # Cấu hình PHP (nếu cần thiết)
 COPY ./php_configs/php8/php.ini /usr/local/etc/php/
 # Copy source code vào container
 COPY ./web/spa-fnb-retail /var/www/spa-fnb-retail
 COPY ./web/package-php-framework /var/www/package-php-framework
 COPY ./web/hola-framework /var/www/hola-framework
+COPY ./web/posapp-yii-backend /var/www/posapp-yii-backend
 # Cài đặt các thư viện phụ thuộc (không cần nữa do chạy ở bên ngoài file docker compose)
 # RUN composer install --working-dir=/var/www/hola-framework
 # RUN composer install --working-dir=/var/www/spa-fnb-retail

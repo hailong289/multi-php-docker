@@ -4,9 +4,7 @@ FROM nginx:latest
 RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lists/*
 
 # Copy các template vào container
-COPY nginx/templates/nginx.conf.template /etc/nginx/nginx.conf.template
-COPY nginx/templates/server1.conf.template /etc/nginx/conf.d/server1.conf.template
-COPY nginx/templates/server2.conf.template /etc/nginx/conf.d/server2.conf.template
+COPY nginx/templates/*.template /etc/nginx/conf.d/
 
 # Copy script entrypoint
 COPY nginx/entrypoint.sh /entrypoint.sh
