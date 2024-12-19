@@ -8,14 +8,10 @@ services:
     container_name: php8-container
     volumes:
       - ./web:/var/www
+      - ./scripts:/var/scripts
       - ./composer-cache:/root/.composer  # cache Composer và tránh phải cài lại mỗi lần
     working_dir: /var/www
-    command: >
-      bash -c "
-        composer install --working-dir=/var/www/hola-framework && 
-        composer update --working-dir=/var/www/posapp-yii-backend && 
-        php-fpm
-      "
+    command: [ "/bin/bash", "-c", "chmod +x /var/scripts/start-php8.sh && /var/scripts/start-php8.sh" ]
     networks:
       - app-network
 
@@ -32,6 +28,8 @@ services:
   redis:
     image: redis:alpine
     container_name: redis_container
+    volumes:
+      - redis-data:/data
     ports:
       - "6379:6379"
     networks:
@@ -74,6 +72,9 @@ volumes:
   mysql-data:  # Khai báo volume mysql-data
     driver: local  # Dùng driver local (mặc định)
     name: mysql-data  # Tên volume
+  redis-data:
+    driver: local
+    name: redis-data
 
 networks:
   app-network:
