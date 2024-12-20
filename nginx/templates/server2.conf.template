@@ -20,3 +20,36 @@ server {
         deny all;
     }
 }
+
+server {
+    listen 443 ssl;
+    server_name ${SERVER_NAME2};
+
+    # Đường dẫn chứng chỉ SSL
+    ssl_certificate /etc/nginx/ssl/server2/nginx.crt;
+    ssl_certificate_key /etc/nginx/ssl/server2/nginx.key;
+
+    # Các thiết lập SSL (khuyến nghị bảo mật)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    root /var/www/hola-framework;
+    index index.php index.html;
+
+    # Xử lý các yêu cầu HTTPS
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass php8-container:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}

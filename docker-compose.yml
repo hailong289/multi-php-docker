@@ -1,6 +1,28 @@
 version: '3.8'
 
 services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: nginx_container
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file:
+      - .env
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./web:/var/www
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - php-8
+    #      - php-7
+    networks:
+      - app-network
+
   php-8:
     build:
       context: .
@@ -35,25 +57,6 @@ services:
     networks:
       - app-network
 
-  nginx:
-    build:
-        context: .
-        dockerfile: nginx/Dockerfile
-    container_name: nginx_container
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-    env_file:
-      - .env
-    volumes:
-      - ./web:/var/www
-    ports:
-      - "80:80"
-    depends_on:
-      - php-8
-#      - php-7
-    networks:
-      - app-network
   mysql:
     image: mysql:8.0
     container_name: mysql_container

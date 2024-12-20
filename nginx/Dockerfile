@@ -8,6 +8,7 @@ COPY nginx/templates/*.template /etc/nginx/conf.d/
 
 # Copy script entrypoint
 COPY nginx/entrypoint.sh /entrypoint.sh
+COPY nginx/ssl /etc/nginx/ssl
 
 # Chỉnh quyền thực thi cho entrypoint script
 RUN chmod +x /entrypoint.sh
