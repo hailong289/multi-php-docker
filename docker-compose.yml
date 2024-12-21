@@ -1,8 +1,9 @@
 services:
   nginx:
-    build:
-      context: .
-      dockerfile: nginx/Dockerfile
+#    build:
+#      context: .
+#      dockerfile: nginx/Dockerfile
+    image: long301001/server-php:nginx
     container_name: nginx_container
     dns:
       - 8.8.8.8
@@ -22,9 +23,10 @@ services:
       - app-network
 
   php-8:
-    build:
-      context: .
-      dockerfile: php_configs/php8/php8.Dockerfile
+#    build:
+#      context: .
+#      dockerfile: php_configs/php8/php8.Dockerfile
+    image: long301001/server-php:php-8
     container_name: php8-container
     volumes:
       - ./web:/var/www
@@ -46,7 +48,7 @@ services:
   #     - app-network
 
   redis:
-    image: redis:alpine
+    image: long301001/server-php:redis
     container_name: redis_container
     volumes:
       - redis-data:/data
@@ -56,7 +58,7 @@ services:
       - app-network
 
   mysql:
-    image: mysql:8.0
+    image: long301001/server-php:mysql-8
     container_name: mysql_container
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
