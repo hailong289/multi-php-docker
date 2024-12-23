@@ -1,9 +1,6 @@
 services:
   nginx:
-    build:
-      context: .
-      dockerfile: docker_files/nginx.Dockerfile
-#    image: long301001/server-php:nginx
+    image: long301001/server-php:nginx
     container_name: nginx_container
     ports:
       - "80:80"
@@ -23,10 +20,7 @@ services:
       - app-network
 
   php-8:
-    build:
-      context: .
-      dockerfile: docker_files/php8.Dockerfile
-#    image: long301001/server-php:php-8
+    image: long301001/server-php:php-8
     container_name: php8-container
     volumes:
       - ./web:/var/www
