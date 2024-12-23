@@ -4,7 +4,7 @@ FROM nginx:latest
 RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lists/*
 
 # Copy các template vào container
-COPY nginx/conf.d/*.template /etc/nginx/conf.d/
+COPY nginx/conf.d/ /etc/nginx/conf.d/
 
 # Sao chép script vào container
 COPY scripts/ /var/scripts/
