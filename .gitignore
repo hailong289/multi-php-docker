@@ -2,3 +2,4 @@
 /composer-cache
 /.idea
 /nginx/conf.d/*.conf
+/manage
