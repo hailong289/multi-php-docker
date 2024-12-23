@@ -10,4 +10,4 @@ done
 #envsubst '${SERVER_NAME1} ${SERVER_NAME2} ${SERVER_NAME3}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Khởi động Nginx
-exec "$@"
+exec nginx -g 'daemon off;'

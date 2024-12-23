@@ -6,14 +6,10 @@ RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lis
 # Copy các template vào container
 COPY nginx/conf.d/*.template /etc/nginx/conf.d/
 
-# Copy script entrypoint
-COPY nginx/entrypoint.sh /etc/nginx/entrypoint.sh
-
-# Chỉnh quyền thực thi cho entrypoint script
-RUN chmod +x /etc/nginx/entrypoint.sh
-
-# Đặt entrypoint mặc định
-ENTRYPOINT ["/etc/nginx/entrypoint.sh"]
+# Sao chép script vào container
+COPY scripts/ /var/scripts/
+# Chỉnh quyền thực thi cho script
+RUN chmod -R +x /var/scripts/*
 
 # Chạy Nginx
 CMD ["nginx", "-g", "daemon off;"]

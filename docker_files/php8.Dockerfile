@@ -28,11 +28,10 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 # Cấu hình PHP (nếu cần thiết)
 COPY ./php_configs/php8/php.ini /usr/local/etc/php/
-# Copy source code vào container
-#COPY ./web /var/www
-# Cài đặt các thư viện phụ thuộc (không cần nữa do chạy ở bên ngoài file docker compose)
-# RUN composer install --working-dir=/var/www/hola-framework
-# RUN composer install --working-dir=/var/www/spa-fnb-retail
+# Copy toàn bộ thư mục scripts vào container
+COPY scripts/ /var/scripts/
+# Chỉnh quyền thực thi cho toàn bộ file trong thư mục
+RUN chmod -R +x /var/scripts/*
 # Expose port 9000 (if using PHP-FPM)
 EXPOSE 9000
 # Khởi động PHP-FPM

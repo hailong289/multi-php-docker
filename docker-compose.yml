@@ -2,38 +2,39 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: nginx/Dockerfile
+      dockerfile: docker_files/nginx.Dockerfile
 #    image: long301001/server-php:nginx
     container_name: nginx_container
+    ports:
+      - "80:80"
+      - "443:443"
     dns:
       - 8.8.8.8
       - 8.8.4.4
     env_file:
       - .env
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
       - ./web:/var/www
-    ports:
-      - "80:80"
-      - "443:443"
+      - ./scripts:/var/scripts
+    entrypoint: ["/var/scripts/entrypoint.sh"]
     depends_on:
       - php-8
-    #      - php-7
     networks:
       - app-network
 
   php-8:
     build:
       context: .
-      dockerfile: php_configs/php8/php8.Dockerfile
+      dockerfile: docker_files/php8.Dockerfile
 #    image: long301001/server-php:php-8
     container_name: php8-container
     volumes:
       - ./web:/var/www
       - ./scripts:/var/scripts
       - ./composer-cache:/root/.composer  # cache Composer và tránh phải cài lại mỗi lần
+      - ./php_configs/php8/php.ini:/usr/local/etc/php/php.ini
     working_dir: /var/www
-    command: [ "/bin/bash", "-c", "chmod +x /var/scripts/start-php8.sh && /var/scripts/start-php8.sh" ]
+    entrypoint: ["/var/scripts/start-php8.sh"]
     networks:
       - app-network
 
