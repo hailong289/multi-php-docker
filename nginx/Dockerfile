@@ -4,11 +4,10 @@ FROM nginx:latest
 RUN apt-get update && apt-get install -y gettext-base && rm -rf /var/lib/apt/lists/*
 
 # Copy các template vào container
-COPY nginx/templates/*.template /etc/nginx/conf.d/
+COPY nginx/conf.d/*.template /etc/nginx/conf.d/
 
 # Copy script entrypoint
 COPY nginx/entrypoint.sh /etc/nginx/entrypoint.sh
-COPY nginx/ssl /etc/nginx/ssl
 
 # Chỉnh quyền thực thi cho entrypoint script
 RUN chmod +x /etc/nginx/entrypoint.sh

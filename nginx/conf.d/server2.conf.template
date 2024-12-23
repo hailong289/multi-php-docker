@@ -1,6 +1,8 @@
 server {
     listen 80;
-    root /var/manage;
+    server_name ${SERVER_NAME2};
+
+    root /var/www/hola-framework;
     index index.php index.html;
 
     location / {
