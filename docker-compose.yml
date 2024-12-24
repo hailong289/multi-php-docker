@@ -15,7 +15,6 @@ services:
     volumes:
       - ./web:/var/www
       - ./scripts:/var/scripts
-      - ./manage:/var/manage
     entrypoint: ["/var/scripts/entrypoint.sh"]
     depends_on:
       - php-8
@@ -28,7 +27,6 @@ services:
       dockerfile: docker_files/php8.Dockerfile
     container_name: php8-container
     volumes:
-      - ./manage:/var/manage
       - ./web:/var/www
       - ./scripts:/var/scripts
       - ./composer-cache:/root/.composer  # cache Composer và tránh phải cài lại mỗi lần
