@@ -26,7 +26,7 @@ services:
     working_dir: /var/www
     volumes:
       - ./web:/var/www
-      - ./composer_cache:/tmp/composer
+      - composer_data:/usr/local/bin/composer
 
   php-8:
     build:
@@ -34,6 +34,7 @@ services:
       dockerfile: docker_files/php8.Dockerfile
     container_name: php8_container
     volumes:
+      - composer_data:/usr/local/bin/composer
       - ./web:/var/www
       - ./scripts:/var/scripts
       - ./php_configs/php8/php.ini:/usr/local/etc/php/php.ini
@@ -50,6 +51,7 @@ services:
        dockerfile: docker_files/php7.Dockerfile
      container_name: php7_container
      volumes:
+       - composer_data:/usr/local/bin/composer
        - ./web:/var/www
        - ./scripts:/var/scripts
        - ./php_configs/php7.4/php.ini:/usr/local/etc/php/php.ini
@@ -91,6 +93,9 @@ volumes:
   redis-data:
     driver: local
     name: redis-data
+  composer_data:
+    driver: local
+    name: composer_data
 
 networks:
   app-network:
