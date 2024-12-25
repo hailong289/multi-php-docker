@@ -1,7 +1,10 @@
 server {
     listen 80;
-    root /var/www;
+    server_name ${SERVER_NAME4};
+
+    root /var/www/motchutkt;
     index index.php index.html;
+
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }

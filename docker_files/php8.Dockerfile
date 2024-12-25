@@ -22,8 +22,6 @@ RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets
 # Nếu bạn cần sử dụng Xdebug, cài đặt qua PECL
 #RUN pecl install xdebug \
 #    && docker-php-ext-enable xdebug \
-# cài dặt composer
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 # Dọn dẹp bộ nhớ cache sau khi cài đặt
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 # Cấu hình PHP (nếu cần thiết)

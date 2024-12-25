@@ -1,8 +1,8 @@
 server {
     listen 80;
-    server_name ${SERVER_NAME4};
+    server_name ${SERVER_NAME6};
 
-    root /var/www/motchutkt;
+    root /var/www/posapp-crm/app;
     index index.php index.html;
 
     location / {
@@ -11,7 +11,7 @@ server {
 
     location ~ \.php$ {
         include fastcgi_params;
-        fastcgi_pass php8-container:9000;
+        fastcgi_pass php7_container:9000;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     }

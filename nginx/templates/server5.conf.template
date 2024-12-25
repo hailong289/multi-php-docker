@@ -1,8 +1,8 @@
 server {
     listen 80;
-    server_name ${SERVER_NAME3};
+    server_name ${SERVER_NAME5};
 
-    root /var/www/posapp-yii-backend/backend;
+    root /var/www/user-system-backend/public;
     index index.php index.html;
 
     location / {
@@ -11,7 +11,7 @@ server {
 
     location ~ \.php$ {
         include fastcgi_params;
-        fastcgi_pass php8-container:9000;
+        fastcgi_pass php8_container:9000;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     }
