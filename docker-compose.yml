@@ -26,7 +26,8 @@ services:
     working_dir: /var/www
     volumes:
       - ./web:/var/www
-      - composer_data:/usr/local/bin/composer
+      - ./composer-cache:/home/composer/.composer
+    entrypoint: ["tail", "-f", "/dev/null"] # Để giữ container luôn chạy
 
   php-8:
     build:
@@ -38,6 +39,7 @@ services:
       - ./web:/var/www
       - ./scripts:/var/scripts
       - ./php_configs/php8/php.ini:/usr/local/etc/php/php.ini
+      - ./composer-cache:/home/composer/.composer # shared cache
     working_dir: /var/www
     entrypoint: ["/var/scripts/start-php8.sh"]
     depends_on:
@@ -55,6 +57,7 @@ services:
        - ./web:/var/www
        - ./scripts:/var/scripts
        - ./php_configs/php7.4/php.ini:/usr/local/etc/php/php.ini
+       - ./composer:/home/composer/.composer # Chia sẻ Composer cache
      working_dir: /var/www
      entrypoint: [ "/var/scripts/start-php7.sh" ]
      depends_on:
