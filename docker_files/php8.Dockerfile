@@ -12,10 +12,13 @@ RUN apt-get update && apt-get install -y \
     unzip \
     libz-dev \
     libssl-dev \
+    curl \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && pecl install grpc \
-    && docker-php-ext-enable grpc
+    && docker-php-ext-enable grpc \
+    && curl -sS https://getcomposer.org/installer | php \
+    && mv composer.phar /usr/local/bin/composer
 
 # Cài đặt các extension PHP cần thiết
 RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets
@@ -28,8 +31,6 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY ./php_configs/php8/php.ini /usr/local/etc/php/
 # Copy toàn bộ thư mục scripts vào container
 COPY scripts/ /var/scripts/
-# Chỉnh quyền thực thi cho toàn bộ file trong thư mục
-RUN chmod -R +x /var/scripts/*
 # Expose port 9000 (if using PHP-FPM)
 EXPOSE 9000
 # Khởi động PHP-FPM
