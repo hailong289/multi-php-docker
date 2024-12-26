@@ -1,8 +1,9 @@
 #!/bin/sh
+variables=$(env | grep '^SERVER_NAME' | cut -d= -f1 | sed 's/^/${/;s/$/}/' | tr '\n' ' ');
 # Thay thế biến môi trường trong tất cả các file .template
 for template in /etc/nginx/templates/*.conf.template; do
     [ -e "$template" ] || break  # Thoát nếu không có tệp nào
-    envsubst '${SERVER_NAME1} ${SERVER_NAME2} ${SERVER_NAME3} ${SERVER_NAME4} ${SERVER_NAME5} ${SERVER_NAME6}' \
+    envsubst "$variables" \
     < "$template" > "/etc/nginx/conf.d/$(basename "${template%.template}")"
 done
 
