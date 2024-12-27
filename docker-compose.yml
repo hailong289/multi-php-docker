@@ -51,7 +51,9 @@ services:
        - app-network
 
   redis:
-    image: long301001/server-php:redis
+    build:
+        context: .
+        dockerfile: docker_files/redis.Dockerfile
     container_name: redis_container
     volumes:
       - redis-data:/data
@@ -61,7 +63,9 @@ services:
       - app-network
 
   mysql:
-    image: long301001/server-php:mysql-8
+    build:
+      context: .
+      dockerfile: docker_files/mysql.Dockerfile
     container_name: mysql_container
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
