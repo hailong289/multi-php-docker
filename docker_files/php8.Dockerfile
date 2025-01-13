@@ -1,5 +1,5 @@
 # Chọn image PHP (ví dụ: php:7.4-fpm hoặc php:8.1-fpm)
-FROM php:8.3-fpm
+FROM php:8.2-fpm
 
 # Cài đặt các thư viện phụ thuộc cho các extension PHP
 RUN apt-get update && apt-get install -y \
