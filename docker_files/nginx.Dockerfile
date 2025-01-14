@@ -8,10 +8,7 @@ COPY nginx/templates/ /etc/nginx/templates/
 COPY nginx/conf.d/ /etc/nginx/conf.d/
 
 # Sao chép script vào container
-COPY scripts/ /var/scripts/
 COPY .env /var/environment/
-# Chỉnh quyền thực thi cho script
-RUN chmod -R +x /var/scripts/*
 
 # Chạy Nginx
 CMD ["nginx", "-g", "daemon off;"]

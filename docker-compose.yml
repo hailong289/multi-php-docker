@@ -11,7 +11,7 @@ services:
       - ./web:/var/www
       - ./scripts:/var/scripts
       - ./nginx/templates:/etc/nginx/templates
-    entrypoint: ["/var/scripts/entrypoint.sh"]
+    command: ["sh", "-c", "/var/scripts/entrypoint.sh"]
     depends_on:
       - php-8
       - php-7
@@ -24,10 +24,10 @@ services:
     volumes:
       - ./web:/var/www
       - ./scripts:/var/scripts
-      - ./php_configs/php8/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
       - ./composer-cache:/root/.composer # shared cache
+      - ./configs/supervisord.conf:/etc/supervisord.conf
     working_dir: /var/www
-    entrypoint: ["/bin/sh", "-c", "chmod +x /var/scripts/start-php8.sh && /var/scripts/start-php8.sh" ]
     networks:
       - app-network
 
@@ -37,15 +37,16 @@ services:
      volumes:
        - ./web:/var/www
        - ./scripts:/var/scripts
-       - ./php_configs/php7.4/php.ini:/usr/local/etc/php/php.ini
+       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
        - ./composer-cache:/root/.composer # shared cache
      working_dir: /var/www
-     entrypoint: ["/bin/sh", "-c", "chmod +x /var/scripts/start-php7.sh && /var/scripts/start-php7.sh" ]
      networks:
        - app-network
 
   redis:
-    image: long301001/server-php:redis
+    build:
+        context: .
+        dockerfile: docker_files/redis.Dockerfile
     container_name: redis_container
     volumes:
       - redis-data:/data
@@ -55,7 +56,9 @@ services:
       - app-network
 
   mysql:
-    image: long301001/server-php:mysql-8
+    build:
+      context: .
+      dockerfile: docker_files/mysql.Dockerfile
     container_name: mysql_container
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root

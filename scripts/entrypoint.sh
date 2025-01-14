@@ -1,4 +1,8 @@
 #!/bin/sh
+if [ ! -f "/var/scripts/entrypoint.sh" ]; then
+  echo "ERROR: /var/scripts/entrypoint.sh not found"
+  exit 1
+fi
 variables=$(env | grep '^SERVER_NAME' | cut -d= -f1 | sed 's/^/${/;s/$/}/' | tr '\n' ' ');
 # Thay thế biến môi trường trong tất cả các file .template
 for template in /etc/nginx/templates/*.conf.template; do
