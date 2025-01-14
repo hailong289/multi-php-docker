@@ -13,7 +13,10 @@ services:
       - ./web:/var/www
       - ./scripts:/var/scripts
       - ./nginx/templates:/etc/nginx/templates
-    entrypoint: ["/var/scripts/entrypoint.sh"]
+    entrypoint: [
+      "/bin/sh", "-c",
+      "/var/scripts/entrypoint.sh"
+    ]
     depends_on:
       - php-8
       - php-7
@@ -28,10 +31,14 @@ services:
     volumes:
       - ./web:/var/www
       - ./scripts:/var/scripts
-      - ./php_configs/php8/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
       - ./composer-cache:/root/.composer # shared cache
+      - ./configs/supervisord.conf:/etc/supervisord.conf
     working_dir: /var/www
-    entrypoint: ["/bin/sh", "-c", "chmod +x /var/scripts/start-php8.sh && /var/scripts/start-php8.sh" ]
+    entrypoint: [ # to do /var/scripts/supervisord.sh
+      "/bin/sh", "-c",
+      "/var/scripts/start-php8.sh",
+    ]
     networks:
       - app-network
 
@@ -43,10 +50,13 @@ services:
      volumes:
        - ./web:/var/www
        - ./scripts:/var/scripts
-       - ./php_configs/php7.4/php.ini:/usr/local/etc/php/php.ini
+       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
        - ./composer-cache:/root/.composer # shared cache
      working_dir: /var/www
-     entrypoint: ["/bin/sh", "-c", "chmod +x /var/scripts/start-php7.sh && /var/scripts/start-php7.sh" ]
+     entrypoint: [
+       "/bin/sh", "-c",
+       "/var/scripts/start-php7.sh"
+     ]
      networks:
        - app-network
 

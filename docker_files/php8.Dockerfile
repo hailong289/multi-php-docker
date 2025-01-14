@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     libz-dev \
     libssl-dev \
     curl \
+    supervisor \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && pecl install grpc \
@@ -21,16 +22,12 @@ RUN apt-get update && apt-get install -y \
     && mv composer.phar /usr/local/bin/composer
 
 # Cài đặt các extension PHP cần thiết
-RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets
+RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl
 # Nếu bạn cần sử dụng Xdebug, cài đặt qua PECL
 #RUN pecl install xdebug \
 #    && docker-php-ext-enable xdebug \
 # Dọn dẹp bộ nhớ cache sau khi cài đặt
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-# Cấu hình PHP (nếu cần thiết)
-COPY ./php_configs/php8/php.ini /usr/local/etc/php/
-# Copy toàn bộ thư mục scripts vào container
-COPY scripts/ /var/scripts/
 # Expose port 9000 (if using PHP-FPM)
 EXPOSE 9000
 # Khởi động PHP-FPM
