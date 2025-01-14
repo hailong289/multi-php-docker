@@ -11,13 +11,10 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     unzip \
     libz-dev \
-    libssl-dev \
     curl \
     supervisor \
     && pecl install redis \
     && docker-php-ext-enable redis \
-    && pecl install grpc \
-    && docker-php-ext-enable grpc \
     && curl -sS https://getcomposer.org/installer | php \
     && mv composer.phar /usr/local/bin/composer
 
