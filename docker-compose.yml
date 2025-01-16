@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: long301001/server-php:nginx-amd
+    image: long301001/server-php:nginx-arm
     container_name: nginx_container
     ports:
       - "80:80"
@@ -19,7 +19,7 @@ services:
       - app-network
 
   php-8:
-    image: long301001/server-php:php8-amd
+    image: long301001/server-php:php8.2-arm
     container_name: php8_container
     volumes:
       - ./web:/var/www
@@ -32,7 +32,7 @@ services:
       - app-network
 
   php-7:
-     image: long301001/server-php:php7-amd
+     image: long301001/server-php:php7.4-arm
      container_name: php7_container
      volumes:
        - ./web:/var/www
@@ -44,7 +44,7 @@ services:
        - app-network
 
   redis:
-    image: long301001/server-php:redis-amd
+    image: long301001/server-php:redis-arm
     container_name: redis_container
     volumes:
       - redis-data:/data
@@ -54,7 +54,7 @@ services:
       - app-network
 
   mysql:
-    image: long301001/server-php:mysql-amd
+    image: long301001/server-php:mysql-arm
     container_name: mysql_container
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
