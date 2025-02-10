@@ -69,7 +69,7 @@ services:
 
   rabbitmq:
     image: long301001/server-php:rabbitmq-arm
-    container_name: rabbitmq
+    container_name: rabbitmq_container
     ports:
       - "5672:5672"   # Cổng AMQP (cho ứng dụng kết nối)
       - "15672:15672" # Cổng UI Web
