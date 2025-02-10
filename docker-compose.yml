@@ -67,6 +67,16 @@ services:
     networks:
       - app-network
 
+  rabbitmq:
+    image: long301001/server-php:rabbitmq-arm
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # Cổng AMQP (cho ứng dụng kết nối)
+      - "15672:15672" # Cổng UI Web
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+
 volumes:
   mysql-data:  # Khai báo volume mysql-data
     driver: local  # Dùng driver local (mặc định)
