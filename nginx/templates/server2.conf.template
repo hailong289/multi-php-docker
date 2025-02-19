@@ -2,7 +2,7 @@ server {
     listen 80;
     server_name ${SERVER_NAME2};
 
-    root /var/www/hola-framework;
+    root /var/www/source_php8.2/hola-framework;
     index index.php index.html;
 
     location / {

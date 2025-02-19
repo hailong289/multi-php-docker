@@ -2,7 +2,7 @@ server {
     listen 80;
     server_name ${SERVER_NAME6};
 
-    root /var/www/posapp-crm/app/webroot;
+    root /var/www/source_php7.4/posapp-crm/app/webroot;
     index index.php index.html;
 
     location / {

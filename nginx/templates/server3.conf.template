@@ -2,7 +2,7 @@ server {
     listen 80;
     server_name ${SERVER_NAME3};
 
-    root /var/www/posapp-yii-backend/backend;
+    root /var/www/source_php8.2/posapp-yii-backend/backend;
     index index.php index.html;
 
     location / {

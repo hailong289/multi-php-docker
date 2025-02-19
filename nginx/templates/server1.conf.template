@@ -2,7 +2,7 @@ server {
     listen 80;
     server_name ${SERVER_NAME1};
 
-    root /var/www/spa-fnb-retail/public;
+    root /var/www/source_php8.2/spa-fnb-retail/public;
     index index.php index.html;
 
     location / {
