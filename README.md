@@ -26,9 +26,15 @@ Trong file php_configs/php8/php8.Dockerfile mình đã cấu hình sẵn cho cá
 ```cmd
   docker-compose up -d
 ```
+
 Xoá và dừng các container
 ```cmd
   docker-compose down
+```
+
+Chỉ dừng các container
+```cmd
+  docker-compose stop
 ```
 
 ### 7. Backup và khôi phục volumn mysql
