@@ -7,8 +7,8 @@ A repo containing Dockerfiles to build images for nginx, php, redis, mysql
 Nếu các bạn muốn sử dụng domain thì cần thêm domain vào file hosts của máy tính
 1. Mở file hosts
     - Windows: `C:\Windows\System32\drivers\etc\hosts`
-    - Linux: `/etc/hosts`
-    - Mac: `/private/etc/hosts`
+    - Linux: `sudo nano /etc/hosts`
+    - Mac: `sudo nano /etc/hosts`
     - Thêm dòng sau vào cuối file hosts. Ví dụ mình thêm một domain với server1.test thì sẽ chèn vô file host
 ```cmd
 127.0.0.1     server1.test
