@@ -9,7 +9,8 @@ COPY nginx/conf.d/ /etc/nginx/conf.d/
 
 # Sao chép script vào container
 COPY .env /var/environment/
-COPY scripts/ /var/scripts/
+COPY scripts/entrypoint.sh /var/scripts/entrypoint.sh
+RUN chmod +x /var/scripts/entrypoint.sh
 
 # Chạy Nginx
 CMD ["nginx", "-g", "daemon off;"]

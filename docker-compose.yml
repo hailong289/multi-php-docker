@@ -11,9 +11,9 @@ services:
       - .env
     volumes:
       - ./server:/var/www
-      - ./scripts:/var/scripts
+      - ./scripts/entrypoint.sh:/var/scripts/entrypoint.sh
       - ./nginx/templates:/etc/nginx/templates
-    command: ["sh", "-c", "/var/scripts/entrypoint.sh"]
+    entrypoint: ["/var/scripts/entrypoint.sh"]
     depends_on:
       - php-8
       - php-7
