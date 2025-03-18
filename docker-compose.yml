@@ -1,6 +1,8 @@
 services:
   nginx:
-    image: long301001/server-php:nginx-arm
+    build:
+      context: .
+      dockerfile: docker_files/nginx.Dockerfile
     container_name: nginx_container
     ports:
       - "80:80"

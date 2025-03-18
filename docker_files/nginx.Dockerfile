@@ -9,6 +9,7 @@ COPY nginx/conf.d/ /etc/nginx/conf.d/
 
 # Sao chép script vào container
 COPY .env /var/environment/
+COPY scripts/ /var/scripts/
 
 # Chạy Nginx
 CMD ["nginx", "-g", "daemon off;"]
