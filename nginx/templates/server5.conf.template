@@ -2,7 +2,7 @@ server {
     listen 80;
     server_name ${SERVER_NAME5};
 
-    root /var/www/user-system-backend/public;
+    root /var/www/source_php8.2/user-system-backend/public;
     index index.php index.html;
 
     location / {
