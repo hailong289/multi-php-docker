@@ -6,13 +6,16 @@ server {
     root ${SERVER_PATH};
     index index.php index.html;
 
+    error_log /var/log/nginx/${SERVER_NAME}.log;
+    access_log /var/log/nginx/${SERVER_NAME}.log;
+
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
     location ~ \.php$ {
         include fastcgi_params;
-        fastcgi_pass php8_container:9000;
+        fastcgi_pass ${CONTAINER_PHP_VERSION}:9000;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     }

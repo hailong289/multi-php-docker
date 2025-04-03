@@ -32,6 +32,7 @@ for key in $keys; do
     DOCKER_APP_NAME=$(jq -r --arg key "$key" '.[$key].APP_NAME' "$JSON_FILE")
     DOCKER_HOSTNAME=$(jq -r --arg key "$key" '.[$key].DOMAIN_NAME' "$JSON_FILE")
     DOCKER_SOURCE_PATH=$(jq -r --arg key "$key" '.[$key].SERVER_PATH' "$JSON_FILE")
+    DOCKER_PHP_VERSION=$(jq -r --arg key "$key" '.[$key].CONTAINER_PHP_VERSION' "$JSON_FILE")
 
     if [ -n "$DOCKER_APP_NAME" ] && [ -n "$DOCKER_HOSTNAME" ] && [ -n "$DOCKER_SOURCE_PATH" ]; then
         OUTPUT_FILE="$OUTPUT_DIR/${DOCKER_APP_NAME}.template"
@@ -39,6 +40,7 @@ for key in $keys; do
         # Thay thế cả SERVER_NAME và SERVER_PATH trong template
         sed -e "s|\${SERVER_NAME}|${DOCKER_HOSTNAME}|g" \
             -e "s|\${SERVER_PATH}|${DOCKER_SOURCE_PATH}|g" \
+            -e "s|\${CONTAINER_PHP_VERSION}|${DOCKER_PHP_VERSION}|g" \
             "$TEMPLATE_FILE" > "$OUTPUT_FILE"
 
         echo "Tạo config nginx thành công: $OUTPUT_FILE"

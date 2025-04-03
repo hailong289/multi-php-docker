@@ -11,6 +11,7 @@ services:
       - ./server:/var/www
       - ./scripts:/var/scripts
       - ./nginx/templates:/etc/nginx/templates
+      - ./nginx/logs:/var/log/nginx
     command: ["sh", "-c", "/var/scripts/entrypoint.sh"]
     depends_on:
       - php-8
