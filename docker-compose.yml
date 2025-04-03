@@ -8,6 +8,8 @@ services:
     volumes:
       - ./server:/var/www
       - ./scripts:/var/scripts
+      - ./nginx/examples:/etc/nginx/examples
+      - ./env.json:/var/environment/env.json
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
     command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]

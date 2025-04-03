@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Tạo file config nginx từ template cho từng server_name trong env.json
-JSON_FILE="env.json"
+JSON_FILE="/var/environment/env.json"
 
 if [ ! -f "$JSON_FILE" ]; then
     echo "JSON file not found: $JSON_FILE"
@@ -9,15 +9,20 @@ if [ ! -f "$JSON_FILE" ]; then
 fi
 
 if ! command -v jq &> /dev/null; then
-    echo "jq command not found. Please install jq."
-    exit 1
+    echo "jq command not found. Installing jq..."
+    # Tải jq từ trang chính (cần curl)
+    apt-get update && apt-get install -y jq
+
+    echo "jq installed successfully."
+else
+    echo "jq is already installed."
 fi
 
 keys=$(jq -r 'keys_unsorted | .[] | select(test("SERVER_NAME[0-9]*"))' "$JSON_FILE")
 
 # Định nghĩa đường dẫn
-TEMPLATE_FILE="nginx/examples/server_example.txt"
-OUTPUT_DIR="nginx/templates"
+TEMPLATE_FILE="/etc/nginx/examples/server_example.txt"
+OUTPUT_DIR="/etc/nginx/templates"
 
 # Kiểm tra file template tồn tại
 if [ ! -f "$TEMPLATE_FILE" ]; then
