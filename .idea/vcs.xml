@@ -2,5 +2,23 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_angular/admin-frontend" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_angular/mini-app-frontend" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_angular/spa-fnb-retail-frontend" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_angular/spa-fnb-retail-frontend-internal" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_angular/spa-fnb-retail-frontend-sale" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_angular/user-system-app" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php7.4/posapp-crm" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php7.4/posapp-wordpress" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/crm-backend" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/hola-framework" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/motchutkt" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/package-php-framework" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/posapp-laravel-backend" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/posapp-operation" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/posapp-yii-backend" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/posapp-yii-backend2" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/spa-fnb-retail" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/server/source_php8.2/user-system-backend" vcs="Git" />
   </component>
 </project>

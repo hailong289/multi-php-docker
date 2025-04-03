@@ -2,3 +2,5 @@
 /composer-cache
 /.idea
 /web
+/nginx/templates
+/nginx/logs

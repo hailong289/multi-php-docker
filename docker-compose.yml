@@ -7,13 +7,14 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    env_file:
-      - .env
     volumes:
       - ./server:/var/www
-      - ./scripts/entrypoint.sh:/var/scripts/entrypoint.sh
+      - ./scripts:/var/scripts
+      - ./nginx/examples:/etc/nginx/examples
       - ./nginx/templates:/etc/nginx/templates
-    entrypoint: ["/var/scripts/entrypoint.sh"]
+      - ./nginx/logs:/var/log/nginx
+      - ./env.json:/var/environment/env.json
+    command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
       - php-8
       - php-7
@@ -29,7 +30,6 @@ services:
       - ./server/source_php8.2:/var/www/source_php8.2
       - ./scripts:/var/scripts
       - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
-      - ./composer-cache:/root/.composer # shared cache
       - ./configs/supervisord.conf:/etc/supervisord.conf
     working_dir: /var/www/source_php8.2
     networks:
@@ -44,7 +44,6 @@ services:
        - ./server/source_php7.4:/var/www/source_php7.4
        - ./scripts:/var/scripts
        - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
-       - ./composer-cache:/root/.composer # shared cache
      working_dir: /var/www/source_php7.4
      networks:
        - app-network
