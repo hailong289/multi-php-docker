@@ -10,7 +10,7 @@ services:
       - ./scripts:/var/scripts
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
-    command: ["sh", "-c", "/var/scripts/entrypoint.sh"]
+    command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
       - php-8
       - php-7

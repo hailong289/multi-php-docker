@@ -6,8 +6,8 @@ server {
     root ${SERVER_PATH};
     index index.php index.html;
 
-    error_log /var/log/nginx/${SERVER_NAME}.log;
-    access_log /var/log/nginx/${SERVER_NAME}.log;
+    access_log /var/log/nginx/${SERVER_NAME}_access.log;
+    error_log /var/log/nginx/${SERVER_NAME}_error.log;
 
     location / {
         try_files $uri $uri/ /index.php?$query_string;
