@@ -1,6 +1,11 @@
-/server
-/composer-cache
 /.idea
-/web
 /nginx/templates
 /nginx/logs
+/.nx
+# Bỏ qua tất cả thư mục con trong source_php8.2
+/server/source_php8.2/*/
+# Giữ lại file index.php
+!/server/source_php8.2/index.php
+
+/server/source_php7.4/*/
+!/server/source_php7.4/index.php
