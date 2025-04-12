@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Kiểm tra xem tệp env.json có tồn tại không
-JSON_FILE="/path/to/env.json"
+JSON_FILE="env.json"
 if [ ! -f "$JSON_FILE" ]; then
   echo "ERROR: $JSON_FILE not found"
   exit 1
