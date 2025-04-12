@@ -8,6 +8,12 @@
       <sourceFolder url="file://$MODULE_DIR$/web/package-php-framework" isTestSource="false" packagePrefix="Hola" />
       <sourceFolder url="file://$MODULE_DIR$/web/spa-fnb-retail" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/web/user-system-backend" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/server/source_php8.2/hola-framework" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/server/source_php8.2/motchutkt" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/server/source_php8.2/package-php-framework" isTestSource="false" packagePrefix="Hola" />
+      <sourceFolder url="file://$MODULE_DIR$/server/source_php8.2/posapp-laravel-backend" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/server/source_php8.2/spa-fnb-retail" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/server/source_php8.2/user-system-backend" isTestSource="false" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
