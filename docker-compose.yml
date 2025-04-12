@@ -20,7 +20,7 @@ services:
       - app-network
 
   php-8:
-    image: long301001/server-php:php8-amd
+    image: long301001/server-php:php8.2-amd
     container_name: php8_container
     volumes:
       - ./server/source_php8.2:/var/www/source_php8.2
@@ -32,7 +32,7 @@ services:
       - app-network
 
   php-7:
-     image: long301001/server-php:php7-amd
+     image: long301001/server-php:php7.4-amd
      container_name: php7_container
      volumes:
        - ./server/source_php7.4:/var/www/source_php7.4
@@ -63,44 +63,6 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./mysql/my.cnf:/etc/mysql/my.cnf
-    networks:
-      - app-network
-
-  zookeeper:
-    image: bitnami/zookeeper:latest
-    container_name: zookeeper
-    restart: always
-    environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
-    ports:
-      - "2181:2181"
-    networks:
-        - app-network
-
-  kafka:
-    image: bitnami/kafka:latest
-    container_name: kafka
-    restart: always
-    depends_on:
-      - zookeeper
-    environment:
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
-    ports:
-      - "9092:9092"
-    networks:
-      - app-network
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    restart: always
-    depends_on:
-      - kafka
-    ports:
-      - "8081:8080"
-    environment:
-      - KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS=kafka:9092
     networks:
       - app-network
 
