@@ -9,6 +9,5 @@ COPY nginx/examples /etc/nginx/examples
 # Sao chép script vào container
 COPY env.json /var/environment/
 COPY scripts/ /var/scripts/
-
 # Chạy Nginx
 CMD ["nginx", "-g", "daemon off;"]

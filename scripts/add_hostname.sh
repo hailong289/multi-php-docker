@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Kiểm tra xem tệp env.json có tồn tại không
 JSON_FILE="env.json"
