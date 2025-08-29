@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y \
 # Cài đặt các extension PHP cần thiết
 RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl
 # Nếu bạn cần sử dụng Xdebug, cài đặt qua PECL
-#RUN pecl install xdebug \
-#    && docker-php-ext-enable xdebug \
+RUN pecl install xdebug \
+    && docker-php-ext-enable xdebug
 # Dọn dẹp bộ nhớ cache sau khi cài đặt
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 # Expose port 9000 (if using PHP-FPM)
