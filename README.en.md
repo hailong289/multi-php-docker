@@ -116,11 +116,14 @@ The script reads every `DOMAIN_NAME` in `env.json` and maps it to `127.0.0.1`. T
 
 ### 5. Build and start the environment
 
-Build the images from `docker_files/` on the first run:
+On the first run, build every image before creating the containers:
 
 ```bash
-docker compose up -d --build
+docker compose build
+docker compose up -d
 ```
+
+Do not use `docker compose up -d --build` on the first run. The `supervisor` service reuses `server-php:8.2-local`, which is built by `php-8`; when the image does not exist yet, Compose may try to pull it from a registry before the build finishes.
 
 For subsequent starts, run:
 
@@ -166,8 +169,9 @@ docker compose restart nginx
 ### Rebuild images
 
 ```bash
-# Rebuild all images and recreate containers
-docker compose up -d --build
+# Rebuild all images, then update the containers
+docker compose build
+docker compose up -d
 
 # Build and run one service
 docker compose build <service-name>

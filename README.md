@@ -116,11 +116,14 @@ Script đọc các `DOMAIN_NAME` trong `env.json` và ánh xạ chúng tới `12
 
 ### 5. Build và khởi động
 
-Lần chạy đầu tiên cần build các image từ thư mục `docker_files/`:
+Lần chạy đầu tiên, build toàn bộ image trước rồi mới tạo container:
 
 ```bash
-docker compose up -d --build
+docker compose build
+docker compose up -d
 ```
+
+Không dùng `docker compose up -d --build` ở lần đầu. Service `supervisor` dùng lại image `server-php:8.2-local` do `php-8` build; nếu image chưa tồn tại, Compose có thể thử pull nó từ registry trước khi build hoàn tất.
 
 Các lần sau chỉ cần:
 
@@ -166,8 +169,9 @@ docker compose restart nginx
 ### Build lại image
 
 ```bash
-# Build toàn bộ image và tạo lại container
-docker compose up -d --build
+# Build toàn bộ image rồi cập nhật container
+docker compose build
+docker compose up -d
 
 # Build và chạy lại một service
 docker compose build <service-name>
