@@ -1,6 +1,6 @@
 services:
   nginx:
-    image: server-nginx:local
+    image: long301001/multi-php-docker:nginx
     build:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
@@ -23,7 +23,7 @@ services:
       - app-network
 
   php-8:
-    image: server-php:8.2-local
+    image: long301001/multi-php-docker:php-8.2
     build:
       context: .
       dockerfile: ./docker_files/php8.Dockerfile
@@ -38,7 +38,7 @@ services:
       - app-network
 
   php-7:
-     image: server-php:7.4-local
+     image: long301001/multi-php-docker:php-7.4
      build:
       context: .
       dockerfile: ./docker_files/php7.Dockerfile
@@ -52,7 +52,7 @@ services:
        - app-network
 
   supervisor:
-    image: server-php:8.2-local
+    image: long301001/multi-php-docker:php-8.2
     container_name: supervisor_container
     volumes:
       - ./server/source_php8.2:/var/www/source_php8.2
@@ -71,7 +71,7 @@ services:
       - app-network
 
   redis:
-    image: server-redis:local
+    image: long301001/multi-php-docker:redis-alpine
     build:
       context: .
       dockerfile: ./docker_files/redis.Dockerfile
@@ -84,7 +84,7 @@ services:
       - app-network
 
   mysql:
-    image: server-mysql:local
+    image: long301001/multi-php-docker:mysql
     build:
       context: .
       dockerfile: ./docker_files/mysql.Dockerfile
@@ -102,7 +102,7 @@ services:
 
 
   rabbitmq:
-    image: server-rabbitmq:local
+    image: long301001/multi-php-docker:rabbitmq-3-management
     build:
       context: .
       dockerfile: ./docker_files/rabbitMQ.Dockerfile
