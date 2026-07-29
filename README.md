@@ -14,6 +14,18 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
 | Redis | `redis_container` | `6379` | Không có mật khẩu |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
+| Supervisor | `supervisor_container` | Không public | Chạy background worker bằng PHP 8.2 |
+
+Các image local được đặt tên cố định:
+
+| Service | Image |
+| --- | --- |
+| `nginx` | `server-nginx:local` |
+| `php-8`, `supervisor` | `server-php:8.2-local` |
+| `php-7` | `server-php:7.4-local` |
+| `mysql` | `server-mysql:local` |
+| `redis` | `server-redis:local` |
+| `rabbitmq` | `server-rabbitmq:local` |
 
 ## Yêu cầu
 
@@ -162,7 +174,177 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Tên service hợp lệ: `nginx`, `php-8`, `php-7`, `mysql`, `redis`, `rabbitmq`.
+Tên service hợp lệ: `nginx`, `php-8`, `php-7`, `supervisor`, `mysql`, `redis`, `rabbitmq`.
+
+## Chạy background worker với Supervisor
+
+Service `php-8` build image local `server-php:8.2-local` một lần; cả `php-8` và `supervisor` đều tạo container từ image này. Hai service cũng mount chung source tại `server/source_php8.2` và `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
+
+### Tạo cấu hình worker
+
+Sao chép file mẫu:
+
+```bash
+cp configs/supervisor.d/worker.conf.example configs/supervisor.d/worker.conf
+```
+
+Sửa `directory` và `command` trong `worker.conf` cho đúng project. Ví dụ Laravel:
+
+```ini
+[program:app_worker]
+directory=/var/www/source_php8.2/my-project
+command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
+numprocs=1
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/app-worker.log
+```
+
+Có thể tạo nhiều file `.conf` trong `configs/supervisor.d/` để chạy worker cho nhiều project. Các file có đuôi `.example` không được nạp tự động.
+
+### Khởi động và quản lý worker
+
+```bash
+# Build image PHP 8.2 dùng chung một lần
+docker compose build php-8
+
+# Khởi động PHP-FPM và Supervisor từ cùng image
+docker compose up -d php-8 supervisor
+
+# Xem trạng thái worker
+docker compose exec supervisor supervisorctl status
+
+# Nạp lại cấu hình sau khi thêm hoặc sửa file .conf
+docker compose exec supervisor supervisorctl reread
+docker compose exec supervisor supervisorctl update
+
+# Khởi động lại tất cả worker
+docker compose exec supervisor supervisorctl restart all
+
+# Xem log container và log worker
+docker compose logs -f supervisor
+ls logs/supervisor
+```
+
+Supervisor dùng hostname `mysql`, `redis` và `rabbitmq` để kết nối các dịch vụ trong `app-network`. `depends_on` chỉ đảm bảo container được khởi động theo thứ tự, không đảm bảo dịch vụ đã sẵn sàng nhận kết nối; worker nên có cơ chế retry.
+
+### Dùng Supervisor với phiên bản PHP khác
+
+Mỗi container Supervisor chỉ có một PHP runtime. Vì vậy, nếu project dùng nhiều phiên bản PHP, hãy tạo một service Supervisor cho mỗi phiên bản và cho nó dùng chung image với service PHP-FPM tương ứng:
+
+| PHP-FPM service | Supervisor service | Image dùng chung |
+| --- | --- | --- |
+| `php-8` | `supervisor` | `server-php:8.2-local` |
+| `php-7` | `supervisor-7` | `server-php:7.4-local` |
+| `php-8-3` | `supervisor-8-3` | `server-php:8.3-local` |
+
+Không khai báo `build` trong service Supervisor. Image chỉ được build bởi service PHP-FPM tương ứng để tránh build lặp lại.
+
+#### Ví dụ Supervisor cho PHP 7.4
+
+Image PHP 7.4 hiện chưa có Supervisor. Thêm `supervisor` vào danh sách package cài đặt trong `docker_files/php7.Dockerfile`:
+
+```dockerfile
+RUN apt-get update && apt-get install -y \
+    supervisor \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libzip-dev \
+    libxml2-dev \
+    unzip \
+    curl
+```
+
+Tạo thư mục cấu hình worker riêng:
+
+```bash
+mkdir -p configs/supervisor.d/php7.4
+cp configs/supervisor.d/worker.conf.example \
+   configs/supervisor.d/php7.4/worker.conf
+```
+
+Thêm service vào `docker-compose.yml`:
+
+```yaml
+  supervisor-7:
+    image: server-php:7.4-local
+    container_name: supervisor7_container
+    volumes:
+      - ./server/source_php7.4:/var/www/source_php7.4
+      - ./scripts:/var/scripts
+      - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d/php7.4:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor-7:/var/log/supervisor
+    working_dir: /var/www/source_php7.4
+    command: ["/var/scripts/supervisord.sh"]
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - app-network
+```
+
+Build image PHP 7.4 một lần rồi khởi động cả PHP-FPM và Supervisor:
+
+```bash
+docker compose build php-7
+docker compose up -d php-7 supervisor-7
+docker compose exec supervisor-7 supervisorctl status
+```
+
+#### Ví dụ Supervisor cho PHP 8.3 hoặc phiên bản mới
+
+Nếu Dockerfile của phiên bản mới được sao chép từ `php8.Dockerfile`, image đã có Supervisor. Gán tag image cho service PHP-FPM:
+
+```yaml
+  php-8-3:
+    image: server-php:8.3-local
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.3.Dockerfile
+    # volumes, working_dir và networks...
+```
+
+Sau đó thêm service Supervisor dùng lại image:
+
+```yaml
+  supervisor-8-3:
+    image: server-php:8.3-local
+    container_name: supervisor83_container
+    volumes:
+      - ./server/source_php8.3:/var/www/source_php8.3
+      - ./scripts:/var/scripts
+      - ./configs/php8.3/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d/php8.3:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor-8.3:/var/log/supervisor
+    working_dir: /var/www/source_php8.3
+    command: ["/var/scripts/supervisord.sh"]
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - app-network
+```
+
+Tạo cấu hình worker và khởi động:
+
+```bash
+mkdir -p configs/supervisor.d/php8.3
+cp configs/supervisor.d/worker.conf.example \
+   configs/supervisor.d/php8.3/worker.conf
+
+docker compose build php-8-3
+docker compose up -d php-8-3 supervisor-8-3
+docker compose exec supervisor-8-3 supervisorctl status
+```
+
+Trong mỗi `worker.conf`, cập nhật `directory` theo đúng source của phiên bản PHP, ví dụ `/var/www/source_php7.4/my-project` hoặc `/var/www/source_php8.3/my-project`. Tách thư mục cấu hình và thư mục log theo phiên bản giúp tránh nạp nhầm worker.
 
 ### Chạy lệnh trong container
 
@@ -376,6 +558,7 @@ Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `loca
 ```text
 .
 ├── configs/                 # Cấu hình PHP và Supervisor
+│   └── supervisor.d/        # Cấu hình background worker
 ├── docker_files/            # Dockerfile để build các dịch vụ
 ├── mysql/                   # Cấu hình MySQL
 ├── nginx/

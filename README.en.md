@@ -14,6 +14,18 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
 | Redis | `redis_container` | `6379` | No password |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
+| Supervisor | `supervisor_container` | Not published | Runs PHP 8.2 background workers |
+
+Local images use fixed names:
+
+| Service | Image |
+| --- | --- |
+| `nginx` | `server-nginx:local` |
+| `php-8`, `supervisor` | `server-php:8.2-local` |
+| `php-7` | `server-php:7.4-local` |
+| `mysql` | `server-mysql:local` |
+| `redis` | `server-redis:local` |
+| `rabbitmq` | `server-rabbitmq:local` |
 
 ## Requirements
 
@@ -162,7 +174,177 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Valid service names: `nginx`, `php-8`, `php-7`, `mysql`, `redis`, and `rabbitmq`.
+Valid service names: `nginx`, `php-8`, `php-7`, `supervisor`, `mysql`, `redis`, and `rabbitmq`.
+
+## Running background workers with Supervisor
+
+The `php-8` service builds the local `server-php:8.2-local` image once; both `php-8` and `supervisor` create containers from that image. They also mount the same source directory at `server/source_php8.2` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
+
+### Create a worker configuration
+
+Copy the example file:
+
+```bash
+cp configs/supervisor.d/worker.conf.example configs/supervisor.d/worker.conf
+```
+
+Update `directory` and `command` in `worker.conf` for the project. Laravel example:
+
+```ini
+[program:app_worker]
+directory=/var/www/source_php8.2/my-project
+command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
+numprocs=1
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/app-worker.log
+```
+
+Create multiple `.conf` files in `configs/supervisor.d/` to run workers for multiple projects. Files ending in `.example` are not loaded automatically.
+
+### Start and manage workers
+
+```bash
+# Build the shared PHP 8.2 image once
+docker compose build php-8
+
+# Start PHP-FPM and Supervisor from the same image
+docker compose up -d php-8 supervisor
+
+# View worker status
+docker compose exec supervisor supervisorctl status
+
+# Reload configuration after adding or editing .conf files
+docker compose exec supervisor supervisorctl reread
+docker compose exec supervisor supervisorctl update
+
+# Restart all workers
+docker compose exec supervisor supervisorctl restart all
+
+# View container and worker logs
+docker compose logs -f supervisor
+ls logs/supervisor
+```
+
+Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` only controls container startup order; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
+
+### Using Supervisor with other PHP versions
+
+Each Supervisor container contains one PHP runtime. When projects use multiple PHP versions, create one Supervisor service per version and share the image with the matching PHP-FPM service:
+
+| PHP-FPM service | Supervisor service | Shared image |
+| --- | --- | --- |
+| `php-8` | `supervisor` | `server-php:8.2-local` |
+| `php-7` | `supervisor-7` | `server-php:7.4-local` |
+| `php-8-3` | `supervisor-8-3` | `server-php:8.3-local` |
+
+Do not add `build` to a Supervisor service. Only the matching PHP-FPM service builds the image, preventing duplicate builds.
+
+#### PHP 7.4 Supervisor example
+
+The current PHP 7.4 image does not include Supervisor. Add `supervisor` to the package list in `docker_files/php7.Dockerfile`:
+
+```dockerfile
+RUN apt-get update && apt-get install -y \
+    supervisor \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libzip-dev \
+    libxml2-dev \
+    unzip \
+    curl
+```
+
+Create a version-specific worker configuration directory:
+
+```bash
+mkdir -p configs/supervisor.d/php7.4
+cp configs/supervisor.d/worker.conf.example \
+   configs/supervisor.d/php7.4/worker.conf
+```
+
+Add the service to `docker-compose.yml`:
+
+```yaml
+  supervisor-7:
+    image: server-php:7.4-local
+    container_name: supervisor7_container
+    volumes:
+      - ./server/source_php7.4:/var/www/source_php7.4
+      - ./scripts:/var/scripts
+      - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d/php7.4:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor-7:/var/log/supervisor
+    working_dir: /var/www/source_php7.4
+    command: ["/var/scripts/supervisord.sh"]
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - app-network
+```
+
+Build the PHP 7.4 image once, then start PHP-FPM and Supervisor:
+
+```bash
+docker compose build php-7
+docker compose up -d php-7 supervisor-7
+docker compose exec supervisor-7 supervisorctl status
+```
+
+#### PHP 8.3 or newer Supervisor example
+
+If the new version's Dockerfile was copied from `php8.Dockerfile`, the image already includes Supervisor. Assign a fixed image tag to the PHP-FPM service:
+
+```yaml
+  php-8-3:
+    image: server-php:8.3-local
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.3.Dockerfile
+    # volumes, working_dir, and networks...
+```
+
+Then add a Supervisor service that reuses the image:
+
+```yaml
+  supervisor-8-3:
+    image: server-php:8.3-local
+    container_name: supervisor83_container
+    volumes:
+      - ./server/source_php8.3:/var/www/source_php8.3
+      - ./scripts:/var/scripts
+      - ./configs/php8.3/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d/php8.3:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor-8.3:/var/log/supervisor
+    working_dir: /var/www/source_php8.3
+    command: ["/var/scripts/supervisord.sh"]
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - app-network
+```
+
+Create the worker configuration and start the services:
+
+```bash
+mkdir -p configs/supervisor.d/php8.3
+cp configs/supervisor.d/worker.conf.example \
+   configs/supervisor.d/php8.3/worker.conf
+
+docker compose build php-8-3
+docker compose up -d php-8-3 supervisor-8-3
+docker compose exec supervisor-8-3 supervisorctl status
+```
+
+Update `directory` in each `worker.conf` to match the PHP version's source path, such as `/var/www/source_php7.4/my-project` or `/var/www/source_php8.3/my-project`. Separate configuration and log directories per version prevent workers from being loaded by the wrong runtime.
 
 ### Run commands inside containers
 
@@ -376,6 +558,7 @@ Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of
 ```text
 .
 ├── configs/                 # PHP and Supervisor configuration
+│   └── supervisor.d/        # Background-worker configurations
 ├── docker_files/            # Dockerfiles used to build services
 ├── mysql/                   # MySQL configuration
 ├── nginx/

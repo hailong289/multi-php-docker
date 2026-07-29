@@ -1,5 +1,6 @@
 services:
   nginx:
+    image: server-nginx:local
     build:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
@@ -22,6 +23,7 @@ services:
       - app-network
 
   php-8:
+    image: server-php:8.2-local
     build:
       context: .
       dockerfile: ./docker_files/php8.Dockerfile
@@ -36,6 +38,7 @@ services:
       - app-network
 
   php-7:
+     image: server-php:7.4-local
      build:
       context: .
       dockerfile: ./docker_files/php7.Dockerfile
@@ -48,7 +51,27 @@ services:
      networks:
        - app-network
 
+  supervisor:
+    image: server-php:8.2-local
+    container_name: supervisor_container
+    volumes:
+      - ./server/source_php8.2:/var/www/source_php8.2
+      - ./scripts:/var/scripts
+      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor:/var/log/supervisor
+    working_dir: /var/www/source_php8.2
+    command: ["/var/scripts/supervisord.sh"]
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - app-network
+
   redis:
+    image: server-redis:local
     build:
       context: .
       dockerfile: ./docker_files/redis.Dockerfile
@@ -61,6 +84,7 @@ services:
       - app-network
 
   mysql:
+    image: server-mysql:local
     build:
       context: .
       dockerfile: ./docker_files/mysql.Dockerfile
@@ -78,6 +102,7 @@ services:
 
 
   rabbitmq:
+    image: server-rabbitmq:local
     build:
       context: .
       dockerfile: ./docker_files/rabbitMQ.Dockerfile
