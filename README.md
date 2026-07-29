@@ -1,3 +1,5 @@
+[Tiếng Việt](README.md) | [English](README.en.md)
+
 # Môi trường phát triển PHP với Docker
 
 Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.2, MySQL, Redis và RabbitMQ. Các image được build trực tiếp từ Dockerfile trong repository. Nginx tự tạo virtual host từ [`env.json`](env.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
