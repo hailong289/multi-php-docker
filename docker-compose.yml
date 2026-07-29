@@ -1,6 +1,8 @@
 services:
   nginx:
-    image: long301001/server-php:nginx-amd
+    build:
+      context: .
+      dockerfile: ./docker_files/nginx.Dockerfile
     container_name: nginx_container
     ports:
       - "80:80"
@@ -20,7 +22,9 @@ services:
       - app-network
 
   php-8:
-    image: long301001/server-php:php8.2-amd
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.Dockerfile
     container_name: php8_container
     volumes:
       - ./server/source_php8.2:/var/www/source_php8.2
@@ -32,7 +36,9 @@ services:
       - app-network
 
   php-7:
-     image: long301001/server-php:php7.4-amd
+     build:
+      context: .
+      dockerfile: ./docker_files/php7.Dockerfile
      container_name: php7_container
      volumes:
        - ./server/source_php7.4:/var/www/source_php7.4
@@ -43,7 +49,9 @@ services:
        - app-network
 
   redis:
-    image: long301001/server-php:redis-amd
+    build:
+      context: .
+      dockerfile: ./docker_files/redis.Dockerfile
     container_name: redis_container
     volumes:
       - redis-data:/data
@@ -53,7 +61,9 @@ services:
       - app-network
 
   mysql:
-    image: long301001/server-php:mysql-amd
+    build:
+      context: .
+      dockerfile: ./docker_files/mysql.Dockerfile
     container_name: mysql_container
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
@@ -68,7 +78,9 @@ services:
 
 
   rabbitmq:
-    image: rabbitmq:3-management
+    build:
+      context: .
+      dockerfile: ./docker_files/rabbitMQ.Dockerfile
     container_name: rabbitmq_container
     ports:
       - "5672:5672"   # Cổng AMQP (cho ứng dụng kết nối)
