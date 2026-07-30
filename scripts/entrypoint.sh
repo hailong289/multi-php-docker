@@ -1,5 +1,9 @@
 #!/bin/sh
 
+# Xóa cấu hình runtime từ lần chạy trước. Các file hiện tại sẽ được tạo lại
+# hoàn toàn từ /etc/nginx/templates ngay bên dưới.
+find /etc/nginx/conf.d -maxdepth 1 -type f -name '*.conf' -delete
+
 for template in /etc/nginx/templates/*.template; do
     [ -e "$template" ] || break  # Thoát nếu không có tệp nào
     # Sao chép tệp từ /etc/nginx/templates/ vào /etc/nginx/conf.d/ mà không giữ phần mở rộng .template

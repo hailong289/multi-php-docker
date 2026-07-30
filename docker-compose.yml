@@ -21,7 +21,7 @@ services:
 
   php-8.2:
     image: long301001/multi-php-docker:php-8.2
-    container_name: php8_container
+    container_name: php8.2_container
     volumes:
       - ./server/source_php8.2:/var/www/source_php8.2
       - ./scripts:/var/scripts
@@ -33,7 +33,7 @@ services:
 
   php-7.4:
      image: long301001/multi-php-docker:php-7.4
-     container_name: php7_container
+     container_name: php7.4_container
      volumes:
        - ./server/source_php7.4:/var/www/source_php7.4
        - ./scripts:/var/scripts

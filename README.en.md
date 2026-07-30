@@ -9,8 +9,8 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | Service | Container | Host ports | Default configuration |
 | --- | --- | --- | --- |
 | Nginx | `nginx_container` | `80`, `443` | Serves domains defined in `env.json` |
-| PHP 8.2 | `php8_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
-| PHP 7.4 | `php7_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
+| PHP 8.2 | `php8.2_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
+| PHP 7.4 | `php7.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
 | Redis | `redis_container` | `6379` | No password |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
@@ -75,13 +75,13 @@ Each project uses one `SERVER_NAME<N>` entry:
     "APP_NAME": "my-php8-app",
     "DOMAIN_NAME": "my-php8-app.test",
     "SERVER_PATH": "/var/www/source_php8.2/my-php8-app/public",
-    "CONTAINER_PHP_VERSION": "php8_container"
+    "CONTAINER_PHP_VERSION": "php8.2_container"
   },
   "SERVER_NAME2": {
     "APP_NAME": "my-php7-app",
     "DOMAIN_NAME": "my-php7-app.test",
     "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
-    "CONTAINER_PHP_VERSION": "php7_container"
+    "CONTAINER_PHP_VERSION": "php7.4_container"
   }
 }
 ```
@@ -91,7 +91,7 @@ Each project uses one `SERVER_NAME<N>` entry:
 | `APP_NAME` | Project name and generated Nginx configuration filename |
 | `DOMAIN_NAME` | Domain used on the local machine |
 | `SERVER_PATH` | Absolute document-root path **inside the container** |
-| `CONTAINER_PHP_VERSION` | `php8_container` or `php7_container` |
+| `CONTAINER_PHP_VERSION` | `php8.2_container` or `php7.4_container` |
 
 For Laravel or frameworks with a separate public directory, `SERVER_PATH` must point to `public`, `webroot`, or the directory containing `index.php`.
 

@@ -32,6 +32,11 @@ fi
 
 # Tạo thư mục đầu ra nếu chưa tồn tại
 mkdir -p "$OUTPUT_DIR"
+
+# Xóa template được sinh từ lần chạy trước để tránh nạp lại project đã xóa
+# hoặc tên PHP container cũ. Thư mục này chỉ chứa file runtime được tạo từ env.json.
+find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.template' -delete
+
 # Lặp qua từng server
 for key in $keys; do
     # Trích xuất NAME và PATH từ JSON bằng jq
