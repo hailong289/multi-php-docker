@@ -14,21 +14,13 @@ services:
       - ./env.json:/var/environment/env.json
     command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
-      - php-8.0
-      - php-8.1
       - php-8.2
-      - php-7.4
     networks:
       - app-network
 
   php-8.0:
+    profiles: ["php-8.0"]
     image: long301001/multi-php-docker:php-8.0
-    build:
-      context: .
-      dockerfile: ./docker_files/php8.0.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: php8.0_container
     volumes:
       - ./server/source_php8.0:/var/www/source_php8.0
@@ -40,13 +32,8 @@ services:
       - app-network
 
   php-8.1:
+    profiles: ["php-8.1"]
     image: long301001/multi-php-docker:php-8.1
-    build:
-      context: .
-      dockerfile: ./docker_files/php8.1.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: php8.1_container
     volumes:
       - ./server/source_php8.1:/var/www/source_php8.1
@@ -70,6 +57,7 @@ services:
       - app-network
 
   php-7.4:
+     profiles: ["php-7.4"]
      image: long301001/multi-php-docker:php-7.4
      container_name: php7.4_container
      volumes:

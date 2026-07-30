@@ -18,6 +18,8 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor_container` | Not published | Runs PHP 8.2 background workers |
 
+PHP 8.2 is the default version. `docker compose up -d` starts only PHP 8.2; PHP 7.4, 8.0, and 8.1 are assigned to separate profiles and remain disabled by default.
+
 The following images are provided:
 
 | Service | Image |
@@ -144,6 +146,41 @@ On the first run, pull the provided images before creating the containers:
 docker compose pull
 docker compose up -d
 ```
+
+The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, and Supervisor. Older PHP versions are not started.
+
+### Enable an optional PHP version
+
+Each older version has a Compose profile with the same name:
+
+```bash
+# Enable PHP 8.1
+docker compose --profile php-8.1 up -d
+
+# Enable PHP 8.0
+docker compose --profile php-8.0 up -d
+
+# Enable PHP 7.4
+docker compose --profile php-7.4 up -d
+```
+
+Multiple versions can be enabled together:
+
+```bash
+docker compose \
+  --profile php-8.0 \
+  --profile php-8.1 \
+  up -d
+```
+
+Stop and remove an optional version with:
+
+```bash
+docker compose stop php-8.1
+docker compose rm -f php-8.1
+```
+
+When a project in `env.json` uses `php8.0_container`, `php8.1_container`, or `php7.4_container`, enable the matching profile before starting or recreating Nginx. Otherwise, Nginx cannot connect to that PHP upstream.
 
 For subsequent starts, run:
 

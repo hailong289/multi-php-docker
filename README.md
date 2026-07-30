@@ -18,6 +18,8 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor_container` | Không public | Chạy background worker bằng PHP 8.2 |
 
+PHP 8.2 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.2; PHP 7.4, 8.0 và 8.1 được đặt trong profile riêng và mặc định không chạy.
+
 Các image được cung cấp sẵn:
 
 | Service | Image |
@@ -144,6 +146,41 @@ Lần chạy đầu tiên, tải các image được cung cấp sẵn rồi tạ
 docker compose pull
 docker compose up -d
 ```
+
+Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ và Supervisor. Các PHP version cũ không được khởi động.
+
+### Bật phiên bản PHP tùy chọn
+
+Mỗi phiên bản cũ có một Compose profile cùng tên:
+
+```bash
+# Bật thêm PHP 8.1
+docker compose --profile php-8.1 up -d
+
+# Bật thêm PHP 8.0
+docker compose --profile php-8.0 up -d
+
+# Bật thêm PHP 7.4
+docker compose --profile php-7.4 up -d
+```
+
+Có thể bật nhiều phiên bản cùng lúc:
+
+```bash
+docker compose \
+  --profile php-8.0 \
+  --profile php-8.1 \
+  up -d
+```
+
+Tắt một phiên bản tùy chọn:
+
+```bash
+docker compose stop php-8.1
+docker compose rm -f php-8.1
+```
+
+Khi một project trong `env.json` dùng `php8.0_container`, `php8.1_container` hoặc `php7.4_container`, hãy bật profile tương ứng trước khi khởi động/tạo lại Nginx. Nếu không, Nginx không thể kết nối tới upstream PHP đó.
 
 Các lần sau chỉ cần:
 
