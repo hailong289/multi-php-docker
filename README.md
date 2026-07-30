@@ -2,7 +2,7 @@
 
 # Môi trường phát triển PHP với Docker
 
-Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.2, MySQL, Redis và RabbitMQ. Các image được build trực tiếp từ Dockerfile trong repository. Nginx tự tạo virtual host từ [`env.json`](env.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
+Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.2, MySQL, Redis và RabbitMQ. Các image multi-architecture đã được cung cấp sẵn trên Docker Hub; người dùng có thể pull và chạy ngay mà không cần build. Dockerfile vẫn được giữ trong repository để bạn tùy chỉnh và tự build image riêng khi cần. Nginx tự tạo virtual host từ [`env.json`](env.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
 ## Dịch vụ và cổng mặc định
 
@@ -16,16 +16,16 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor_container` | Không public | Chạy background worker bằng PHP 8.2 |
 
-Các image local được đặt tên cố định:
+Các image được cung cấp sẵn:
 
 | Service | Image |
 | --- | --- |
-| `nginx` | `server-nginx:local` |
-| `php-8`, `supervisor` | `server-php:8.2-local` |
-| `php-7` | `server-php:7.4-local` |
-| `mysql` | `server-mysql:local` |
-| `redis` | `server-redis:local` |
-| `rabbitmq` | `server-rabbitmq:local` |
+| `nginx` | `long301001/multi-php-docker:nginx` |
+| `php-8`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7` | `long301001/multi-php-docker:php-7.4` |
+| `mysql` | `long301001/multi-php-docker:mysql` |
+| `redis` | `long301001/multi-php-docker:redis-alpine` |
+| `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
 
 ## Yêu cầu
 
@@ -114,16 +114,14 @@ Script đọc các `DOMAIN_NAME` trong `env.json` và ánh xạ chúng tới `12
 127.0.0.1 my-php7-app.test
 ```
 
-### 5. Build và khởi động
+### 5. Pull image và khởi động
 
-Lần chạy đầu tiên, build toàn bộ image trước rồi mới tạo container:
+Lần chạy đầu tiên, tải các image được cung cấp sẵn rồi tạo container:
 
 ```bash
-docker compose build
+docker compose pull
 docker compose up -d
 ```
-
-Không dùng `docker compose up -d --build` ở lần đầu. Service `supervisor` dùng lại image `server-php:8.2-local` do `php-8` build; nếu image chưa tồn tại, Compose có thể thử pull nó từ registry trước khi build hoàn tất.
 
 Các lần sau chỉ cần:
 
@@ -166,14 +164,41 @@ docker compose down
 docker compose restart nginx
 ```
 
-### Build lại image
+### Cập nhật image từ registry
 
 ```bash
-# Build toàn bộ image rồi cập nhật container
-docker compose build
+# Tải phiên bản mới nhất của các tag hiện tại
+docker compose pull
 docker compose up -d
+```
 
-# Build và chạy lại một service
+### Tự build image riêng
+
+Nếu muốn thay đổi extension, package hoặc cấu hình bên trong image, hãy đổi `image` sang tên riêng và thêm `build` cho service tương ứng. Không nên giữ tên `long301001/multi-php-docker:*` cho image tự build.
+
+Ví dụ tự build PHP 8.2:
+
+```yaml
+services:
+  php-8:
+    image: my-project/php:8.2-local
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.Dockerfile
+    # Giữ nguyên volumes, working_dir và networks hiện có
+
+  supervisor:
+    image: my-project/php:8.2-local
+    # Không thêm build; Supervisor dùng lại image của php-8
+```
+
+Build image riêng trước rồi khởi động container:
+
+```bash
+docker compose build php-8
+docker compose up -d php-8 supervisor
+
+# Build và chạy một service khác
 docker compose build <service-name>
 docker compose up -d <service-name>
 ```
@@ -182,7 +207,7 @@ Tên service hợp lệ: `nginx`, `php-8`, `php-7`, `supervisor`, `mysql`, `redi
 
 ## Chạy background worker với Supervisor
 
-Service `php-8` build image local `server-php:8.2-local` một lần; cả `php-8` và `supervisor` đều tạo container từ image này. Hai service cũng mount chung source tại `server/source_php8.2` và `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
+Hai service `php-8` và `supervisor` cùng dùng image có sẵn `long301001/multi-php-docker:php-8.2`. Hai service cũng mount chung source tại `server/source_php8.2` và `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
 
 ### Tạo cấu hình worker
 
@@ -210,10 +235,7 @@ Có thể tạo nhiều file `.conf` trong `configs/supervisor.d/` để chạy 
 ### Khởi động và quản lý worker
 
 ```bash
-# Build image PHP 8.2 dùng chung một lần
-docker compose build php-8
-
-# Khởi động PHP-FPM và Supervisor từ cùng image
+# Khởi động PHP-FPM và Supervisor từ image có sẵn
 docker compose up -d php-8 supervisor
 
 # Xem trạng thái worker
@@ -239,15 +261,15 @@ Mỗi container Supervisor chỉ có một PHP runtime. Vì vậy, nếu project
 
 | PHP-FPM service | Supervisor service | Image dùng chung |
 | --- | --- | --- |
-| `php-8` | `supervisor` | `server-php:8.2-local` |
-| `php-7` | `supervisor-7` | `server-php:7.4-local` |
+| `php-8` | `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7` | `supervisor-7` | Image PHP 7.4 tùy chỉnh của bạn |
 | `php-8-3` | `supervisor-8-3` | `server-php:8.3-local` |
 
-Không khai báo `build` trong service Supervisor. Image chỉ được build bởi service PHP-FPM tương ứng để tránh build lặp lại.
+Không khai báo `build` trong service Supervisor. Với image tùy chỉnh, chỉ service PHP-FPM tương ứng khai báo `build`; service Supervisor dùng lại cùng tên image để tránh build lặp lại.
 
 #### Ví dụ Supervisor cho PHP 7.4
 
-Image PHP 7.4 hiện chưa có Supervisor. Thêm `supervisor` vào danh sách package cài đặt trong `docker_files/php7.Dockerfile`:
+Image PHP 7.4 được cung cấp sẵn hiện chưa có Supervisor. Để chạy `supervisor-7`, hãy tạo image tùy chỉnh: thêm `supervisor` vào danh sách package trong `docker_files/php7.Dockerfile`, đổi image của `php-7` sang tên riêng và thêm `build` như hướng dẫn ở mục **Tự build image riêng**.
 
 ```dockerfile
 RUN apt-get update && apt-get install -y \
@@ -273,7 +295,7 @@ Thêm service vào `docker-compose.yml`:
 
 ```yaml
   supervisor-7:
-    image: server-php:7.4-local
+    image: my-project/php:7.4-local
     container_name: supervisor7_container
     volumes:
       - ./server/source_php7.4:/var/www/source_php7.4
