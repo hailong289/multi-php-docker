@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.2, MySQL, Redis, and RabbitMQ. Images are built directly from the Dockerfiles in this repository. Nginx generates virtual hosts from [`env.json`](env.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.2, MySQL, Redis, and RabbitMQ. Ready-to-use multi-architecture images are provided on Docker Hub, so users can pull and run the stack without building it. Dockerfiles remain available for users who need customized images. Nginx generates virtual hosts from [`env.json`](env.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Default services and ports
 
@@ -16,16 +16,16 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor_container` | Not published | Runs PHP 8.2 background workers |
 
-Local images use fixed names:
+The following images are provided:
 
 | Service | Image |
 | --- | --- |
-| `nginx` | `server-nginx:local` |
-| `php-8`, `supervisor` | `server-php:8.2-local` |
-| `php-7` | `server-php:7.4-local` |
-| `mysql` | `server-mysql:local` |
-| `redis` | `server-redis:local` |
-| `rabbitmq` | `server-rabbitmq:local` |
+| `nginx` | `long301001/multi-php-docker:nginx` |
+| `php-8`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7` | `long301001/multi-php-docker:php-7.4` |
+| `mysql` | `long301001/multi-php-docker:mysql` |
+| `redis` | `long301001/multi-php-docker:redis-alpine` |
+| `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
 
 ## Requirements
 
@@ -114,16 +114,14 @@ The script reads every `DOMAIN_NAME` in `env.json` and maps it to `127.0.0.1`. T
 127.0.0.1 my-php7-app.test
 ```
 
-### 5. Build and start the environment
+### 5. Pull images and start the environment
 
-On the first run, build every image before creating the containers:
+On the first run, pull the provided images before creating the containers:
 
 ```bash
-docker compose build
+docker compose pull
 docker compose up -d
 ```
-
-Do not use `docker compose up -d --build` on the first run. The `supervisor` service reuses `server-php:8.2-local`, which is built by `php-8`; when the image does not exist yet, Compose may try to pull it from a registry before the build finishes.
 
 For subsequent starts, run:
 
@@ -166,14 +164,41 @@ docker compose down
 docker compose restart nginx
 ```
 
-### Rebuild images
+### Update images from the registry
 
 ```bash
-# Rebuild all images, then update the containers
-docker compose build
+# Pull the newest content for the configured tags
+docker compose pull
 docker compose up -d
+```
 
-# Build and run one service
+### Build custom images
+
+To change extensions, packages, or configuration inside an image, change `image` to your own name and add `build` to the corresponding service. Do not keep a `long301001/multi-php-docker:*` name for a custom image.
+
+Example for a custom PHP 8.2 image:
+
+```yaml
+services:
+  php-8:
+    image: my-project/php:8.2-local
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.Dockerfile
+    # Keep the existing volumes, working_dir, and networks
+
+  supervisor:
+    image: my-project/php:8.2-local
+    # Do not add build; Supervisor reuses the php-8 image
+```
+
+Build the custom image before starting the containers:
+
+```bash
+docker compose build php-8
+docker compose up -d php-8 supervisor
+
+# Build and run another service
 docker compose build <service-name>
 docker compose up -d <service-name>
 ```
@@ -182,7 +207,7 @@ Valid service names: `nginx`, `php-8`, `php-7`, `supervisor`, `mysql`, `redis`, 
 
 ## Running background workers with Supervisor
 
-The `php-8` service builds the local `server-php:8.2-local` image once; both `php-8` and `supervisor` create containers from that image. They also mount the same source directory at `server/source_php8.2` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
+The `php-8` and `supervisor` services both use the provided `long301001/multi-php-docker:php-8.2` image. They also mount the same source directory at `server/source_php8.2` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
 
 ### Create a worker configuration
 
@@ -210,10 +235,7 @@ Create multiple `.conf` files in `configs/supervisor.d/` to run workers for mult
 ### Start and manage workers
 
 ```bash
-# Build the shared PHP 8.2 image once
-docker compose build php-8
-
-# Start PHP-FPM and Supervisor from the same image
+# Start PHP-FPM and Supervisor from the provided image
 docker compose up -d php-8 supervisor
 
 # View worker status
@@ -239,15 +261,15 @@ Each Supervisor container contains one PHP runtime. When projects use multiple P
 
 | PHP-FPM service | Supervisor service | Shared image |
 | --- | --- | --- |
-| `php-8` | `supervisor` | `server-php:8.2-local` |
-| `php-7` | `supervisor-7` | `server-php:7.4-local` |
+| `php-8` | `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7` | `supervisor-7` | Your custom PHP 7.4 image |
 | `php-8-3` | `supervisor-8-3` | `server-php:8.3-local` |
 
-Do not add `build` to a Supervisor service. Only the matching PHP-FPM service builds the image, preventing duplicate builds.
+Do not add `build` to a Supervisor service. For a custom image, only the matching PHP-FPM service declares `build`; the Supervisor service reuses the same image name to prevent duplicate builds.
 
 #### PHP 7.4 Supervisor example
 
-The current PHP 7.4 image does not include Supervisor. Add `supervisor` to the package list in `docker_files/php7.Dockerfile`:
+The provided PHP 7.4 image does not currently include Supervisor. To run `supervisor-7`, create a custom image: add `supervisor` to the package list in `docker_files/php7.Dockerfile`, change `php-7` to your own image name, and add `build` as described under **Build custom images**.
 
 ```dockerfile
 RUN apt-get update && apt-get install -y \
@@ -273,7 +295,7 @@ Add the service to `docker-compose.yml`:
 
 ```yaml
   supervisor-7:
-    image: server-php:7.4-local
+    image: my-project/php:7.4-local
     container_name: supervisor7_container
     volumes:
       - ./server/source_php7.4:/var/www/source_php7.4
