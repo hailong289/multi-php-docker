@@ -557,6 +557,124 @@ Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `loca
 - Kiểm tra kết nối mạng và Docker daemon.
 - Kiểm tra đúng tên Dockerfile, đặc biệt RabbitMQ dùng `docker_files/rabbitMQ.Dockerfile`.
 
+## Build multi-architecture image với Docker Buildx
+
+Phần này dành cho trường hợp cần publish image hỗ trợ đồng thời:
+
+- `linux/amd64`: máy Intel/AMD, phần lớn máy Windows/Linux.
+- `linux/arm64`: Apple Silicon và máy ARM64.
+
+Nếu chỉ chạy local, không cần cấu hình multi-architecture. Hãy dùng `docker compose build` để Docker tự build theo kiến trúc native của máy.
+
+### 1. Khai báo platform trong `docker-compose.yml`
+
+Thêm `platforms` bên trong `build` của từng service cần publish. Đồng thời, `image` phải là tên đầy đủ trên Docker Hub hoặc registry mà bạn có quyền push:
+
+```yaml
+services:
+  nginx:
+    image: <dockerhub-username>/server-nginx:v1.0.0
+    build:
+      context: .
+      dockerfile: ./docker_files/nginx.Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+
+  php-8:
+    image: <dockerhub-username>/server-php:8.2-v1.0.0
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+```
+
+Áp dụng cùng cấu trúc cho `php-7`, `mysql`, `redis` và `rabbitmq`. Service `supervisor` không có `build`; nó tiếp tục dùng cùng image với `php-8`.
+
+> Không dùng các tag local như `server-php:8.2-local` khi push. Hãy đổi sang `<registry>/<namespace>/<image>:<tag>`, ví dụ `docker.io/my-user/server-php:8.2-v1.0.0`.
+
+### 2. Tạo Buildx builder
+
+Chỉ cần thực hiện một lần trên mỗi máy:
+
+```bash
+docker buildx create \
+  --name multiarch-builder \
+  --driver docker-container \
+  --use
+
+docker buildx inspect --bootstrap
+```
+
+Kiểm tra builder đang được chọn và các platform được hỗ trợ:
+
+```bash
+docker buildx ls
+```
+
+### 3. Đăng nhập registry
+
+Với Docker Hub:
+
+```bash
+docker login
+```
+
+Với registry khác:
+
+```bash
+docker login <registry-domain>
+```
+
+### 4. Build và push toàn bộ image
+
+Docker Compose v2 sử dụng BuildKit/Buildx cho quá trình build. Khi đã chọn builder ở bước trên, chạy:
+
+```bash
+docker compose build --push
+```
+
+Build và push riêng một service:
+
+```bash
+docker compose build --push php-8
+```
+
+Các biến sau chỉ cần thiết khi dùng Docker Compose cũ; với Docker Compose v2 hiện đại thường không cần thiết lập thủ công:
+
+```bash
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+```
+
+### 5. Kiểm tra image đã publish
+
+```bash
+docker buildx imagetools inspect \
+  <dockerhub-username>/server-php:8.2-v1.0.0
+```
+
+Hoặc:
+
+```bash
+docker manifest inspect \
+  <dockerhub-username>/server-php:8.2-v1.0.0
+```
+
+Kết quả cần chứa manifest cho cả `linux/amd64` và `linux/arm64`.
+
+### Lưu ý khi build đa kiến trúc
+
+- Dùng `--push` để đẩy kết quả đa kiến trúc thẳng lên registry. Docker image store kiểu cũ không thể nạp nhiều platform dưới cùng một tag local.
+- Cross-build có thể dùng QEMU và chậm hơn native build, đặc biệt ở các bước compile PHP extension.
+- Base image và package được cài trong Dockerfile phải tồn tại trên cả hai kiến trúc.
+- Không chạy `docker compose up` trực tiếp với cấu hình publish nếu các tag image trên registry chưa tồn tại.
+- Không dùng cùng một tag cho các nội dung release khác nhau; nên dùng tag phiên bản rõ ràng như `v1.0.0`.
+
+Tham khảo tài liệu chính thức: [Docker Compose Build Specification](https://docs.docker.com/reference/compose-file/build/) và [Docker multi-platform builds](https://docs.docker.com/build/building/multi-platform/).
+
 ## Cấu trúc repository
 
 ```text

@@ -557,6 +557,124 @@ Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of
 - Check the network connection and Docker daemon.
 - Verify Dockerfile names, especially `docker_files/rabbitMQ.Dockerfile` for RabbitMQ.
 
+## Building multi-architecture images with Docker Buildx
+
+Use this workflow when publishing images that must support both:
+
+- `linux/amd64`: Intel/AMD machines and most Windows/Linux systems.
+- `linux/arm64`: Apple Silicon and ARM64 machines.
+
+Multi-architecture configuration is unnecessary for local-only use. Run `docker compose build` and Docker will build for the host's native architecture.
+
+### 1. Define platforms in `docker-compose.yml`
+
+Add `platforms` under `build` for each service being published. The `image` value must also be a fully qualified Docker Hub or registry name that you are authorized to push:
+
+```yaml
+services:
+  nginx:
+    image: <dockerhub-username>/server-nginx:v1.0.0
+    build:
+      context: .
+      dockerfile: ./docker_files/nginx.Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+
+  php-8:
+    image: <dockerhub-username>/server-php:8.2-v1.0.0
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+```
+
+Apply the same structure to `php-7`, `mysql`, `redis`, and `rabbitmq`. The `supervisor` service has no `build` section and continues to share the `php-8` image.
+
+> Do not push local tags such as `server-php:8.2-local`. Use `<registry>/<namespace>/<image>:<tag>`, for example `docker.io/my-user/server-php:8.2-v1.0.0`.
+
+### 2. Create a Buildx builder
+
+This step is required only once per machine:
+
+```bash
+docker buildx create \
+  --name multiarch-builder \
+  --driver docker-container \
+  --use
+
+docker buildx inspect --bootstrap
+```
+
+Check the selected builder and its supported platforms:
+
+```bash
+docker buildx ls
+```
+
+### 3. Sign in to the registry
+
+For Docker Hub:
+
+```bash
+docker login
+```
+
+For another registry:
+
+```bash
+docker login <registry-domain>
+```
+
+### 4. Build and push all images
+
+Docker Compose v2 uses BuildKit/Buildx for builds. After selecting the builder above, run:
+
+```bash
+docker compose build --push
+```
+
+Build and push one service only:
+
+```bash
+docker compose build --push php-8
+```
+
+The following variables are only needed with older Docker Compose versions; modern Compose v2 normally does not require them:
+
+```bash
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+```
+
+### 5. Verify the published image
+
+```bash
+docker buildx imagetools inspect \
+  <dockerhub-username>/server-php:8.2-v1.0.0
+```
+
+Alternatively:
+
+```bash
+docker manifest inspect \
+  <dockerhub-username>/server-php:8.2-v1.0.0
+```
+
+The result should contain manifests for both `linux/amd64` and `linux/arm64`.
+
+### Multi-architecture build notes
+
+- Use `--push` to send multi-platform output directly to a registry. The classic Docker image store cannot load multiple platforms under one local tag.
+- Cross-builds may use QEMU and run slower than native builds, especially while compiling PHP extensions.
+- Base images and packages installed by Dockerfiles must be available for both architectures.
+- Do not run `docker compose up` with publishing configuration before the registry tags exist.
+- Do not reuse one tag for different release contents; use explicit version tags such as `v1.0.0`.
+
+See the official [Docker Compose Build Specification](https://docs.docker.com/reference/compose-file/build/) and [Docker multi-platform build documentation](https://docs.docker.com/build/building/multi-platform/).
+
 ## Repository structure
 
 ```text
