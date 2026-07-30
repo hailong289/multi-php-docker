@@ -9,8 +9,8 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | Dịch vụ | Container | Cổng host | Thông tin mặc định |
 | --- | --- | --- | --- |
 | Nginx | `nginx_container` | `80`, `443` | Phục vụ domain trong `env.json` |
-| PHP 8.2 | `php8_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
-| PHP 7.4 | `php7_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
+| PHP 8.2 | `php8.2_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
+| PHP 7.4 | `php7.4_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
 | Redis | `redis_container` | `6379` | Không có mật khẩu |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
@@ -75,13 +75,13 @@ Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
     "APP_NAME": "my-php8-app",
     "DOMAIN_NAME": "my-php8-app.test",
     "SERVER_PATH": "/var/www/source_php8.2/my-php8-app/public",
-    "CONTAINER_PHP_VERSION": "php8_container"
+    "CONTAINER_PHP_VERSION": "php8.2_container"
   },
   "SERVER_NAME2": {
     "APP_NAME": "my-php7-app",
     "DOMAIN_NAME": "my-php7-app.test",
     "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
-    "CONTAINER_PHP_VERSION": "php7_container"
+    "CONTAINER_PHP_VERSION": "php7.4_container"
   }
 }
 ```
@@ -91,7 +91,7 @@ Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
 | `APP_NAME` | Tên project và tên file cấu hình Nginx được sinh ra |
 | `DOMAIN_NAME` | Domain dùng trên máy local |
 | `SERVER_PATH` | Document root tuyệt đối **bên trong container** |
-| `CONTAINER_PHP_VERSION` | `php8_container` hoặc `php7_container` |
+| `CONTAINER_PHP_VERSION` | `php8.2_container` hoặc `php7.4_container` |
 
 Với Laravel hoặc framework có thư mục public riêng, `SERVER_PATH` phải trỏ tới thư mục `public`, `webroot` hoặc thư mục chứa `index.php`.
 
