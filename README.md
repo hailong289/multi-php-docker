@@ -2,13 +2,15 @@
 
 # Môi trường phát triển PHP với Docker
 
-Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.2, MySQL, Redis và RabbitMQ. Các image multi-architecture đã được cung cấp sẵn trên Docker Hub; người dùng có thể pull và chạy ngay mà không cần build. Dockerfile vẫn được giữ trong repository để bạn tùy chỉnh và tự build image riêng khi cần. Nginx tự tạo virtual host từ [`env.json`](env.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
+Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis và RabbitMQ. Các image multi-architecture đã được cung cấp sẵn trên Docker Hub; PHP 8.0 và 8.1 cũng có Dockerfile để build từ source. Nginx tự tạo virtual host từ [`env.json`](env.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
 ## Dịch vụ và cổng mặc định
 
 | Dịch vụ | Container | Cổng host | Thông tin mặc định |
 | --- | --- | --- | --- |
 | Nginx | `nginx_container` | `80`, `443` | Phục vụ domain trong `env.json` |
+| PHP 8.0 | `php8.0_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
+| PHP 8.1 | `php8.1_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
 | PHP 8.2 | `php8.2_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
 | PHP 7.4 | `php7.4_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
@@ -21,6 +23,8 @@ Các image được cung cấp sẵn:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
+| `php-8.0` | `long301001/multi-php-docker:php-8.0` (build từ source trước khi push) |
+| `php-8.1` | `long301001/multi-php-docker:php-8.1` (build từ source trước khi push) |
 | `php-8.2`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
@@ -52,15 +56,21 @@ cd <repository-folder>
 
 ### 2. Đặt source code vào đúng thư mục
 
+- PHP 8.0: `server/source_php8.0/<project-name>`
+- PHP 8.1: `server/source_php8.1/<project-name>`
 - PHP 8.2: `server/source_php8.2/<project-name>`
 - PHP 7.4: `server/source_php7.4/<project-name>`
 
-Các thư mục tương ứng bên trong container là `/var/www/source_php8.2` và `/var/www/source_php7.4`.
+Các thư mục được mount vào container tại `/var/www/source_php<version>` tương ứng.
 
 ```text
 server/
+├── source_php8.0/
+│   └── my-php80-app/
+├── source_php8.1/
+│   └── my-php81-app/
 ├── source_php8.2/
-│   └── my-php8-app/
+│   └── my-php82-app/
 └── source_php7.4/
     └── my-php7-app/
 ```
@@ -72,12 +82,24 @@ Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
 ```json
 {
   "SERVER_NAME1": {
-    "APP_NAME": "my-php8-app",
-    "DOMAIN_NAME": "my-php8-app.test",
-    "SERVER_PATH": "/var/www/source_php8.2/my-php8-app/public",
-    "CONTAINER_PHP_VERSION": "php8.2_container"
+    "APP_NAME": "my-php80-app",
+    "DOMAIN_NAME": "my-php80-app.test",
+    "SERVER_PATH": "/var/www/source_php8.0/my-php80-app/public",
+    "CONTAINER_PHP_VERSION": "php8.0_container"
   },
   "SERVER_NAME2": {
+    "APP_NAME": "my-php81-app",
+    "DOMAIN_NAME": "my-php81-app.test",
+    "SERVER_PATH": "/var/www/source_php8.1/my-php81-app/public",
+    "CONTAINER_PHP_VERSION": "php8.1_container"
+  },
+  "SERVER_NAME3": {
+    "APP_NAME": "my-php82-app",
+    "DOMAIN_NAME": "my-php82-app.test",
+    "SERVER_PATH": "/var/www/source_php8.2/my-php82-app/public",
+    "CONTAINER_PHP_VERSION": "php8.2_container"
+  },
+  "SERVER_NAME4": {
     "APP_NAME": "my-php7-app",
     "DOMAIN_NAME": "my-php7-app.test",
     "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
@@ -91,7 +113,7 @@ Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
 | `APP_NAME` | Tên project và tên file cấu hình Nginx được sinh ra |
 | `DOMAIN_NAME` | Domain dùng trên máy local |
 | `SERVER_PATH` | Document root tuyệt đối **bên trong container** |
-| `CONTAINER_PHP_VERSION` | `php8.2_container` hoặc `php7.4_container` |
+| `CONTAINER_PHP_VERSION` | `php8.0_container`, `php8.1_container`, `php8.2_container` hoặc `php7.4_container` |
 
 Với Laravel hoặc framework có thư mục public riêng, `SERVER_PATH` phải trỏ tới thư mục `public`, `webroot` hoặc thư mục chứa `index.php`.
 
@@ -203,7 +225,7 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Tên service hợp lệ: `nginx`, `php-8.2`, `php-7.4`, `supervisor`, `mysql`, `redis`, `rabbitmq`.
+Tên service hợp lệ: `nginx`, `php-8.0`, `php-8.1`, `php-8.2`, `php-7.4`, `supervisor`, `mysql`, `redis`, `rabbitmq`.
 
 ## Chạy background worker với Supervisor
 
@@ -376,6 +398,8 @@ Trong mỗi `worker.conf`, cập nhật `directory` theo đúng source của phi
 
 ```bash
 docker compose exec php-8.2 sh
+docker compose exec php-8.0 php -v
+docker compose exec php-8.1 php -v
 docker compose exec php-8.2 php -v
 docker compose exec php-7.4 php -v
 docker compose exec mysql mysql -uroot -p1
@@ -453,7 +477,7 @@ mkdir -p server/source_php8.3
 
 ### 4. Thêm service vào `docker-compose.yml`
 
-Thêm service mới cùng cấp với `php-8.2` và `php-7.4`:
+Thêm service mới cùng cấp với `php-8.0`, `php-8.1`, `php-8.2` và `php-7.4`:
 
 ```yaml
   php-8-3:
@@ -594,6 +618,8 @@ Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `loca
 ├── scripts/                 # Script khởi động và tạo cấu hình
 ├── server/
 │   ├── source_php7.4/       # Source chạy PHP 7.4
+│   ├── source_php8.0/       # Source chạy PHP 8.0
+│   ├── source_php8.1/       # Source chạy PHP 8.1
 │   └── source_php8.2/       # Source chạy PHP 8.2
 ├── docker-compose.yml
 └── env.json                 # Khai báo project và domain
