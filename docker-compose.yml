@@ -1,5 +1,6 @@
 services:
   nginx:
+    image: long301001/multi-php-docker:nginx
     build:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
@@ -22,6 +23,7 @@ services:
       - app-network
 
   php-8:
+    image: long301001/multi-php-docker:php-8.2
     build:
       context: .
       dockerfile: ./docker_files/php8.Dockerfile
@@ -41,9 +43,10 @@ services:
       - app-network
 
   php-7:
+     image: long301001/multi-php-docker:php-7.4
      build:
-       context: .
-       dockerfile: ./docker_files/php7.Dockerfile
+      context: .
+      dockerfile: ./docker_files/php7.Dockerfile
      container_name: php7_container
      volumes:
        - ./server/source_php7.4:/var/www/source_php7.4
@@ -53,7 +56,27 @@ services:
      networks:
        - app-network
 
+  supervisor:
+    image: long301001/multi-php-docker:php-8.2
+    container_name: supervisor_container
+    volumes:
+      - ./server/source_php8.2:/var/www/source_php8.2
+      - ./scripts:/var/scripts
+      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor:/var/log/supervisor
+    working_dir: /var/www/source_php8.2
+    command: ["/var/scripts/supervisord.sh"]
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - app-network
+
   redis:
+    image: long301001/multi-php-docker:redis-alpine
     build:
       context: .
       dockerfile: ./docker_files/redis.Dockerfile
@@ -66,6 +89,7 @@ services:
       - app-network
 
   mysql:
+    image: long301001/multi-php-docker:mysql
     build:
       context: .
       dockerfile: ./docker_files/mysql.Dockerfile
@@ -82,7 +106,10 @@ services:
       - app-network
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: long301001/multi-php-docker:rabbitmq-3-management
+    build:
+      context: .
+      dockerfile: ./docker_files/rabbitMQ.Dockerfile
     container_name: rabbitmq_container
     ports:
       - "5672:5672"   # Cổng AMQP (cho ứng dụng kết nối)

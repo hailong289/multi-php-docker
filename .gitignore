@@ -1,7 +1,11 @@
-/.idea
 /nginx/templates
 /nginx/logs
 /.nx
+/.idea
+.DS_Store
+.DS_Store?
+._*
+**/.DS_Store
 # Bỏ qua tất cả thư mục con trong source_php8.2
 /server/source_php8.2/*/
 # Giữ lại file index.php
