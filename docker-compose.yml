@@ -20,8 +20,46 @@ services:
       - ./env.json:/var/environment/env.json
     command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
+      - php-8.0
+      - php-8.1
       - php-8.2
       - php-7.4
+    networks:
+      - app-network
+
+  php-8.0:
+    image: long301001/multi-php-docker:php-8.0
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.0.Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: php8.0_container
+    volumes:
+      - ./server/source_php8.0:/var/www/source_php8.0
+      - ./scripts:/var/scripts
+      - ./configs/php8.0/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf
+    working_dir: /var/www/source_php8.0
+    networks:
+      - app-network
+
+  php-8.1:
+    image: long301001/multi-php-docker:php-8.1
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.1.Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: php8.1_container
+    volumes:
+      - ./server/source_php8.1:/var/www/source_php8.1
+      - ./scripts:/var/scripts
+      - ./configs/php8.1/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf
+    working_dir: /var/www/source_php8.1
     networks:
       - app-network
 
@@ -39,10 +77,7 @@ services:
       - ./scripts:/var/scripts
       - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf
-      - ./configs/php8/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
     working_dir: /var/www/source_php8.2
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     networks:
       - app-network
 

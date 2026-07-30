@@ -2,13 +2,15 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.2, MySQL, Redis, and RabbitMQ. Ready-to-use multi-architecture images are provided on Docker Hub, so users can pull and run the stack without building it. Dockerfiles remain available for users who need customized images. Nginx generates virtual hosts from [`env.json`](env.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis, and RabbitMQ. Ready-to-use multi-architecture images are provided on Docker Hub; PHP 8.0 and 8.1 also include Dockerfiles for source builds. Nginx generates virtual hosts from [`env.json`](env.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Default services and ports
 
 | Service | Container | Host ports | Default configuration |
 | --- | --- | --- | --- |
 | Nginx | `nginx_container` | `80`, `443` | Serves domains defined in `env.json` |
+| PHP 8.0 | `php8.0_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
+| PHP 8.1 | `php8.1_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | PHP 8.2 | `php8.2_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | PHP 7.4 | `php7.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
@@ -21,6 +23,8 @@ The following images are provided:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
+| `php-8.0` | `long301001/multi-php-docker:php-8.0` (build from source before pushing) |
+| `php-8.1` | `long301001/multi-php-docker:php-8.1` (build from source before pushing) |
 | `php-8.2`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
@@ -52,15 +56,21 @@ cd <repository-folder>
 
 ### 2. Place the source code in the correct directory
 
+- PHP 8.0: `server/source_php8.0/<project-name>`
+- PHP 8.1: `server/source_php8.1/<project-name>`
 - PHP 8.2: `server/source_php8.2/<project-name>`
 - PHP 7.4: `server/source_php7.4/<project-name>`
 
-These directories are mounted inside the containers at `/var/www/source_php8.2` and `/var/www/source_php7.4`, respectively.
+Each directory is mounted at the matching `/var/www/source_php<version>` path inside its container.
 
 ```text
 server/
+├── source_php8.0/
+│   └── my-php80-app/
+├── source_php8.1/
+│   └── my-php81-app/
 ├── source_php8.2/
-│   └── my-php8-app/
+│   └── my-php82-app/
 └── source_php7.4/
     └── my-php7-app/
 ```
@@ -72,12 +82,24 @@ Each project uses one `SERVER_NAME<N>` entry:
 ```json
 {
   "SERVER_NAME1": {
-    "APP_NAME": "my-php8-app",
-    "DOMAIN_NAME": "my-php8-app.test",
-    "SERVER_PATH": "/var/www/source_php8.2/my-php8-app/public",
-    "CONTAINER_PHP_VERSION": "php8.2_container"
+    "APP_NAME": "my-php80-app",
+    "DOMAIN_NAME": "my-php80-app.test",
+    "SERVER_PATH": "/var/www/source_php8.0/my-php80-app/public",
+    "CONTAINER_PHP_VERSION": "php8.0_container"
   },
   "SERVER_NAME2": {
+    "APP_NAME": "my-php81-app",
+    "DOMAIN_NAME": "my-php81-app.test",
+    "SERVER_PATH": "/var/www/source_php8.1/my-php81-app/public",
+    "CONTAINER_PHP_VERSION": "php8.1_container"
+  },
+  "SERVER_NAME3": {
+    "APP_NAME": "my-php82-app",
+    "DOMAIN_NAME": "my-php82-app.test",
+    "SERVER_PATH": "/var/www/source_php8.2/my-php82-app/public",
+    "CONTAINER_PHP_VERSION": "php8.2_container"
+  },
+  "SERVER_NAME4": {
     "APP_NAME": "my-php7-app",
     "DOMAIN_NAME": "my-php7-app.test",
     "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
@@ -91,7 +113,7 @@ Each project uses one `SERVER_NAME<N>` entry:
 | `APP_NAME` | Project name and generated Nginx configuration filename |
 | `DOMAIN_NAME` | Domain used on the local machine |
 | `SERVER_PATH` | Absolute document-root path **inside the container** |
-| `CONTAINER_PHP_VERSION` | `php8.2_container` or `php7.4_container` |
+| `CONTAINER_PHP_VERSION` | `php8.0_container`, `php8.1_container`, `php8.2_container`, or `php7.4_container` |
 
 For Laravel or frameworks with a separate public directory, `SERVER_PATH` must point to `public`, `webroot`, or the directory containing `index.php`.
 
@@ -203,7 +225,7 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Valid service names: `nginx`, `php-8.2`, `php-7.4`, `supervisor`, `mysql`, `redis`, and `rabbitmq`.
+Valid service names: `nginx`, `php-8.0`, `php-8.1`, `php-8.2`, `php-7.4`, `supervisor`, `mysql`, `redis`, and `rabbitmq`.
 
 ## Running background workers with Supervisor
 
@@ -376,6 +398,8 @@ Update `directory` in each `worker.conf` to match the PHP version's source path,
 
 ```bash
 docker compose exec php-8.2 sh
+docker compose exec php-8.0 php -v
+docker compose exec php-8.1 php -v
 docker compose exec php-8.2 php -v
 docker compose exec php-7.4 php -v
 docker compose exec mysql mysql -uroot -p1
@@ -453,7 +477,7 @@ mkdir -p server/source_php8.3
 
 ### 4. Add the service to `docker-compose.yml`
 
-Add a service at the same level as `php-8.2` and `php-7.4`:
+Add a service at the same level as `php-8.0`, `php-8.1`, `php-8.2`, and `php-7.4`:
 
 ```yaml
   php-8-3:
@@ -613,7 +637,7 @@ services:
         - linux/arm64
 ```
 
-Apply the same structure to `php-7.4`, `mysql`, `redis`, and `rabbitmq`. The `supervisor` service has no `build` section and continues to share the `php-8.2` image.
+Apply the same structure to `php-8.0`, `php-8.1`, `php-7.4`, `mysql`, `redis`, and `rabbitmq`. The `supervisor` service has no `build` section and continues to share the `php-8.2` image.
 
 > Do not push local tags such as `server-php:8.2-local`. Use `<registry>/<namespace>/<image>:<tag>`, for example `docker.io/my-user/server-php:8.2-v1.0.0`.
 
@@ -712,6 +736,8 @@ See the official [Docker Compose Build Specification](https://docs.docker.com/re
 ├── scripts/                 # Startup and configuration scripts
 ├── server/
 │   ├── source_php7.4/       # PHP 7.4 projects
+│   ├── source_php8.0/       # PHP 8.0 projects
+│   ├── source_php8.1/       # PHP 8.1 projects
 │   └── source_php8.2/       # PHP 8.2 projects
 ├── docker-compose.yml
 └── env.json                 # Project and domain definitions

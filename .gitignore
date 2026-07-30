@@ -9,7 +9,13 @@
 .DS_Store?
 ._*
 **/.DS_Store
-# Bỏ qua tất cả thư mục con trong source_php8.2
+# Bỏ qua source project local, giữ lại cấu trúc thư mục PHP
+/server/source_php8.0/*/
+!/server/source_php8.0/.gitkeep
+
+/server/source_php8.1/*/
+!/server/source_php8.1/.gitkeep
+
 /server/source_php8.2/*/
 # Giữ lại file index.php
 !/server/source_php8.2/index.php
