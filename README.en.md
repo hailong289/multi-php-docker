@@ -21,8 +21,8 @@ The following images are provided:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
-| `php-7` | `long301001/multi-php-docker:php-7.4` |
+| `php-8.2`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
 | `redis` | `long301001/multi-php-docker:redis-alpine` |
 | `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
@@ -144,7 +144,7 @@ When Nginx starts, `scripts/auto-add-template.sh` reads `env.json`, generates vi
 ```bash
 docker compose logs -f
 docker compose logs -f nginx
-docker compose logs -f php-8
+docker compose logs -f php-8.2
 docker compose logs -f mysql
 ```
 
@@ -180,7 +180,7 @@ Example for a custom PHP 8.2 image:
 
 ```yaml
 services:
-  php-8:
+  php-8.2:
     image: my-project/php:8.2-local
     build:
       context: .
@@ -189,25 +189,25 @@ services:
 
   supervisor:
     image: my-project/php:8.2-local
-    # Do not add build; Supervisor reuses the php-8 image
+    # Do not add build; Supervisor reuses the php-8.2 image
 ```
 
 Build the custom image before starting the containers:
 
 ```bash
-docker compose build php-8
-docker compose up -d php-8 supervisor
+docker compose build php-8.2
+docker compose up -d php-8.2 supervisor
 
 # Build and run another service
 docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Valid service names: `nginx`, `php-8`, `php-7`, `supervisor`, `mysql`, `redis`, and `rabbitmq`.
+Valid service names: `nginx`, `php-8.2`, `php-7.4`, `supervisor`, `mysql`, `redis`, and `rabbitmq`.
 
 ## Running background workers with Supervisor
 
-The `php-8` and `supervisor` services both use the provided `long301001/multi-php-docker:php-8.2` image. They also mount the same source directory at `server/source_php8.2` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
+The `php-8.2` and `supervisor` services both use the provided `long301001/multi-php-docker:php-8.2` image. They also mount the same source directory at `server/source_php8.2` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
 
 ### Create a worker configuration
 
@@ -236,7 +236,7 @@ Create multiple `.conf` files in `configs/supervisor.d/` to run workers for mult
 
 ```bash
 # Start PHP-FPM and Supervisor from the provided image
-docker compose up -d php-8 supervisor
+docker compose up -d php-8.2 supervisor
 
 # View worker status
 docker compose exec supervisor supervisorctl status
@@ -261,15 +261,15 @@ Each Supervisor container contains one PHP runtime. When projects use multiple P
 
 | PHP-FPM service | Supervisor service | Shared image |
 | --- | --- | --- |
-| `php-8` | `supervisor` | `long301001/multi-php-docker:php-8.2` |
-| `php-7` | `supervisor-7` | Your custom PHP 7.4 image |
+| `php-8.2` | `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7.4` | `supervisor-7` | Your custom PHP 7.4 image |
 | `php-8-3` | `supervisor-8-3` | `server-php:8.3-local` |
 
 Do not add `build` to a Supervisor service. For a custom image, only the matching PHP-FPM service declares `build`; the Supervisor service reuses the same image name to prevent duplicate builds.
 
 #### PHP 7.4 Supervisor example
 
-The provided PHP 7.4 image does not currently include Supervisor. To run `supervisor-7`, create a custom image: add `supervisor` to the package list in `docker_files/php7.Dockerfile`, change `php-7` to your own image name, and add `build` as described under **Build custom images**.
+The provided PHP 7.4 image does not currently include Supervisor. To run `supervisor-7`, create a custom image: add `supervisor` to the package list in `docker_files/php7.Dockerfile`, change `php-7.4` to your own image name, and add `build` as described under **Build custom images**.
 
 ```dockerfile
 RUN apt-get update && apt-get install -y \
@@ -317,8 +317,8 @@ Add the service to `docker-compose.yml`:
 Build the PHP 7.4 image once, then start PHP-FPM and Supervisor:
 
 ```bash
-docker compose build php-7
-docker compose up -d php-7 supervisor-7
+docker compose build php-7.4
+docker compose up -d php-7.4 supervisor-7
 docker compose exec supervisor-7 supervisorctl status
 ```
 
@@ -375,9 +375,9 @@ Update `directory` in each `worker.conf` to match the PHP version's source path,
 ### Run commands inside containers
 
 ```bash
-docker compose exec php-8 sh
-docker compose exec php-8 php -v
-docker compose exec php-7 php -v
+docker compose exec php-8.2 sh
+docker compose exec php-8.2 php -v
+docker compose exec php-7.4 php -v
 docker compose exec mysql mysql -uroot -p1
 ```
 
@@ -453,7 +453,7 @@ mkdir -p server/source_php8.3
 
 ### 4. Add the service to `docker-compose.yml`
 
-Add a service at the same level as `php-8` and `php-7`:
+Add a service at the same level as `php-8.2` and `php-7.4`:
 
 ```yaml
   php-8-3:
@@ -478,8 +478,8 @@ Add the new service to the Nginx `depends_on` list:
   nginx:
     # ...
     depends_on:
-      - php-8
-      - php-7
+      - php-8.2
+      - php-7.4
       - php-8-3
 ```
 

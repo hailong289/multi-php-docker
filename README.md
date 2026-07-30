@@ -21,8 +21,8 @@ Các image được cung cấp sẵn:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
-| `php-7` | `long301001/multi-php-docker:php-7.4` |
+| `php-8.2`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
 | `redis` | `long301001/multi-php-docker:redis-alpine` |
 | `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
@@ -144,7 +144,7 @@ Khi Nginx khởi động, `scripts/auto-add-template.sh` đọc `env.json`, tạ
 ```bash
 docker compose logs -f
 docker compose logs -f nginx
-docker compose logs -f php-8
+docker compose logs -f php-8.2
 docker compose logs -f mysql
 ```
 
@@ -180,7 +180,7 @@ Ví dụ tự build PHP 8.2:
 
 ```yaml
 services:
-  php-8:
+  php-8.2:
     image: my-project/php:8.2-local
     build:
       context: .
@@ -189,25 +189,25 @@ services:
 
   supervisor:
     image: my-project/php:8.2-local
-    # Không thêm build; Supervisor dùng lại image của php-8
+    # Không thêm build; Supervisor dùng lại image của php-8.2
 ```
 
 Build image riêng trước rồi khởi động container:
 
 ```bash
-docker compose build php-8
-docker compose up -d php-8 supervisor
+docker compose build php-8.2
+docker compose up -d php-8.2 supervisor
 
 # Build và chạy một service khác
 docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Tên service hợp lệ: `nginx`, `php-8`, `php-7`, `supervisor`, `mysql`, `redis`, `rabbitmq`.
+Tên service hợp lệ: `nginx`, `php-8.2`, `php-7.4`, `supervisor`, `mysql`, `redis`, `rabbitmq`.
 
 ## Chạy background worker với Supervisor
 
-Hai service `php-8` và `supervisor` cùng dùng image có sẵn `long301001/multi-php-docker:php-8.2`. Hai service cũng mount chung source tại `server/source_php8.2` và `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
+Hai service `php-8.2` và `supervisor` cùng dùng image có sẵn `long301001/multi-php-docker:php-8.2`. Hai service cũng mount chung source tại `server/source_php8.2` và `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
 
 ### Tạo cấu hình worker
 
@@ -236,7 +236,7 @@ Có thể tạo nhiều file `.conf` trong `configs/supervisor.d/` để chạy 
 
 ```bash
 # Khởi động PHP-FPM và Supervisor từ image có sẵn
-docker compose up -d php-8 supervisor
+docker compose up -d php-8.2 supervisor
 
 # Xem trạng thái worker
 docker compose exec supervisor supervisorctl status
@@ -261,15 +261,15 @@ Mỗi container Supervisor chỉ có một PHP runtime. Vì vậy, nếu project
 
 | PHP-FPM service | Supervisor service | Image dùng chung |
 | --- | --- | --- |
-| `php-8` | `supervisor` | `long301001/multi-php-docker:php-8.2` |
-| `php-7` | `supervisor-7` | Image PHP 7.4 tùy chỉnh của bạn |
+| `php-8.2` | `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-7.4` | `supervisor-7` | Image PHP 7.4 tùy chỉnh của bạn |
 | `php-8-3` | `supervisor-8-3` | `server-php:8.3-local` |
 
 Không khai báo `build` trong service Supervisor. Với image tùy chỉnh, chỉ service PHP-FPM tương ứng khai báo `build`; service Supervisor dùng lại cùng tên image để tránh build lặp lại.
 
 #### Ví dụ Supervisor cho PHP 7.4
 
-Image PHP 7.4 được cung cấp sẵn hiện chưa có Supervisor. Để chạy `supervisor-7`, hãy tạo image tùy chỉnh: thêm `supervisor` vào danh sách package trong `docker_files/php7.Dockerfile`, đổi image của `php-7` sang tên riêng và thêm `build` như hướng dẫn ở mục **Tự build image riêng**.
+Image PHP 7.4 được cung cấp sẵn hiện chưa có Supervisor. Để chạy `supervisor-7`, hãy tạo image tùy chỉnh: thêm `supervisor` vào danh sách package trong `docker_files/php7.Dockerfile`, đổi image của `php-7.4` sang tên riêng và thêm `build` như hướng dẫn ở mục **Tự build image riêng**.
 
 ```dockerfile
 RUN apt-get update && apt-get install -y \
@@ -317,8 +317,8 @@ Thêm service vào `docker-compose.yml`:
 Build image PHP 7.4 một lần rồi khởi động cả PHP-FPM và Supervisor:
 
 ```bash
-docker compose build php-7
-docker compose up -d php-7 supervisor-7
+docker compose build php-7.4
+docker compose up -d php-7.4 supervisor-7
 docker compose exec supervisor-7 supervisorctl status
 ```
 
@@ -375,9 +375,9 @@ Trong mỗi `worker.conf`, cập nhật `directory` theo đúng source của phi
 ### Chạy lệnh trong container
 
 ```bash
-docker compose exec php-8 sh
-docker compose exec php-8 php -v
-docker compose exec php-7 php -v
+docker compose exec php-8.2 sh
+docker compose exec php-8.2 php -v
+docker compose exec php-7.4 php -v
 docker compose exec mysql mysql -uroot -p1
 ```
 
@@ -453,7 +453,7 @@ mkdir -p server/source_php8.3
 
 ### 4. Thêm service vào `docker-compose.yml`
 
-Thêm service mới cùng cấp với `php-8` và `php-7`:
+Thêm service mới cùng cấp với `php-8.2` và `php-7.4`:
 
 ```yaml
   php-8-3:
@@ -478,8 +478,8 @@ Thêm service mới vào `depends_on` của Nginx:
   nginx:
     # ...
     depends_on:
-      - php-8
-      - php-7
+      - php-8.2
+      - php-7.4
       - php-8-3
 ```
 
