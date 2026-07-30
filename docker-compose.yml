@@ -41,8 +41,6 @@ services:
       - ./configs/supervisord.conf:/etc/supervisord.conf
       - ./configs/php8/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
     working_dir: /var/www/source_php8.2
-    ports:
-      - "9003:9003" # Mở cổng Xdebug
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
