@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis, and RabbitMQ. Ready-to-use multi-architecture images are provided on Docker Hub; PHP 8.0 and 8.1 also include Dockerfiles for source builds. Nginx generates virtual hosts from [`env.json`](env.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis, and RabbitMQ. Every service uses a ready-to-use multi-architecture image from Docker Hub by default; `docker-compose.yml` does not build images. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from [`env.json`](env.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Default services and ports
 
@@ -25,8 +25,8 @@ The following images are provided:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8.0` | `long301001/multi-php-docker:php-8.0` (build from source before pushing) |
-| `php-8.1` | `long301001/multi-php-docker:php-8.1` (build from source before pushing) |
+| `php-8.0` | `long301001/multi-php-docker:php-8.0` |
+| `php-8.1` | `long301001/multi-php-docker:php-8.1` |
 | `php-8.2`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `mysql` | `long301001/multi-php-docker:mysql` |

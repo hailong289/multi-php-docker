@@ -2,7 +2,7 @@
 
 # Môi trường phát triển PHP với Docker
 
-Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis và RabbitMQ. Các image multi-architecture đã được cung cấp sẵn trên Docker Hub; PHP 8.0 và 8.1 cũng có Dockerfile để build từ source. Nginx tự tạo virtual host từ [`env.json`](env.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
+Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis và RabbitMQ. Tất cả service mặc định dùng image multi-architecture được cung cấp sẵn trên Docker Hub; `docker-compose.yml` không tự build image. Các Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ [`env.json`](env.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
 ## Dịch vụ và cổng mặc định
 
@@ -25,8 +25,8 @@ Các image được cung cấp sẵn:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8.0` | `long301001/multi-php-docker:php-8.0` (build từ source trước khi push) |
-| `php-8.1` | `long301001/multi-php-docker:php-8.1` (build từ source trước khi push) |
+| `php-8.0` | `long301001/multi-php-docker:php-8.0` |
+| `php-8.1` | `long301001/multi-php-docker:php-8.1` |
 | `php-8.2`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
