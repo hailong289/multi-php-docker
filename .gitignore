@@ -2,6 +2,7 @@
 /nginx/logs
 /logs/
 *.log
+/.ai/
 /.nx
 /.idea
 .DS_Store
