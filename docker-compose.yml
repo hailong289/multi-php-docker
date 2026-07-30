@@ -20,12 +20,12 @@ services:
       - ./env.json:/var/environment/env.json
     command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
-      - php-8
-      - php-7
+      - php-8.2
+      - php-7.4
     networks:
       - app-network
 
-  php-8:
+  php-8.2:
     image: long301001/multi-php-docker:php-8.2
     build:
       context: .
@@ -48,7 +48,7 @@ services:
     networks:
       - app-network
 
-  php-7:
+  php-7.4:
      image: long301001/multi-php-docker:php-7.4
      build:
       context: .
