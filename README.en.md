@@ -208,6 +208,8 @@ Server Manager can:
 - Restrict document roots to the selected PHP version's source directory.
 - Display the profiles and commands required to apply the configuration.
 - Request virtual-host regeneration and an Nginx reload with **Apply & Reload Nginx**.
+- Support Vietnamese and English; the first visit follows the browser language and the selected locale is then remembered in the session.
+- Support **System**, **Light**, and **Dark** appearances; the selection is stored in the browser, and System mode follows the operating-system preference.
 
 If `env.json` does not exist, the `env-init` service creates it from `env.example.json` before Server Manager and Nginx start. This short-lived service never overwrites existing configuration.
 

@@ -32,26 +32,26 @@ function manager_php_versions(): array
     ];
 }
 
-function manager_load_servers(string $path): array
+function manager_load_servers(string $path, string $locale = 'en'): array
 {
     if (!is_file($path) || !is_readable($path)) {
-        throw new RuntimeException('env.json does not exist or is not readable.');
+        throw new RuntimeException(manager_translate($locale, 'error.env_missing'));
     }
 
     $contents = file_get_contents($path);
     if ($contents === false) {
-        throw new RuntimeException('Unable to read env.json.');
+        throw new RuntimeException(manager_translate($locale, 'error.env_read'));
     }
 
     $servers = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
     if (!is_array($servers)) {
-        throw new RuntimeException('env.json must contain a JSON object.');
+        throw new RuntimeException(manager_translate($locale, 'error.env_object'));
     }
 
     return $servers;
 }
 
-function manager_save_servers(string $path, array $servers): void
+function manager_save_servers(string $path, array $servers, string $locale = 'en'): void
 {
     uksort($servers, static function (string $left, string $right): int {
         return manager_key_number($left) <=> manager_key_number($right);
@@ -64,18 +64,18 @@ function manager_save_servers(string $path, array $servers): void
 
     $handle = fopen($path, 'c+');
     if ($handle === false) {
-        throw new RuntimeException('Unable to open env.json for writing.');
+        throw new RuntimeException(manager_translate($locale, 'error.env_open'));
     }
 
     try {
         if (!flock($handle, LOCK_EX)) {
-            throw new RuntimeException('Unable to lock env.json.');
+            throw new RuntimeException(manager_translate($locale, 'error.env_lock'));
         }
         if (!ftruncate($handle, 0) || rewind($handle) === false) {
-            throw new RuntimeException('Unable to prepare env.json for writing.');
+            throw new RuntimeException(manager_translate($locale, 'error.env_prepare'));
         }
         if (fwrite($handle, $json) !== strlen($json)) {
-            throw new RuntimeException('Unable to write the complete env.json file.');
+            throw new RuntimeException(manager_translate($locale, 'error.env_write'));
         }
         fflush($handle);
         flock($handle, LOCK_UN);
@@ -120,15 +120,15 @@ function manager_validate_server(array $input, array $servers, ?string $currentK
     $errors = [];
 
     if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/', $appName)) {
-        $errors['app_name'] = 'Use 1-64 letters, numbers, dots, underscores, or hyphens.';
+        $errors['app_name'] = ['key' => 'validation.app_name'];
     }
 
     if ($domainName === '' || filter_var($domainName, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
-        $errors['domain_name'] = 'Enter a valid hostname, for example my-app.test.';
+        $errors['domain_name'] = ['key' => 'validation.domain'];
     }
 
     if (!isset($versions[$phpVersion])) {
-        $errors['php_version'] = 'Select a supported PHP version.';
+        $errors['php_version'] = ['key' => 'validation.php_version'];
     } else {
         $prefix = $versions[$phpVersion]['source_prefix'];
         if (
@@ -137,7 +137,10 @@ function manager_validate_server(array $input, array $servers, ?string $currentK
             || !preg_match('#^/var/www/[a-zA-Z0-9._/-]+$#', $serverPath)
             || preg_match('/[\x00-\x1F\x7F]/', $serverPath)
         ) {
-            $errors['server_path'] = 'Use a safe path inside ' . $prefix . ' without spaces or special characters.';
+            $errors['server_path'] = [
+                'key' => 'validation.safe_path',
+                'parameters' => ['prefix' => $prefix],
+            ];
         }
     }
 
@@ -146,10 +149,10 @@ function manager_validate_server(array $input, array $servers, ?string $currentK
             continue;
         }
         if (strcasecmp((string) ($server['APP_NAME'] ?? ''), $appName) === 0) {
-            $errors['app_name'] = 'This application name already exists.';
+            $errors['app_name'] = ['key' => 'validation.duplicate_app'];
         }
         if (strcasecmp((string) ($server['DOMAIN_NAME'] ?? ''), $domainName) === 0) {
-            $errors['domain_name'] = 'This domain already exists.';
+            $errors['domain_name'] = ['key' => 'validation.duplicate_domain'];
         }
     }
 
