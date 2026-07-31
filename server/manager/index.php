@@ -8,6 +8,7 @@ require __DIR__ . '/lib.php';
 
 $envPath = getenv('MANAGER_ENV_PATH') ?: '/data/env.json';
 $runtimePath = getenv('MANAGER_RUNTIME_PATH') ?: '/runtime';
+$phpControllerPath = getenv('MANAGER_PHP_CONTROLLER_PATH') ?: '/runtime/php-controller';
 $locale = manager_locale($_SESSION, (string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
 $versions = manager_php_versions();
 $errors = [];
@@ -55,6 +56,27 @@ try {
                 throw new RuntimeException(manager_translate($locale, 'error.reload_request'));
             }
             $_SESSION['flash'] = manager_translate($locale, 'reload.requested');
+            header('Location: /');
+            exit;
+        }
+
+        if ($action === 'php_action') {
+            $service = (string) ($_POST['service'] ?? '');
+            $containerAction = (string) ($_POST['container_action'] ?? '');
+            try {
+                manager_request_php_action($phpControllerPath, $service, $containerAction);
+            } catch (InvalidArgumentException | RuntimeException $controllerException) {
+                $messageKey = $controllerException->getMessage();
+                if (!str_starts_with($messageKey, 'php_controller.')) {
+                    $messageKey = 'php_controller.request_failed';
+                }
+                throw new RuntimeException(manager_translate($locale, $messageKey));
+            }
+            $target = manager_php_controller_targets()[$service];
+            $_SESSION['flash'] = manager_translate($locale, 'php_controller.requested', [
+                'action' => manager_translate($locale, 'php_controller.' . $containerAction),
+                'version' => $target['label'],
+            ]);
             header('Location: /');
             exit;
         }
@@ -133,6 +155,8 @@ $reloadMessageKeys = [
     'Nginx configuration is invalid. Previous configuration was restored.' => 'reload.status.invalid',
     'Nginx could not reload. Previous configuration was restored.' => 'reload.status.failed',
 ];
+$phpControllerTargets = manager_php_controller_targets();
+$phpStatuses = manager_load_php_statuses($phpControllerPath);
 $profiles = manager_required_profiles($servers);
 $profileFlags = implode(' ', array_map(static fn (string $profile): string => '--profile ' . $profile, $profiles));
 $applyCommand = 'docker compose' . ($profileFlags !== '' ? ' ' . $profileFlags : '') . ' up -d' . PHP_EOL
@@ -214,6 +238,7 @@ function version_label(string $locale, string $version, array $config): string
         .actions { display:flex; gap:8px; }
         button,.button,select { appearance:none; border:1px solid var(--button-line); background:var(--button-bg); color:var(--text); padding:9px 12px; border-radius:9px; cursor:pointer; font-weight:650; font-size:13px; }
         button:hover,.button:hover { border-color:var(--blue); }
+        button:disabled { cursor:not-allowed; opacity:.42; border-color:var(--button-line); }
         .primary { color:#fff; background:var(--primary); border-color:var(--primary-line); }
         .danger { color:var(--danger-text); border-color:var(--danger-line); background:var(--danger-bg); }
         label { display:block; margin:14px 0 7px; color:#c9d6e8; font-size:13px; font-weight:700; }
@@ -231,6 +256,17 @@ function version_label(string $locale, string $version, array $config): string
         .empty { padding:34px; text-align:center; color:var(--muted); }
         .form-actions { display:flex; gap:10px; margin-top:20px; }
         .status-line { margin-top:10px; font-size:12px; color:var(--muted); line-height:1.5; }
+        .controller-panel { margin-top:20px; }
+        .controller-heading { display:flex; justify-content:space-between; gap:16px; align-items:end; }
+        .controller-heading h2 { margin:0 0 5px; }
+        .state-badge { display:inline-flex; align-items:center; gap:7px; padding:6px 9px; border:1px solid var(--badge-line); border-radius:999px; background:var(--badge-bg); color:var(--badge-text); font-size:12px; font-weight:800; white-space:nowrap; }
+        .state-badge::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+        .state-running { color:var(--success-text); border-color:var(--success-line); background:var(--success-bg); }
+        .state-error { color:var(--failure-text); border-color:var(--failure-line); background:var(--failure-bg); }
+        .controller-actions { display:flex; flex-wrap:wrap; gap:7px; }
+        .controller-actions form { margin:0; }
+        .controller-message,.create-hint { margin-top:8px; color:var(--muted); font-size:12px; line-height:1.5; }
+        .create-hint code { display:block; margin-top:5px; padding:7px 9px; border-radius:7px; background:var(--command); color:var(--command-text); }
         @media (max-width:900px) { .grid { grid-template-columns:1fr; } header { align-items:start; flex-direction:column; } .header-actions { align-items:flex-start; } .panel-heading-row { align-items:flex-start; flex-direction:column; } }
     </style>
 </head>
@@ -336,6 +372,61 @@ function version_label(string $locale, string $version, array $config): string
             <div class="command"><?= e($applyCommand) ?></div>
         </div></aside>
     </div>
+
+    <section class="panel controller-panel">
+        <div class="panel-body controller-heading">
+            <div>
+                <h2><?= e(manager_translate($locale, 'php_controller.title')) ?></h2>
+                <p><?= e(manager_translate($locale, 'php_controller.subtitle')) ?></p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr>
+                    <th><?= e(manager_translate($locale, 'php_controller.version')) ?></th>
+                    <th><?= e(manager_translate($locale, 'php_controller.container')) ?></th>
+                    <th><?= e(manager_translate($locale, 'php_controller.profile')) ?></th>
+                    <th><?= e(manager_translate($locale, 'php_controller.state')) ?></th>
+                    <th><?= e(manager_translate($locale, 'php_controller.actions')) ?></th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($phpControllerTargets as $service => $target):
+                    $status = $phpStatuses[$service];
+                    $state = (string) $status['state'];
+                    $stateKey = 'php_controller.state_' . $state;
+                    $messageKey = (string) ($status['message_key'] ?? 'php_controller.status_unavailable');
+                ?>
+                    <tr>
+                        <td><strong><?= e($target['label']) ?></strong><br><code><?= e($service) ?></code></td>
+                        <td><code><?= e($target['container']) ?></code></td>
+                        <td><?= e($target['profile'] === null ? manager_translate($locale, 'php_controller.default_profile') : $target['profile']) ?></td>
+                        <td>
+                            <span class="state-badge state-<?= e($state) ?>"><?= e(manager_translate($locale, $stateKey)) ?></span>
+                            <div class="controller-message"><?= e(manager_translate($locale, $messageKey)) ?><br><?= e((string) ($status['updated_at'] ?? '')) ?></div>
+                            <?php if ($state === 'not_created' && $target['profile'] !== null): ?>
+                                <div class="create-hint"><?= e(manager_translate($locale, 'php_controller.create_hint')) ?><code><?= e($target['create_command']) ?></code></div>
+                            <?php endif; ?>
+                        </td>
+                        <td><div class="controller-actions">
+                            <?php foreach (['start', 'stop', 'restart'] as $containerAction):
+                                $enabled = ($containerAction === 'start' && $state === 'stopped')
+                                    || (in_array($containerAction, ['stop', 'restart'], true) && $state === 'running');
+                            ?>
+                                <form method="post">
+                                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+                                    <input type="hidden" name="action" value="php_action">
+                                    <input type="hidden" name="service" value="<?= e($service) ?>">
+                                    <input type="hidden" name="container_action" value="<?= e($containerAction) ?>">
+                                    <button type="submit" <?= $enabled ? '' : 'disabled' ?>><?= e(manager_translate($locale, 'php_controller.' . $containerAction)) ?></button>
+                                </form>
+                            <?php endforeach; ?>
+                        </div></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
 </main>
 <script>
 const phpSelect = document.getElementById('php_version');

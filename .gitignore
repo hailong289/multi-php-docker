@@ -2,6 +2,7 @@
 /nginx/logs
 /logs/
 /runtime/
+/php-controller-runtime/
 *.log
 /.ai/
 /env.json
