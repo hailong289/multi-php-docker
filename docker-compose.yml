@@ -1,4 +1,22 @@
 services:
+  env-init:
+    image: alpine:latest
+    container_name: env_init_container
+    volumes:
+      - ./:/workspace
+    working_dir: /workspace
+    command:
+      - sh
+      - -c
+      - |
+        if [ ! -f env.json ]; then
+          cp env.example.json env.json
+          echo "Created env.json from env.example.json"
+        else
+          echo "env.json already exists; keeping current configuration"
+        fi
+    restart: "no"
+
   nginx:
     image: long301001/multi-php-docker:nginx
     container_name: nginx_container
@@ -11,10 +29,17 @@ services:
       - ./nginx/examples:/etc/nginx/examples
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
-      - ./env.json:/var/environment/env.json
+      - type: bind
+        source: ./env.json
+        target: /var/environment/env.json
+        bind:
+          create_host_path: false
     command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
-      - php-8.2
+      env-init:
+        condition: service_completed_successfully
+      php-8.2:
+        condition: service_started
     networks:
       - app-network
 
@@ -84,6 +109,28 @@ services:
       - mysql
       - redis
       - rabbitmq
+    networks:
+      - app-network
+
+  manager:
+    image: long301001/multi-php-docker:php-8.2
+    container_name: manager_container
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./server/manager:/app:ro
+      - type: bind
+        source: ./env.json
+        target: /data/env.json
+        bind:
+          create_host_path: false
+    working_dir: /app
+    environment:
+      MANAGER_ENV_PATH: /data/env.json
+    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app"]
+    depends_on:
+      env-init:
+        condition: service_completed_successfully
     networks:
       - app-network
 

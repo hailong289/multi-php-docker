@@ -3,6 +3,7 @@
 /logs/
 *.log
 /.ai/
+/env.json
 /.nx
 /.idea
 .DS_Store
