@@ -1,9 +1,12 @@
 /nginx/templates
 /nginx/logs
 /logs/
+/runtime/
 *.log
 /.ai/
 /env.json
+/configs/supervisor.d/*
+!/configs/supervisor.d/*.example
 /.nx
 /.idea
 .DS_Store

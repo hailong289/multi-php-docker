@@ -6,6 +6,7 @@ session_start();
 require __DIR__ . '/lib.php';
 
 $envPath = getenv('MANAGER_ENV_PATH') ?: '/data/env.json';
+$runtimePath = getenv('MANAGER_RUNTIME_PATH') ?: '/runtime';
 $versions = manager_php_versions();
 $errors = [];
 $fatalError = null;
@@ -31,6 +32,18 @@ try {
         }
 
         $action = (string) ($_POST['action'] ?? '');
+        if ($action === 'reload_nginx') {
+            if (!is_dir($runtimePath) && !mkdir($runtimePath, 0775, true) && !is_dir($runtimePath)) {
+                throw new RuntimeException('Unable to create the runtime directory.');
+            }
+            if (file_put_contents($runtimePath . '/nginx.reload', date(DATE_ATOM), LOCK_EX) === false) {
+                throw new RuntimeException('Unable to send the Nginx reload request.');
+            }
+            $_SESSION['flash'] = 'Nginx reload requested. Refresh this page in a moment to see the result.';
+            header('Location: /');
+            exit;
+        }
+
         if ($action === 'delete') {
             $key = (string) ($_POST['key'] ?? '');
             if (!preg_match('/^SERVER_NAME\d+$/', $key) || !isset($servers[$key])) {
@@ -91,6 +104,14 @@ try {
 
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
+$reloadStatus = null;
+$statusFile = $runtimePath . '/nginx.status.json';
+if (is_file($statusFile) && is_readable($statusFile)) {
+    $decodedStatus = json_decode((string) file_get_contents($statusFile), true);
+    if (is_array($decodedStatus)) {
+        $reloadStatus = $decodedStatus;
+    }
+}
 $profiles = manager_required_profiles($servers);
 $profileFlags = implode(' ', array_map(static fn (string $profile): string => '--profile ' . $profile, $profiles));
 $applyCommand = 'docker compose' . ($profileFlags !== '' ? ' ' . $profileFlags : '') . ' up -d' . PHP_EOL
@@ -143,6 +164,8 @@ function e(string $value): string
         .command { margin-top:20px; background:#07101d; border:1px solid var(--line); border-radius:12px; padding:15px; white-space:pre-wrap; color:#b9f6dc; font:13px/1.6 "SFMono-Regular",Consolas,monospace; }
         .empty { padding:34px; text-align:center; color:var(--muted); }
         .form-actions { display:flex; gap:10px; margin-top:20px; }
+        .reload-box { margin-top:18px; padding-top:18px; border-top:1px solid var(--line); }
+        .status-line { margin-top:10px; font-size:12px; color:var(--muted); line-height:1.5; }
         @media (max-width:900px) { .grid { grid-template-columns:1fr; } header { align-items:start; flex-direction:column; } }
     </style>
 </head>
@@ -207,6 +230,20 @@ function e(string $value): string
             </form>
 
             <div class="command"><?= e($applyCommand) ?></div>
+            <div class="reload-box">
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= e($_SESSION['csrf_token']) ?>">
+                    <input type="hidden" name="action" value="reload_nginx">
+                    <button class="primary" type="submit">Apply &amp; Reload Nginx</button>
+                </form>
+                <?php if ($reloadStatus): ?>
+                    <div class="status-line">
+                        <strong><?= e(($reloadStatus['status'] ?? '') === 'success' ? 'Success' : 'Error') ?>:</strong>
+                        <?= e((string) ($reloadStatus['message'] ?? 'Unknown reload result.')) ?><br>
+                        <?= e((string) ($reloadStatus['updated_at'] ?? '')) ?>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div></aside>
     </div>
 </main>

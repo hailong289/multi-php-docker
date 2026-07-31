@@ -207,17 +207,21 @@ Server Manager can:
 - Reject duplicate application names and domains.
 - Restrict document roots to the selected PHP version's source directory.
 - Display the profiles and commands required to apply the configuration.
+- Request virtual-host regeneration and an Nginx reload with **Apply & Reload Nginx**.
 
 If `env.json` does not exist, the `env-init` service creates it from `env.example.json` before Server Manager and Nginx start. This short-lived service never overwrites existing configuration.
 
-The UI is bound to `127.0.0.1` only and is not directly exposed to the LAN. It can only write `env.json`; the Docker socket is not mounted, so it cannot control containers.
+The UI is bound to `127.0.0.1` only and is not directly exposed to the LAN. The Docker socket is not mounted into Server Manager. When **Apply & Reload Nginx** is clicked, the UI writes a signal file to the shared `runtime/` directory. A watcher inside the Nginx container regenerates the templates, runs `nginx -t`, and reloads only when the configuration is valid. If validation fails, the previous configuration is restored.
 
-After adding, editing, or deleting a server, run the command shown by the UI. For example, with PHP 8.1:
+For the default PHP 8.2 runtime, click **Apply & Reload Nginx** after adding, editing, or deleting a server. The container does not need to be restarted.
+
+The reload button does not start optional PHP profiles. If the server uses PHP 8.1, 8.0, or 7.4, run the profile command shown by the UI first. For example, with PHP 8.1:
 
 ```bash
 docker compose --profile php-8.1 up -d
-docker compose restart nginx
 ```
+
+Then click **Apply & Reload Nginx**. Refresh the page to see the latest result below the button. Detailed errors are written to `runtime/nginx.reload.log`; `runtime/` contains temporary data and is ignored by Git.
 
 New domains must still be added to the `hosts` file:
 

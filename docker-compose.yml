@@ -29,6 +29,7 @@ services:
       - ./nginx/examples:/etc/nginx/examples
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
+      - ./runtime:/var/runtime
       - type: bind
         source: ./env.json
         target: /var/environment/env.json
@@ -119,6 +120,7 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./server/manager:/app:ro
+      - ./runtime:/runtime
       - type: bind
         source: ./env.json
         target: /data/env.json
@@ -127,6 +129,7 @@ services:
     working_dir: /app
     environment:
       MANAGER_ENV_PATH: /data/env.json
+      MANAGER_RUNTIME_PATH: /runtime
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app"]
     depends_on:
       env-init:

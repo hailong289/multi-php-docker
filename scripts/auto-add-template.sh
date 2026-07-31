@@ -8,7 +8,7 @@ if [ ! -f "$JSON_FILE" ]; then
     exit 1
 fi
 
-if ! command -v jq &> /dev/null; then
+if ! command -v jq >/dev/null 2>&1; then
     echo "jq command not found. Cài đặt jq..."
     # Tải jq từ trang chính (cần curl)
     apt-get update && apt-get install -y jq

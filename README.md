@@ -207,17 +207,21 @@ Server Manager cho phép:
 - Kiểm tra trùng application name và domain.
 - Giới hạn document root trong thư mục source của PHP version đã chọn.
 - Hiển thị profile cần bật và lệnh áp dụng cấu hình.
+- Gửi yêu cầu tạo lại virtual host và reload Nginx bằng nút **Apply & Reload Nginx**.
 
 Nếu `env.json` chưa tồn tại, service `env-init` sẽ tự tạo nó từ `env.example.json` trước khi Server Manager và Nginx khởi động. Service này chỉ chạy trong thời gian ngắn và không ghi đè cấu hình hiện có.
 
-UI chỉ được bind vào `127.0.0.1`, không mở trực tiếp ra mạng LAN. Nó chỉ ghi `env.json`; không được mount Docker socket và không thể tự điều khiển container.
+UI chỉ được bind vào `127.0.0.1`, không mở trực tiếp ra mạng LAN. Docker socket không được mount vào Server Manager. Khi nhấn **Apply & Reload Nginx**, UI tạo một file tín hiệu trong `runtime/`; tiến trình theo dõi bên trong container Nginx sẽ sinh lại template, chạy `nginx -t` và chỉ reload khi cấu hình hợp lệ. Nếu kiểm tra thất bại, cấu hình trước đó được khôi phục.
 
-Sau khi thêm, sửa hoặc xóa server, chạy lệnh UI hiển thị. Ví dụ với PHP 8.1:
+Với PHP 8.2 mặc định, sau khi thêm, sửa hoặc xóa server, nhấn **Apply & Reload Nginx** để áp dụng mà không cần restart container.
+
+Nút reload không tự khởi động PHP profile. Nếu server dùng PHP 8.1, 8.0 hoặc 7.4, hãy chạy lệnh profile mà UI hiển thị trước. Ví dụ với PHP 8.1:
 
 ```bash
 docker compose --profile php-8.1 up -d
-docker compose restart nginx
 ```
+
+Sau đó nhấn **Apply & Reload Nginx**. Kết quả gần nhất được hiển thị ngay dưới nút sau khi tải lại trang. Có thể xem chi tiết lỗi trong `runtime/nginx.reload.log`; `runtime/` là dữ liệu tạm và đã được bỏ qua khỏi Git.
 
 Domain mới vẫn cần được thêm vào file `hosts`:
 
