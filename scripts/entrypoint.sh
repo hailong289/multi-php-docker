@@ -10,4 +10,7 @@ for template in /etc/nginx/templates/*.template; do
     cp "$template" "/etc/nginx/conf.d/$(basename "${template%.template}.conf")"
 done
 
+# Theo dõi yêu cầu reload từ Server Manager trong background.
+sh /var/scripts/watch-nginx-reload.sh &
+
 exec nginx -g 'daemon off;'

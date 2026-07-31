@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis, and RabbitMQ. Ready-to-use multi-architecture images are provided on Docker Hub; PHP 8.0 and 8.1 also include Dockerfiles for source builds. Nginx generates virtual hosts from [`env.json`](env.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis, and RabbitMQ. Every service uses a ready-to-use multi-architecture image from Docker Hub by default; `docker-compose.yml` does not build images. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Default services and ports
 
@@ -17,6 +17,8 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | Redis | `redis_container` | `6379` | No password |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor_container` | Not published | Runs PHP 8.2 background workers |
+| Server Manager | `manager_container` | `127.0.0.1:8080` | Manages virtual servers in `env.json` |
+| Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
 PHP 8.2 is the default version. `docker compose up -d` starts only PHP 8.2; PHP 7.4, 8.0, and 8.1 are assigned to separate profiles and remain disabled by default.
 
@@ -25,13 +27,14 @@ The following images are provided:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8.0` | `long301001/multi-php-docker:php-8.0` (build from source before pushing) |
-| `php-8.1` | `long301001/multi-php-docker:php-8.1` (build from source before pushing) |
-| `php-8.2`, `supervisor` | `long301001/multi-php-docker:php-8.2` |
+| `php-8.0` | `long301001/multi-php-docker:php-8.0` |
+| `php-8.1` | `long301001/multi-php-docker:php-8.1` |
+| `php-8.2`, `supervisor`, `manager` | `long301001/multi-php-docker:php-8.2` |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
 | `redis` | `long301001/multi-php-docker:redis-alpine` |
 | `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
+| `env-init` | `alpine:latest` |
 
 ## Requirements
 
@@ -54,6 +57,14 @@ docker compose version
 ```bash
 git clone <repository-url>
 cd <repository-folder>
+```
+
+`env.json` contains machine-specific project configuration and must not be pushed to Git. Only `env.example.json` is committed as the configuration template. On the first Compose run, the `env-init` service automatically copies `env.example.json` to `env.json`; an existing file is always preserved.
+
+To create the file before starting Docker, copy it manually:
+
+```bash
+cp env.example.json env.json
 ```
 
 ### 2. Place the source code in the correct directory
@@ -147,7 +158,7 @@ docker compose pull
 docker compose up -d
 ```
 
-The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, and Supervisor. Older PHP versions are not started.
+The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, Supervisor, and Server Manager. Older PHP versions are not started.
 
 ### Enable an optional PHP version
 
@@ -181,6 +192,50 @@ docker compose rm -f php-8.1
 ```
 
 When a project in `env.json` uses `php8.0_container`, `php8.1_container`, or `php7.4_container`, enable the matching profile before starting or recreating Nginx. Otherwise, Nginx cannot connect to that PHP upstream.
+
+## Manage servers in the web interface
+
+After running `docker compose up -d`, open:
+
+[http://127.0.0.1:8080](http://127.0.0.1:8080)
+
+Server Manager can:
+
+- List the virtual servers currently stored in `env.json`.
+- Add, edit, and delete servers.
+- Select PHP 7.4, 8.0, 8.1, or 8.2.
+- Reject duplicate application names and domains.
+- Restrict document roots to the selected PHP version's source directory.
+- Display the profiles and commands required to apply the configuration.
+- Request virtual-host regeneration and an Nginx reload with **Apply & Reload Nginx**.
+- Support Vietnamese and English; the first visit follows the browser language and the selected locale is then remembered in the session.
+- Support **System**, **Light**, and **Dark** appearances; the selection is stored in the browser, and System mode follows the operating-system preference.
+
+If `env.json` does not exist, the `env-init` service creates it from `env.example.json` before Server Manager and Nginx start. This short-lived service never overwrites existing configuration.
+
+The UI is bound to `127.0.0.1` only and is not directly exposed to the LAN. The Docker socket is not mounted into Server Manager. When **Apply & Reload Nginx** is clicked, the UI writes a signal file to the shared `runtime/` directory. A watcher inside the Nginx container regenerates the templates, runs `nginx -t`, and reloads only when the configuration is valid. If validation fails, the previous configuration is restored.
+
+For the default PHP 8.2 runtime, click **Apply & Reload Nginx** after adding, editing, or deleting a server. The container does not need to be restarted.
+
+The reload button does not start optional PHP profiles. If the server uses PHP 8.1, 8.0, or 7.4, run the profile command shown by the UI first. For example, with PHP 8.1:
+
+```bash
+docker compose --profile php-8.1 up -d
+```
+
+Then click **Apply & Reload Nginx**. Refresh the page to see the latest result below the button. Detailed errors are written to `runtime/nginx.reload.log`; `runtime/` contains temporary data and is ignored by Git.
+
+New domains must still be added to the `hosts` file:
+
+```bash
+./scripts/add_hostname.sh
+```
+
+Stop the UI separately when it is not needed:
+
+```bash
+docker compose stop manager
+```
 
 For subsequent starts, run:
 
@@ -262,7 +317,7 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Valid service names: `nginx`, `php-8.0`, `php-8.1`, `php-8.2`, `php-7.4`, `supervisor`, `mysql`, `redis`, and `rabbitmq`.
+Valid service names: `env-init`, `nginx`, `php-8.0`, `php-8.1`, `php-8.2`, `php-7.4`, `supervisor`, `manager`, `mysql`, `redis`, and `rabbitmq`.
 
 ## Running background workers with Supervisor
 
@@ -624,7 +679,7 @@ docker compose start mysql
 
 - `SERVER_PATH` must be a path inside the container.
 - Verify that the document root contains `index.php`.
-- Confirm that the source is in the correct PHP 7.4 or PHP 8.2 directory.
+- Confirm that the source is in the correct PHP 7.4, 8.0, 8.1, or 8.2 directory.
 
 ### A port is already in use
 
@@ -772,10 +827,12 @@ See the official [Docker Compose Build Specification](https://docs.docker.com/re
 │   └── templates/           # Configuration generated from env.json
 ├── scripts/                 # Startup and configuration scripts
 ├── server/
+│   ├── manager/             # env.json management UI
 │   ├── source_php7.4/       # PHP 7.4 projects
 │   ├── source_php8.0/       # PHP 8.0 projects
 │   ├── source_php8.1/       # PHP 8.1 projects
 │   └── source_php8.2/       # PHP 8.2 projects
 ├── docker-compose.yml
-└── env.json                 # Project and domain definitions
+├── env.example.json         # Committed project/domain template
+└── env.json                 # Local configuration ignored by Git
 ```
