@@ -6,7 +6,7 @@ session_start();
 require __DIR__ . '/i18n.php';
 require __DIR__ . '/lib.php';
 
-$envPath = getenv('MANAGER_ENV_PATH') ?: '/data/env.json';
+$envPath = getenv('MANAGER_ENV_PATH') ?: '/var/host-project/env.json';
 $runtimePath = getenv('MANAGER_RUNTIME_PATH') ?: '/runtime';
 $locale = manager_locale($_SESSION, (string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''));
 $versions = manager_php_versions();

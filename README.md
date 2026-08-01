@@ -59,7 +59,7 @@ git clone <repository-url>
 cd <repository-folder>
 ```
 
-`env.json` chứa cấu hình project riêng của từng máy và không được push lên Git. Chỉ `env.example.json` được commit làm cấu hình mẫu. Khi chạy Compose lần đầu, service `env-init` tự copy `env.example.json` thành `env.json`; file đã tồn tại sẽ luôn được giữ nguyên.
+`env.json` chứa cấu hình project riêng của từng máy và không được push lên Git. Chỉ `env.example.json` được commit làm cấu hình mẫu. Khi chạy Compose lần đầu, service `env-init` tự copy `env.example.json` thành `env.json`; file đã tồn tại sẽ luôn được giữ nguyên. Compose mount thư mục project (không mount trực tiếp file `env.json`) để tránh lỗi bind-mount khác nhau giữa Windows và macOS.
 
 Nếu muốn tạo file trước khi chạy Docker, có thể thực hiện thủ công:
 
@@ -89,6 +89,8 @@ server/
 ```
 
 ### 3. Khai báo project trong `env.json`
+
+
 
 Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
 

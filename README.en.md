@@ -59,7 +59,7 @@ git clone <repository-url>
 cd <repository-folder>
 ```
 
-`env.json` contains machine-specific project configuration and must not be pushed to Git. Only `env.example.json` is committed as the configuration template. On the first Compose run, the `env-init` service automatically copies `env.example.json` to `env.json`; an existing file is always preserved.
+`env.json` contains machine-specific project configuration and must not be pushed to Git. Only `env.example.json` is committed as the configuration template. On the first Compose run, the `env-init` service automatically copies `env.example.json` to `env.json`; an existing file is always preserved. Compose mounts the project directory (not the optional `env.json` file itself) so bind-mount behavior stays consistent on Windows and macOS.
 
 To create the file before starting Docker, copy it manually:
 
@@ -89,6 +89,8 @@ server/
 ```
 
 ### 3. Define projects in `env.json`
+
+
 
 Each project uses one `SERVER_NAME<N>` entry:
 
