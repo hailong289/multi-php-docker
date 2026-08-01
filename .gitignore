@@ -2,9 +2,13 @@
 /nginx/logs
 /logs/
 /runtime/
+/php-controller-runtime/
 *.log
 /.ai/
 /env.json
+/.env
+/server/manager/frontend/node_modules/
+/server/manager/frontend/dist/
 /configs/supervisor.d/*
 !/configs/supervisor.d/*.example
 /.nx

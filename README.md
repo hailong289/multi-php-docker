@@ -18,6 +18,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor_container` | Không public | Chạy background worker bằng PHP 8.2 |
 | Server Manager | `manager_container` | `127.0.0.1:8080` | Quản lý virtual server trong `env.json` |
+| PHP Controller | `php_controller_container` | Không public | Điều khiển allowlist PHP container qua Docker socket |
 | Env Init | `env_init_container` | Không public | Tạo `env.json` nếu thiếu rồi thoát với mã `0` |
 
 PHP 8.2 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.2; PHP 7.4, 8.0 và 8.1 được đặt trong profile riêng và mặc định không chạy.
@@ -31,6 +32,7 @@ Các image được cung cấp sẵn:
 | `php-8.1` | `long301001/multi-php-docker:php-8.1` |
 | `php-8.2`, `supervisor`, `manager` | `long301001/multi-php-docker:php-8.2` |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
+| `php-controller` | `docker:cli` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
 | `redis` | `long301001/multi-php-docker:redis-alpine` |
 | `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
@@ -59,7 +61,7 @@ git clone <repository-url>
 cd <repository-folder>
 ```
 
-`env.json` chứa cấu hình project riêng của từng máy và không được push lên Git. Chỉ `env.example.json` được commit làm cấu hình mẫu. Khi chạy Compose lần đầu, service `env-init` tự copy `env.example.json` thành `env.json`; file đã tồn tại sẽ luôn được giữ nguyên.
+`env.json` chứa cấu hình project riêng của từng máy và không được push lên Git. Chỉ `env.example.json` được commit làm cấu hình mẫu. Khi chạy Compose lần đầu, service `env-init` tự copy `env.example.json` thành `env.json`; file đã tồn tại sẽ luôn được giữ nguyên. Compose mount thư mục project (không mount trực tiếp file `env.json`) để tránh lỗi bind-mount khác nhau giữa Windows và macOS.
 
 Nếu muốn tạo file trước khi chạy Docker, có thể thực hiện thủ công:
 
@@ -89,6 +91,8 @@ server/
 ```
 
 ### 3. Khai báo project trong `env.json`
+
+
 
 Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
 
@@ -132,14 +136,60 @@ Với Laravel hoặc framework có thư mục public riêng, `SERVER_PATH` phả
 
 ### 4. Thêm domain vào file `hosts`
 
-Tự động trên macOS, Linux hoặc WSL:
+**Đồng bộ trạng thái từ file hosts (không cần admin):**
+
+1. Chạy script nhận diện OS để ghi `HOSTS_FILE` và `HOST_PROJECT_PATH` vào `.env` (Compose tự đọc):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+```
+
+macOS / Linux / WSL:
+
+```bash
+chmod +x scripts/ensure_hosts_env.sh
+./scripts/ensure_hosts_env.sh
+```
+
+2. Mở Server Manager → **Quản lý domain**.
+3. Bấm **Đồng bộ domain từ file hosts**. Manager đọc file hosts đã mount và cập nhật badge đã đồng bộ / thiếu.
+
+Nếu đổi máy / OS, chạy lại `ensure_hosts_env` rồi `docker compose up -d manager --force-recreate`.
+
+**Ghi hosts (cần script trên host + quyền admin):**
+
+1. Trên Windows, chạy một lần (ghi `HOSTS_FILE` + đăng ký protocol `multi-php-hosts:`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+```
+
+Gỡ protocol: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
+
+2. Trong Manager dùng **Thêm domain** / **Ghi hosts (Admin)**. Trình duyệt mở `multi-php-hosts:write` → chạy `add_hostname.ps1` (có UAC). Cho phép mở ứng dụng nếu trình duyệt hỏi.
+
+macOS / Linux / WSL (không dùng protocol Windows):
 
 ```bash
 chmod +x scripts/add_hostname.sh
+./scripts/add_hostname.sh --watch
+```
+
+Script chỉ sửa block `# multi-php-docker-serve:managed:*` trong file hosts.
+
+**One-shot (không cần Manager):**
+
+```bash
 ./scripts/add_hostname.sh
 ```
 
-Script đọc các `DOMAIN_NAME` trong `env.json` và ánh xạ chúng tới `127.0.0.1`. Nếu không dùng script, thêm thủ công vào:
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1
+```
+
+Script đọc `DOMAIN_NAME` trong `env.json` (và `runtime/hosts.extra.json` nếu có) rồi ánh xạ tới `127.0.0.1`. Nếu không dùng script, thêm thủ công vào:
 
 - macOS/Linux: `/etc/hosts`
 - Windows: `C:\Windows\System32\drivers\etc\hosts`
@@ -158,7 +208,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ, Supervisor và Server Manager. Các PHP version cũ không được khởi động.
+Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager và PHP Controller. Các PHP version cũ không được khởi động.
 
 ### Bật phiên bản PHP tùy chọn
 
@@ -210,10 +260,21 @@ Server Manager cho phép:
 - Gửi yêu cầu tạo lại virtual host và reload Nginx bằng nút **Apply & Reload Nginx**.
 - Hỗ trợ giao diện Tiếng Việt và English; lần truy cập đầu tiên tự nhận ngôn ngữ trình duyệt, sau đó ghi nhớ lựa chọn trong session.
 - Hỗ trợ giao diện **Hệ thống**, **Sáng** và **Tối**; lựa chọn được lưu trong trình duyệt và chế độ Hệ thống tự đi theo cài đặt của hệ điều hành.
+- Quản lý trực tiếp trạng thái các PHP container bằng các nút **Tạo**, **Khởi động**, **Dừng** và **Khởi động lại**.
+
+Card **Các phiên bản PHP** hiển thị trạng thái `Đang chạy`, `Đã dừng`, `Chưa được tạo` hoặc `Đang xử lý`. PHP 8.2 được tạo mặc định. Với PHP tùy chọn chưa từng được tạo, bấm **Tạo** trong UI (tương đương `docker compose --profile … create …`), rồi dùng **Khởi động**. Vẫn có thể tạo thủ công:
+
+```bash
+docker compose --profile php-8.1 create php-8.1
+```
+
+Sau đó làm mới Server Manager để dùng các nút điều khiển. Controller chấp nhận PHP 8.2, 8.1, 8.0, 7.4 và các thao tác Create (chỉ bản có profile), Start, Stop, Restart; nó không xóa container. `ensure_hosts_env` cũng ghi `HOST_PROJECT_PATH` vào `.env` để `php-controller` chạy compose create với bind mount đúng đường dẫn host — sau khi đổi máy, chạy lại script rồi `docker compose up -d php-controller --force-recreate`.
+
+Service `php-controller` không public cổng và là container duy nhất được mount `/var/run/docker.sock`. Docker socket có quyền tương đương root trên Docker host, vì vậy chỉ chạy stack từ source tin cậy và không mở Server Manager ra mạng công cộng.
 
 Nếu `env.json` chưa tồn tại, service `env-init` sẽ tự tạo nó từ `env.example.json` trước khi Server Manager và Nginx khởi động. Service này chỉ chạy trong thời gian ngắn và không ghi đè cấu hình hiện có.
 
-UI chỉ được bind vào `127.0.0.1`, không mở trực tiếp ra mạng LAN. Docker socket không được mount vào Server Manager. Khi nhấn **Apply & Reload Nginx**, UI tạo một file tín hiệu trong `runtime/`; tiến trình theo dõi bên trong container Nginx sẽ sinh lại template, chạy `nginx -t` và chỉ reload khi cấu hình hợp lệ. Nếu kiểm tra thất bại, cấu hình trước đó được khôi phục.
+UI chỉ được bind vào `127.0.0.1`, không mở trực tiếp ra mạng LAN. Docker socket không được mount vào Server Manager. Yêu cầu điều khiển PHP được gửi qua thư mục runtime riêng tới `php-controller`. Khi nhấn **Apply & Reload Nginx**, UI tạo một file tín hiệu trong `runtime/`; tiến trình theo dõi bên trong container Nginx sẽ sinh lại template, chạy `nginx -t` và chỉ reload khi cấu hình hợp lệ. Nếu kiểm tra thất bại, cấu hình trước đó được khôi phục.
 
 Với PHP 8.2 mặc định, sau khi thêm, sửa hoặc xóa server, nhấn **Apply & Reload Nginx** để áp dụng mà không cần restart container.
 
@@ -317,7 +378,7 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Tên service hợp lệ: `env-init`, `nginx`, `php-8.0`, `php-8.1`, `php-8.2`, `php-7.4`, `supervisor`, `manager`, `mysql`, `redis`, `rabbitmq`.
+Tên service hợp lệ: `env-init`, `nginx`, `php-8.0`, `php-8.1`, `php-8.2`, `php-7.4`, `supervisor`, `manager`, `php-controller`, `mysql`, `redis`, `rabbitmq`.
 
 ## Chạy background worker với Supervisor
 

@@ -9,6 +9,24 @@ services:
       - sh
       - -c
       - |
+        # Keep env.json at the project root. Do not bind-mount that file directly:
+        # when it is missing, Docker Desktop on Windows creates a host *directory*
+        # named env.json (macOS usually does not). Mount the project directory
+        # instead and read ./env.json inside the container.
+        if [ -d env.json ]; then
+          echo "Removing invalid env.json directory left by a previous bind mount"
+          rm -rf env.json
+        fi
+
+        # Move back from the short-lived environment/ layout if present
+        if [ -f environment/env.json ] && [ ! -f env.json ]; then
+          mv environment/env.json env.json
+          echo "Moved environment/env.json back to ./env.json"
+        fi
+        if [ -d environment/env.json ]; then
+          rm -rf environment/env.json
+        fi
+
         if [ ! -f env.json ]; then
           cp env.example.json env.json
           echo "Created env.json from env.example.json"
@@ -36,11 +54,9 @@ services:
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
       - ./runtime:/var/runtime
-      - type: bind
-        source: ./env.json
-        target: /var/environment/env.json
-        bind:
-          create_host_path: false
+      - .:/var/host-project:ro
+    environment:
+      ENV_JSON_FILE: /var/host-project/env.json
     command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
       env-init:
@@ -151,21 +167,46 @@ services:
     volumes:
       - ./server/manager:/app:ro
       - ./runtime:/runtime
-      - type: bind
-        source: ./env.json
-        target: /data/env.json
-        bind:
-          create_host_path: false
+      - ./php-controller-runtime:/runtime/php-controller
+      - .:/var/host-project
+      # OS hosts (read-only). Path comes from .env HOSTS_FILE (run scripts/ensure_hosts_env.*).
+      - ${HOSTS_FILE}:/host-hosts:ro
     working_dir: /app
     environment:
-      MANAGER_ENV_PATH: /data/env.json
+      MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
-    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app"]
+      MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
+      MANAGER_HOSTS_PATH: /host-hosts
+    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:
         condition: service_completed_successfully
     networks:
       - app-network
+
+  php-controller:
+    image: docker:cli
+    container_name: php_controller_container
+    entrypoint: ["/bin/sh", "/scripts/php-controller.sh"]
+    environment:
+      # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
+      # rewrite compose bind mounts when creating optional PHP containers.
+      HOST_PROJECT_PATH: ${HOST_PROJECT_PATH:-/project}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts:/scripts:ro
+      - ./php-controller-runtime:/runtime
+      # Long syntax avoids "too many colons" with Windows D:/ paths in short form.
+      - type: bind
+        source: ${HOST_PROJECT_PATH:-.}
+        target: /project
+        read_only: true
+    working_dir: /project
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    network_mode: none
 
   redis:
     image: long301001/multi-php-docker:redis-alpine
