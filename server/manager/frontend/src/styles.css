@@ -277,6 +277,97 @@ button:disabled {
   opacity: 0.42;
 }
 
+button.is-loading:disabled {
+  opacity: 0.85;
+}
+
+.btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+  animation: btn-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toast-host {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 28px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 12px;
+  border: 1px solid;
+  box-shadow: 0 10px 30px var(--shadow);
+  animation: toast-in 0.22s ease-out;
+}
+
+.toast-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 650;
+}
+
+.toast-close {
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.toast-close:hover {
+  opacity: 1;
+  border-color: transparent;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.modal-fieldset:disabled {
+  opacity: 0.72;
+}
+
 button.primary,
 .button.primary {
   color: #fff;
@@ -462,11 +553,30 @@ select:focus {
   margin: 0 0 20px;
 }
 
+.nav-menu a,
 .nav-menu button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
   background: var(--panel);
-  border-color: var(--line);
+  color: var(--text);
+  font-weight: 650;
+  font-size: 13px;
+  line-height: 1.25;
+  text-decoration: none;
+  cursor: pointer;
 }
 
+.nav-menu a:hover,
+.nav-menu button:hover {
+  border-color: var(--blue);
+}
+
+.nav-menu a[aria-current='page'],
 .nav-menu button[aria-current='true'] {
   color: #fff;
   background: var(--primary);
@@ -529,6 +639,79 @@ select:focus {
 
 .modal-body {
   padding: 8px 20px 22px;
+}
+
+.skeleton-wrap {
+  min-height: 220px;
+}
+
+.skeleton-table th,
+.skeleton-table td {
+  vertical-align: middle;
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--panel-strong) 0%,
+    var(--line) 45%,
+    var(--panel-strong) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-th {
+  width: 42%;
+  height: 10px;
+}
+
+.skeleton-sub {
+  width: 55%;
+  margin-top: 8px;
+  height: 10px;
+  opacity: 0.75;
+}
+
+.skeleton-w0 {
+  width: 72%;
+}
+
+.skeleton-w1 {
+  width: 48%;
+}
+
+.skeleton-w2 {
+  width: 64%;
+}
+
+.skeleton-command {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.status-line .skeleton-line {
+  width: min(320px, 70%);
+  height: 11px;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
 }
 
 @media (max-width: 900px) {
