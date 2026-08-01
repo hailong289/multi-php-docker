@@ -54,24 +54,36 @@ if (-not (Test-Path -LiteralPath $HostsPath)) {
     throw "Hosts file not found at $HostsPath"
 }
 
-$line = "HOSTS_FILE=$HostsPath"
-if (Test-Path -LiteralPath $EnvFile) {
-    $content = Get-Content -LiteralPath $EnvFile -Raw
-    if ($null -eq $content) { $content = '' }
-    if ($content -match '(?m)^HOSTS_FILE=') {
-        $content = [regex]::Replace($content, '(?m)^HOSTS_FILE=.*$', $line)
-    } else {
-        if ($content.Length -gt 0 -and -not $content.EndsWith("`n")) {
-            $content += "`n"
+# Docker Desktop bind mounts for compose create need the absolute host path.
+$ProjectPath = $RepoRoot -replace '\\', '/'
+
+function Set-EnvLine {
+    param(
+        [string]$Key,
+        [string]$Value
+    )
+    $line = "$Key=$Value"
+    if (Test-Path -LiteralPath $EnvFile) {
+        $content = Get-Content -LiteralPath $EnvFile -Raw
+        if ($null -eq $content) { $content = '' }
+        $pattern = "(?m)^$([regex]::Escape($Key))="
+        if ($content -match $pattern) {
+            $content = [regex]::Replace($content, "(?m)^$([regex]::Escape($Key))=.*$", $line)
+        } else {
+            if ($content.Length -gt 0 -and -not $content.EndsWith("`n")) {
+                $content += "`n"
+            }
+            $content += "$line`n"
         }
-        $content += "$line`n"
+        Set-Content -LiteralPath $EnvFile -Value $content -NoNewline
+    } else {
+        Set-Content -LiteralPath $EnvFile -Value "$line`n" -NoNewline
     }
-    Set-Content -LiteralPath $EnvFile -Value $content -NoNewline
-} else {
-    Set-Content -LiteralPath $EnvFile -Value "$line`n" -NoNewline
+    Write-Host "Wrote $line to .env"
 }
 
-Write-Host "Wrote $line to .env"
+Set-EnvLine -Key 'HOSTS_FILE' -Value $HostsPath
+Set-EnvLine -Key 'HOST_PROJECT_PATH' -Value $ProjectPath
 
 if (-not $SkipProtocol) {
     Register-HostsProtocol

@@ -606,6 +606,10 @@ export function useManager() {
   function phpActionEnabled(service, action) {
     if (busy.value) return false
     const state = phpServiceState(service)
+    const target = data.php_controllers.targets[service]
+    if (action === 'create') {
+      return state === 'not_created' && target?.profile != null
+    }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
     if (action === 'stop' || action === 'restart') return state === 'running'

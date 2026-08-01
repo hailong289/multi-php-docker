@@ -60,11 +60,29 @@ const {
               </span>
               <div v-if="showCreateHint(service, target)" class="create-hint">
                 {{ $t('php_controller.create_hint') }}
-                <code>{{ target.create_command }}</code>
               </div>
             </td>
             <td>
               <div class="controller-actions">
+                <button
+                  v-if="showCreateHint(service, target)"
+                  type="button"
+                  class="primary"
+                  :class="{ 'is-loading': isPending('php', { service, action: 'create' }) }"
+                  :disabled="!phpActionEnabled(service, 'create')"
+                  @click="phpAction(service, 'create')"
+                >
+                  <span
+                    v-if="isPending('php', { service, action: 'create' })"
+                    class="btn-spinner"
+                    aria-hidden="true"
+                  ></span>
+                  {{
+                    isPending('php', { service, action: 'create' })
+                      ? $t('action.working')
+                      : $t('php_controller.create')
+                  }}
+                </button>
                 <button
                   type="button"
                   :class="{ 'is-loading': isPending('php', { service, action: 'start' }) }"

@@ -75,7 +75,7 @@ watch(() => route.fullPath, updateTitle)
         <span class="badge">{{ t('header.local_only') }}</span>
         <div class="switcher">
           <span class="switcher-label">{{ t('language.label') }}</span>
-          <div class="locale-form">
+          <div class="locale-form" role="group" :aria-label="t('language.label')">
             <button type="button" :aria-current="locale === 'vi'" @click="setLocale('vi')">VI</button>
             <button type="button" :aria-current="locale === 'en'" @click="setLocale('en')">EN</button>
           </div>

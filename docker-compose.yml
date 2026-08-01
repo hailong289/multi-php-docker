@@ -158,10 +158,20 @@ services:
     image: docker:cli
     container_name: php_controller_container
     entrypoint: ["/bin/sh", "/scripts/php-controller.sh"]
+    environment:
+      # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
+      # rewrite compose bind mounts when creating optional PHP containers.
+      HOST_PROJECT_PATH: ${HOST_PROJECT_PATH:-/project}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./scripts:/scripts:ro
       - ./php-controller-runtime:/runtime
+      # Long syntax avoids "too many colons" with Windows D:/ paths in short form.
+      - type: bind
+        source: ${HOST_PROJECT_PATH:-.}
+        target: /project
+        read_only: true
+    working_dir: /project
     read_only: true
     tmpfs:
       - /tmp

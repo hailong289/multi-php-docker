@@ -36,17 +36,23 @@ if [ ! -f "$HOSTS_FILE" ]; then
   exit 1
 fi
 
-LINE="HOSTS_FILE=$HOSTS_FILE"
-if [ -f "$ENV_FILE" ]; then
-  if grep -q '^HOSTS_FILE=' "$ENV_FILE"; then
-    tmp="$(mktemp)"
-    sed "s|^HOSTS_FILE=.*|$LINE|" "$ENV_FILE" > "$tmp"
-    mv "$tmp" "$ENV_FILE"
+upsert_env_line() {
+  local key="$1"
+  local value="$2"
+  local line="$key=$value"
+  if [ -f "$ENV_FILE" ]; then
+    if grep -q "^${key}=" "$ENV_FILE"; then
+      tmp="$(mktemp)"
+      sed "s|^${key}=.*|$line|" "$ENV_FILE" > "$tmp"
+      mv "$tmp" "$ENV_FILE"
+    else
+      printf '\n%s\n' "$line" >> "$ENV_FILE"
+    fi
   else
-    printf '\n%s\n' "$LINE" >> "$ENV_FILE"
+    printf '%s\n' "$line" > "$ENV_FILE"
   fi
-else
-  printf '%s\n' "$LINE" > "$ENV_FILE"
-fi
+  echo "Wrote $line to .env"
+}
 
-echo "Wrote $LINE to .env"
+upsert_env_line 'HOSTS_FILE' "$HOSTS_FILE"
+upsert_env_line 'HOST_PROJECT_PATH' "$REPO_ROOT"

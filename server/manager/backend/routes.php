@@ -23,7 +23,7 @@ return [
     ['DELETE', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'destroyExtra']],
     ['PUT', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'update']],
     ['GET', '/php-controllers', [PhpControllerController::class, 'index']],
-    ['POST', '/php-controllers/(?P<service>php-[0-9.]+)/(?P<action>start|stop|restart)', [PhpControllerController::class, 'action']],
+    ['POST', '/php-controllers/(?P<service>php-[0-9.]+)/(?P<action>start|stop|restart|create)', [PhpControllerController::class, 'action']],
     ['POST', '/servers', [ServerController::class, 'store']],
     ['PUT', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'update']],
     ['DELETE', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'destroy']],

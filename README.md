@@ -138,7 +138,7 @@ Với Laravel hoặc framework có thư mục public riêng, `SERVER_PATH` phả
 
 **Đồng bộ trạng thái từ file hosts (không cần admin):**
 
-1. Chạy script nhận diện OS để ghi `HOSTS_FILE` vào `.env` (Compose tự đọc):
+1. Chạy script nhận diện OS để ghi `HOSTS_FILE` và `HOST_PROJECT_PATH` vào `.env` (Compose tự đọc):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
@@ -260,15 +260,15 @@ Server Manager cho phép:
 - Gửi yêu cầu tạo lại virtual host và reload Nginx bằng nút **Apply & Reload Nginx**.
 - Hỗ trợ giao diện Tiếng Việt và English; lần truy cập đầu tiên tự nhận ngôn ngữ trình duyệt, sau đó ghi nhớ lựa chọn trong session.
 - Hỗ trợ giao diện **Hệ thống**, **Sáng** và **Tối**; lựa chọn được lưu trong trình duyệt và chế độ Hệ thống tự đi theo cài đặt của hệ điều hành.
-- Quản lý trực tiếp trạng thái các PHP container bằng các nút **Khởi động**, **Dừng** và **Khởi động lại**.
+- Quản lý trực tiếp trạng thái các PHP container bằng các nút **Tạo**, **Khởi động**, **Dừng** và **Khởi động lại**.
 
-Card **Các phiên bản PHP** hiển thị trạng thái `Đang chạy`, `Đã dừng`, `Chưa được tạo` hoặc `Đang xử lý`. PHP 8.2 được tạo mặc định. Với PHP tùy chọn chưa từng được tạo, chạy lệnh UI hiển thị một lần, ví dụ:
+Card **Các phiên bản PHP** hiển thị trạng thái `Đang chạy`, `Đã dừng`, `Chưa được tạo` hoặc `Đang xử lý`. PHP 8.2 được tạo mặc định. Với PHP tùy chọn chưa từng được tạo, bấm **Tạo** trong UI (tương đương `docker compose --profile … create …`), rồi dùng **Khởi động**. Vẫn có thể tạo thủ công:
 
 ```bash
 docker compose --profile php-8.1 create php-8.1
 ```
 
-Sau đó làm mới Server Manager để dùng các nút điều khiển. Controller chỉ chấp nhận PHP 8.2, 8.1, 8.0, 7.4 và ba thao tác Start/Stop/Restart; nó không tạo hoặc xóa container.
+Sau đó làm mới Server Manager để dùng các nút điều khiển. Controller chấp nhận PHP 8.2, 8.1, 8.0, 7.4 và các thao tác Create (chỉ bản có profile), Start, Stop, Restart; nó không xóa container. `ensure_hosts_env` cũng ghi `HOST_PROJECT_PATH` vào `.env` để `php-controller` chạy compose create với bind mount đúng đường dẫn host — sau khi đổi máy, chạy lại script rồi `docker compose up -d php-controller --force-recreate`.
 
 Service `php-controller` không public cổng và là container duy nhất được mount `/var/run/docker.sock`. Docker socket có quyền tương đương root trên Docker host, vì vậy chỉ chạy stack từ source tin cậy và không mở Server Manager ra mạng công cộng.
 

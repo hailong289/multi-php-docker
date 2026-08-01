@@ -18,6 +18,13 @@ container_for_service() {
     esac
 }
 
+profile_for_service() {
+    case "$1" in
+        php-8.1|php-8.0|php-7.4) printf '%s' "$1" ;;
+        *) return 1 ;;
+    esac
+}
+
 container_state() {
     container="$1"
     state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null) || {
@@ -70,7 +77,7 @@ while true; do
         [ -e "$request_file" ] || break
         request=$(tr -d '\r\n' < "$request_file")
 
-        if ! printf '%s' "$request" | grep -Eq '^\{"request_id":"[0-9a-f]{32}","service":"php-(8\.2|8\.1|8\.0|7\.4)","action":"(start|stop|restart)","requested_at":"[0-9T:+-]+"\}$'; then
+        if ! printf '%s' "$request" | grep -Eq '^\{"request_id":"[0-9a-f]{32}","service":"php-(8\.2|8\.1|8\.0|7\.4)","action":"(start|stop|restart|create)","requested_at":"[0-9T:+-]+"\}$'; then
             reject_request "$request_file"
             continue
         fi
@@ -84,11 +91,43 @@ while true; do
         }
 
         write_status "$service" "busy" "php_controller.processing" "$request_id"
-        if docker "$action" "$container" >/dev/null 2>&1; then
-            state=$(container_state "$container")
+        ok=0
+        if [ "$action" = "create" ]; then
+            profile=$(profile_for_service "$service") || {
+                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
+                rm -f "$request_file"
+                continue
+            }
+            # Compose bind sources must be host paths. Short Windows mounts like
+            # D:/repo:D:/repo:ro break ("too many colons"), so the project is at
+            # /project and we rewrite "./" volume sources to HOST_PROJECT_PATH.
+            host_project="${HOST_PROJECT_PATH:-}"
+            if [ -z "$host_project" ] || [ "$host_project" = "/project" ]; then
+                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
+                rm -f "$request_file"
+                continue
+            fi
+            project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
+            if [ -z "$project_name" ]; then
+                project_name=$(basename "$host_project")
+            fi
+            tmp_compose="/tmp/docker-compose.create.yml"
+            # shellcheck disable=SC2016
+            sed "s|- \\./|- ${host_project}/|g" /project/docker-compose.yml > "$tmp_compose"
+            if docker compose -p "$project_name" --env-file /project/.env -f "$tmp_compose" --profile "$profile" create "$service" >/tmp/php-create.log 2>&1; then
+                ok=1
+            else
+                cp /tmp/php-create.log "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+            fi
+            rm -f "$tmp_compose"
+        elif docker "$action" "$container" >/dev/null 2>&1; then
+            ok=1
+        fi
+
+        state=$(container_state "$container")
+        if [ "$ok" -eq 1 ]; then
             write_status "$service" "$state" "php_controller.action_success" "$request_id"
         else
-            state=$(container_state "$container")
             write_status "$service" "$state" "php_controller.action_failed" "$request_id"
         fi
         rm -f "$request_file"

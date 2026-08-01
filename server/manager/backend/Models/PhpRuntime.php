@@ -86,7 +86,10 @@ final class PhpRuntime
         if (!isset($targets[$service])) {
             throw new HttpException('php_controller.invalid_service', 400);
         }
-        if (!in_array($action, ['start', 'stop', 'restart'], true)) {
+        if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
+            throw new HttpException('php_controller.invalid_action', 400);
+        }
+        if ($action === 'create' && ($targets[$service]['profile'] ?? null) === null) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
 

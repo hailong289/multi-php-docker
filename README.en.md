@@ -138,7 +138,7 @@ For Laravel or frameworks with a separate public directory, `SERVER_PATH` must p
 
 **Refresh status from hosts (no admin):**
 
-1. Detect the OS hosts path and write `HOSTS_FILE` into `.env` (Compose loads it automatically):
+1. Detect the OS hosts path and write `HOSTS_FILE` plus `HOST_PROJECT_PATH` into `.env` (Compose loads it automatically):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
@@ -260,15 +260,15 @@ Server Manager can:
 - Request virtual-host regeneration and an Nginx reload with **Apply & Reload Nginx**.
 - Support Vietnamese and English; the first visit follows the browser language and the selected locale is then remembered in the session.
 - Support **System**, **Light**, and **Dark** appearances; the selection is stored in the browser, and System mode follows the operating-system preference.
-- Manage PHP container state directly with **Start**, **Stop**, and **Restart** controls.
+- Manage PHP container state directly with **Create**, **Start**, **Stop**, and **Restart** controls.
 
-The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. PHP 8.2 is created by default. For an optional PHP container that has never been created, run the command shown by the UI once, for example:
+The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. PHP 8.2 is created by default. For an optional PHP container that has never been created, click **Create** in the UI (equivalent to `docker compose --profile … create …`), then use **Start**. You can still create manually:
 
 ```bash
 docker compose --profile php-8.1 create php-8.1
 ```
 
-Then refresh Server Manager to use the controls. The controller only accepts PHP 8.2, 8.1, 8.0, and 7.4 plus the Start/Stop/Restart actions; it does not create or delete containers.
+Then refresh Server Manager to use the controls. The controller accepts PHP 8.2, 8.1, 8.0, and 7.4 plus Create (profiled services only), Start, Stop, and Restart; it does not delete containers. `ensure_hosts_env` also writes `HOST_PROJECT_PATH` into `.env` so `php-controller` can run compose create with host-correct bind mounts — after changing machines, re-run the script and `docker compose up -d php-controller --force-recreate`.
 
 The `php-controller` service publishes no ports and is the only container that mounts `/var/run/docker.sock`. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source and never expose Server Manager publicly.
 

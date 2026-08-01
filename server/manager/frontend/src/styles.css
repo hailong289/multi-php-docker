@@ -218,11 +218,22 @@ code {
   color: var(--code);
 }
 
-.actions,
-.locale-form {
+.actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.locale-form {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  flex-wrap: nowrap;
+  padding: 2px;
+  border: 1px solid var(--input-line);
+  border-radius: 9px;
+  background: var(--input);
+  overflow: hidden;
 }
 
 .form-actions {
@@ -467,18 +478,49 @@ select {
 }
 
 .switcher select {
+  display: block;
   width: auto;
-  padding: 7px 30px 7px 10px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 28px 0 10px;
+  line-height: 32px;
+  flex-shrink: 0;
+  background-color: var(--input);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%239dafc8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+}
+
+[data-theme='light'] .switcher select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%235d6e85' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 .locale-form button {
-  padding: 7px 9px;
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.locale-form button:hover {
+  border-color: transparent;
+  color: var(--text);
 }
 
 .locale-form button[aria-current='true'] {
   color: #fff;
   background: var(--primary);
-  border-color: var(--primary-line);
+}
+
+.locale-form button[aria-current='true']:hover {
+  color: #fff;
+  border-color: transparent;
 }
 
 input:focus,
