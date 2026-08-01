@@ -137,13 +137,14 @@ services:
     volumes:
       - ./server/manager:/app:ro
       - ./runtime:/runtime
+      - ./php-controller-runtime:/runtime/php-controller
       - .:/var/host-project
     working_dir: /app
     environment:
       MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
-    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app"]
+    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:
         condition: service_completed_successfully
