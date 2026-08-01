@@ -9,6 +9,24 @@ services:
       - sh
       - -c
       - |
+        # Keep env.json at the project root. Do not bind-mount that file directly:
+        # when it is missing, Docker Desktop on Windows creates a host *directory*
+        # named env.json (macOS usually does not). Mount the project directory
+        # instead and read ./env.json inside the container.
+        if [ -d env.json ]; then
+          echo "Removing invalid env.json directory left by a previous bind mount"
+          rm -rf env.json
+        fi
+
+        # Move back from the short-lived environment/ layout if present
+        if [ -f environment/env.json ] && [ ! -f env.json ]; then
+          mv environment/env.json env.json
+          echo "Moved environment/env.json back to ./env.json"
+        fi
+        if [ -d environment/env.json ]; then
+          rm -rf environment/env.json
+        fi
+
         if [ ! -f env.json ]; then
           cp env.example.json env.json
           echo "Created env.json from env.example.json"
@@ -30,11 +48,9 @@ services:
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
       - ./runtime:/var/runtime
-      - type: bind
-        source: ./env.json
-        target: /var/environment/env.json
-        bind:
-          create_host_path: false
+      - .:/var/host-project:ro
+    environment:
+      ENV_JSON_FILE: /var/host-project/env.json
     command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
     depends_on:
       env-init:
@@ -121,15 +137,10 @@ services:
     volumes:
       - ./server/manager:/app:ro
       - ./runtime:/runtime
-      - ./php-controller-runtime:/runtime/php-controller
-      - type: bind
-        source: ./env.json
-        target: /data/env.json
-        bind:
-          create_host_path: false
+      - .:/var/host-project
     working_dir: /app
     environment:
-      MANAGER_ENV_PATH: /data/env.json
+      MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app"]

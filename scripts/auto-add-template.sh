@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Tạo file config nginx từ template cho từng server_name trong env.json
-JSON_FILE="/var/environment/env.json"
+JSON_FILE="${ENV_JSON_FILE:-/var/environment/env.json}"
 
 if [ ! -f "$JSON_FILE" ]; then
     echo "JSON file not found: $JSON_FILE"
