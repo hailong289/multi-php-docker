@@ -111,15 +111,27 @@ while true; do
             if [ -z "$project_name" ]; then
                 project_name=$(basename "$host_project")
             fi
-            tmp_compose="/tmp/docker-compose.create.yml"
+            tmp_dir="/tmp/compose-create.$$"
+            mkdir -p "$tmp_dir/compose"
+            # Rewrite ./ bind sources to absolute host paths in root + all included fragments.
+            # Also point include project_directory at the host repo (not the temp dir).
             # shellcheck disable=SC2016
-            sed "s|- \\./|- ${host_project}/|g" /project/docker-compose.yml > "$tmp_compose"
-            if docker compose -p "$project_name" --env-file /project/.env -f "$tmp_compose" --profile "$profile" create "$service" >/tmp/php-create.log 2>&1; then
+            sed -e "s|- \\./|- ${host_project}/|g" \
+                -e "s|project_directory: \\.|project_directory: ${host_project}|g" \
+                /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
+            for f in /project/compose/*.yml; do
+                [ -f "$f" ] || continue
+                sed "s|- \\./|- ${host_project}/|g" "$f" > "$tmp_dir/compose/$(basename "$f")"
+            done
+            if docker compose -p "$project_name" --env-file /project/.env \
+                -f "$tmp_dir/docker-compose.yml" \
+                --project-directory "$host_project" \
+                --profile "$profile" create "$service" >/tmp/php-create.log 2>&1; then
                 ok=1
             else
                 cp /tmp/php-create.log "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
             fi
-            rm -f "$tmp_compose"
+            rm -rf "$tmp_dir"
         elif docker "$action" "$container" >/dev/null 2>&1; then
             ok=1
         fi

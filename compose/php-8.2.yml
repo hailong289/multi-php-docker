@@ -1,0 +1,41 @@
+services:
+  php-8.2:
+    image: long301001/multi-php-docker:php-8.2
+    build:
+      context: .
+      dockerfile: ./docker_files/php8.Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: php8.2_container
+    volumes:
+      - ./server/source_php8.2:/var/www/source_php8.2
+      - ./scripts:/var/scripts
+      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf
+    working_dir: /var/www/source_php8.2
+    networks:
+      - app-network
+
+  supervisor:
+    image: long301001/multi-php-docker:php-8.2
+    container_name: supervisor_container
+    volumes:
+      - ./server/source_php8.2:/var/www/source_php8.2
+      - ./scripts:/var/scripts
+      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor:/var/log/supervisor
+    working_dir: /var/www/source_php8.2
+    command: ["/var/scripts/supervisord.sh"]
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
