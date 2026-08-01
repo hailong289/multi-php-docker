@@ -1,0 +1,3 @@
+# Placeholder hosts file for docker compose when HOSTS_FILE is unset.
+# Run scripts/ensure_hosts_env.ps1 (Windows) or scripts/ensure_hosts_env.sh
+# to point HOSTS_FILE at the real OS hosts file for domain sync.

@@ -138,7 +138,7 @@ Với Laravel hoặc framework có thư mục public riêng, `SERVER_PATH` phả
 
 **Đồng bộ trạng thái từ file hosts (không cần admin):**
 
-1. Chạy script nhận diện OS để ghi `HOSTS_FILE` và `HOST_PROJECT_PATH` vào `.env` (Compose tự đọc):
+1. Wrapper `scripts/compose.*` tự chạy bước này trước mọi lệnh compose. Hoặc chạy thủ công để ghi `HOSTS_FILE` và `HOST_PROJECT_PATH` vào `.env`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
@@ -201,14 +201,24 @@ Script đọc `DOMAIN_NAME` trong `env.json` (và `runtime/hosts.extra.json` n�
 
 ### 5. Pull image và khởi động
 
-Lần chạy đầu tiên, tải các image được cung cấp sẵn rồi tạo container:
+Lần chạy đầu tiên, tải các image được cung cấp sẵn rồi tạo container. Dùng wrapper `scripts/compose.*` để **tự chạy `ensure_hosts_env`** (ghi `HOSTS_FILE` + `HOST_PROJECT_PATH` vào `.env`) rồi mới gọi `docker compose`:
+
+```powershell
+docker compose pull
+powershell -ExecutionPolicy Bypass -File .\scripts\compose.ps1 up -d
+```
+
+macOS / Linux / WSL:
 
 ```bash
 docker compose pull
-docker compose up -d
+chmod +x scripts/compose.sh scripts/ensure_hosts_env.sh
+./scripts/compose.sh up -d
 ```
 
 Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager và PHP Controller. Các PHP version cũ không được khởi động.
+
+> Nếu gọi thẳng `docker compose up -d` mà chưa có `.env`, Compose vẫn lên được nhờ fallback `configs/hosts.default`, nhưng đồng bộ hosts OS và `php-controller create` cần đã chạy `ensure_hosts_env` (hoặc dùng wrapper ở trên).
 
 ### Bật phiên bản PHP tùy chọn
 

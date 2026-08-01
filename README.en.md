@@ -138,7 +138,7 @@ For Laravel or frameworks with a separate public directory, `SERVER_PATH` must p
 
 **Refresh status from hosts (no admin):**
 
-1. Detect the OS hosts path and write `HOSTS_FILE` plus `HOST_PROJECT_PATH` into `.env` (Compose loads it automatically):
+1. The `scripts/compose.*` wrapper runs this automatically before every compose command. Or run it manually to write `HOSTS_FILE` and `HOST_PROJECT_PATH` into `.env`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
@@ -201,14 +201,24 @@ The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.js
 
 ### 5. Pull images and start the environment
 
-On the first run, pull the provided images before creating the containers:
+On the first run, pull the provided images before creating the containers. Use the `scripts/compose.*` wrapper so **`ensure_hosts_env` runs automatically** (writes `HOSTS_FILE` + `HOST_PROJECT_PATH` into `.env`) before `docker compose`:
+
+```powershell
+docker compose pull
+powershell -ExecutionPolicy Bypass -File .\scripts\compose.ps1 up -d
+```
+
+macOS / Linux / WSL:
 
 ```bash
 docker compose pull
-docker compose up -d
+chmod +x scripts/compose.sh scripts/ensure_hosts_env.sh
+./scripts/compose.sh up -d
 ```
 
 The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager, and PHP Controller. Older PHP versions are not started.
+
+> If you call plain `docker compose up -d` without a `.env`, Compose still starts via the `configs/hosts.default` fallback, but OS hosts sync and `php-controller create` need `ensure_hosts_env` (or the wrapper above).
 
 ### Enable an optional PHP version
 
