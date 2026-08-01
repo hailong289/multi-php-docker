@@ -368,6 +368,57 @@ button.is-loading:disabled {
   opacity: 0.72;
 }
 
+.manual-path,
+.manual-lines {
+  display: block;
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--command);
+  color: var(--command-text);
+  border: 1px solid var(--line);
+  font: 13px/1.5 'SFMono-Regular', Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.hosts-progress {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+}
+
+.hosts-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hosts-progress-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hosts-progress-bar {
+  margin-top: 10px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--input);
+  overflow: hidden;
+}
+
+.hosts-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 0.25s ease;
+}
+
 button.primary,
 .button.primary {
   color: #fff;
@@ -478,6 +529,10 @@ select:focus {
   color: var(--muted);
 }
 
+.empty .primary {
+  margin-top: 14px;
+}
+
 .status-line,
 .controller-message,
 .create-hint {
@@ -485,6 +540,10 @@ select:focus {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.status-line.warn {
+  color: #a15c12;
 }
 
 .controller-panel {

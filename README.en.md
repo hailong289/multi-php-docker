@@ -136,14 +136,60 @@ For Laravel or frameworks with a separate public directory, `SERVER_PATH` must p
 
 ### 4. Add domains to the `hosts` file
 
-Automatic setup on macOS, Linux, or WSL:
+**Refresh status from hosts (no admin):**
+
+1. Detect the OS hosts path and write `HOSTS_FILE` into `.env` (Compose loads it automatically):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+```
+
+macOS / Linux / WSL:
+
+```bash
+chmod +x scripts/ensure_hosts_env.sh
+./scripts/ensure_hosts_env.sh
+```
+
+2. Open Server Manager → **Domains**.
+3. Click **Sync domains from hosts file**. Manager reads the mounted hosts file and updates synced/missing badges.
+
+If you switch machines/OS, re-run `ensure_hosts_env` and `docker compose up -d manager --force-recreate`.
+
+**Write hosts (needs host script + admin):**
+
+1. On Windows, run once (writes `HOSTS_FILE` + registers `multi-php-hosts:`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+```
+
+Unregister: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
+
+2. In Manager use **Add domain** / **Write hosts (Admin)**. The browser opens `multi-php-hosts:write` → runs `add_hostname.ps1` (UAC). Allow the app if the browser prompts.
+
+macOS / Linux / WSL (no Windows protocol):
 
 ```bash
 chmod +x scripts/add_hostname.sh
+./scripts/add_hostname.sh --watch
+```
+
+The script only edits the `# multi-php-docker-serve:managed:*` block in the hosts file.
+
+**One-shot (without Manager):**
+
+```bash
 ./scripts/add_hostname.sh
 ```
 
-The script reads every `DOMAIN_NAME` in `env.json` and maps it to `127.0.0.1`. To configure domains manually, edit:
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1
+```
+
+The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.json` if present) and maps it to `127.0.0.1`. To configure domains manually, edit:
 
 - macOS/Linux: `/etc/hosts`
 - Windows: `C:\Windows\System32\drivers\etc\hosts`

@@ -136,14 +136,60 @@ Với Laravel hoặc framework có thư mục public riêng, `SERVER_PATH` phả
 
 ### 4. Thêm domain vào file `hosts`
 
-Tự động trên macOS, Linux hoặc WSL:
+**Đồng bộ trạng thái từ file hosts (không cần admin):**
+
+1. Chạy script nhận diện OS để ghi `HOSTS_FILE` vào `.env` (Compose tự đọc):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+```
+
+macOS / Linux / WSL:
+
+```bash
+chmod +x scripts/ensure_hosts_env.sh
+./scripts/ensure_hosts_env.sh
+```
+
+2. Mở Server Manager → **Quản lý domain**.
+3. Bấm **Đồng bộ domain từ file hosts**. Manager đọc file hosts đã mount và cập nhật badge đã đồng bộ / thiếu.
+
+Nếu đổi máy / OS, chạy lại `ensure_hosts_env` rồi `docker compose up -d manager --force-recreate`.
+
+**Ghi hosts (cần script trên host + quyền admin):**
+
+1. Trên Windows, chạy một lần (ghi `HOSTS_FILE` + đăng ký protocol `multi-php-hosts:`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+```
+
+Gỡ protocol: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
+
+2. Trong Manager dùng **Thêm domain** / **Ghi hosts (Admin)**. Trình duyệt mở `multi-php-hosts:write` → chạy `add_hostname.ps1` (có UAC). Cho phép mở ứng dụng nếu trình duyệt hỏi.
+
+macOS / Linux / WSL (không dùng protocol Windows):
 
 ```bash
 chmod +x scripts/add_hostname.sh
+./scripts/add_hostname.sh --watch
+```
+
+Script chỉ sửa block `# multi-php-docker-serve:managed:*` trong file hosts.
+
+**One-shot (không cần Manager):**
+
+```bash
 ./scripts/add_hostname.sh
 ```
 
-Script đọc các `DOMAIN_NAME` trong `env.json` và ánh xạ chúng tới `127.0.0.1`. Nếu không dùng script, thêm thủ công vào:
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1
+```
+
+Script đọc `DOMAIN_NAME` trong `env.json` (và `runtime/hosts.extra.json` nếu có) rồi ánh xạ tới `127.0.0.1`. Nếu không dùng script, thêm thủ công vào:
 
 - macOS/Linux: `/etc/hosts`
 - Windows: `C:\Windows\System32\drivers\etc\hosts`

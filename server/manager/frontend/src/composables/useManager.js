@@ -26,6 +26,9 @@ const data = reactive({
   php_versions: {},
   apply_command: '',
   nginx_status: null,
+  hosts_status: null,
+  hosts_extras: [],
+  pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
 })
 
@@ -36,12 +39,60 @@ const form = reactive({
   php_version: 'php-8.2',
 })
 
+const domainForm = reactive({
+  domain_name: '',
+})
+const domainModalOpen = ref(false)
+const domainModalMode = ref('add')
+const domainEditingKey = ref(null)
+const domainFieldErrors = ref({})
+const hostsManualOpen = ref(false)
+const hostsManual = ref(null)
+const hostsProgress = ref(null)
+
 export function useManager() {
   const { t } = useI18n()
 
   const serverEntries = computed(() =>
     Object.entries(data.servers).map(([key, server]) => ({ key, server })),
   )
+
+  const domainEntries = computed(() => {
+    const states = data.hosts_status?.domains || {}
+    const rows = []
+    const seen = new Set()
+
+    for (const [key, server] of Object.entries(data.servers)) {
+      const domainName = (server.DOMAIN_NAME || '').toLowerCase()
+      if (!domainName) continue
+      seen.add(domainName)
+      rows.push({
+        key,
+        source: 'server',
+        app_name: server.APP_NAME || '',
+        domain_name: domainName,
+        hosts_state: data.hosts_status
+          ? states[domainName] || 'missing'
+          : 'unknown',
+      })
+    }
+
+    for (const domainName of data.hosts_extras || []) {
+      const normalized = String(domainName || '').toLowerCase()
+      if (!normalized || seen.has(normalized)) continue
+      rows.push({
+        key: `hosts:${normalized}`,
+        source: 'hosts',
+        app_name: '',
+        domain_name: normalized,
+        hosts_state: data.hosts_status
+          ? states[normalized] || 'missing'
+          : 'unknown',
+      })
+    }
+
+    return rows
+  })
 
   function trKey(key, params = {}) {
     if (!key) return ''
@@ -84,6 +135,7 @@ export function useManager() {
     if (meta.key != null && current.key !== meta.key) return false
     if (meta.service != null && current.service !== meta.service) return false
     if (meta.action != null && current.action !== meta.action) return false
+    if (meta.domain != null && current.domain !== meta.domain) return false
     return true
   }
 
@@ -97,6 +149,9 @@ export function useManager() {
     data.php_versions = payload.php_versions || {}
     data.apply_command = payload.apply_command || ''
     data.nginx_status = payload.nginx_status || null
+    data.hosts_status = payload.hosts_status || null
+    data.hosts_extras = payload.hosts_extras || []
+    data.pending_sync = !!payload.pending_sync
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
     if (payload.csrf_token) setCsrfToken(payload.csrf_token)
   }
@@ -179,8 +234,8 @@ export function useManager() {
     }
   }
 
-  async function deleteServer(key) {
-    if (!confirm(t('confirm.delete'))) return
+  async function deleteServer(key, confirmKey = 'confirm.delete') {
+    if (!confirm(t(confirmKey))) return
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
     try {
@@ -188,6 +243,29 @@ export function useManager() {
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       toastFromResult(result)
       if (editingKey.value === key) closeModal()
+      if (domainEditingKey.value === key) closeDomainModal()
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function deleteDomain(key) {
+    if (!String(key).startsWith('hosts:')) {
+      showToast('failure', t('error.hosts_only_delete'))
+      return
+    }
+    if (!confirm(t('domains.confirm_delete'))) return
+    const domain = String(key).slice('hosts:'.length)
+    busy.value = true
+    pendingAction.value = { kind: 'delete', key }
+    try {
+      const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`)
+      if (domainEditingKey.value === key) closeDomainModal()
+      showToast('success', trKey(result.message_key || 'hosts.domain_removed'))
+      await finishHostsWrite(result)
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -225,6 +303,268 @@ export function useManager() {
       busy.value = false
       pendingAction.value = null
     }
+  }
+
+  function openHostsDomainAdd() {
+    domainModalMode.value = 'add'
+    domainEditingKey.value = null
+    domainFieldErrors.value = {}
+    domainForm.domain_name = ''
+    domainModalOpen.value = true
+  }
+
+  function openDomainEdit(key) {
+    const row = domainEntries.value.find((item) => item.key === key)
+    if (!row) return
+    domainModalMode.value = 'edit'
+    domainEditingKey.value = key
+    domainFieldErrors.value = {}
+    domainForm.domain_name = row.domain_name || ''
+    domainModalOpen.value = true
+  }
+
+  function closeDomainModal() {
+    domainModalOpen.value = false
+    domainModalMode.value = 'add'
+    domainEditingKey.value = null
+    domainFieldErrors.value = {}
+    domainForm.domain_name = ''
+  }
+
+  function closeHostsManual() {
+    hostsManualOpen.value = false
+  }
+
+  function showHostsManual(manual) {
+    if (!manual?.lines?.length) return
+    hostsManual.value = manual
+    hostsManualOpen.value = true
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  async function waitForHostsResult(previousUpdatedAt, maxAttempts = 5) {
+    let latestBusy = null
+    let pendingSync = false
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      hostsProgress.value = {
+        attempt,
+        maxAttempts,
+        message_key: 'hosts.progress_checking',
+      }
+      await sleep(1000)
+      try {
+        const payload = await apiGet('/api/hosts/status')
+        pendingSync = !!payload.pending_sync
+        data.pending_sync = pendingSync
+        const status = payload.hosts_status
+        if (!status?.updated_at) {
+          hostsProgress.value = {
+            attempt,
+            maxAttempts,
+            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
+          }
+          continue
+        }
+        if (previousUpdatedAt && status.updated_at === previousUpdatedAt) {
+          hostsProgress.value = {
+            attempt,
+            maxAttempts,
+            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
+          }
+          continue
+        }
+        data.hosts_status = status
+        if (status.status === 'busy') {
+          latestBusy = status
+          hostsProgress.value = {
+            attempt,
+            maxAttempts,
+            message_key: status.message_key || 'hosts.processing',
+          }
+          continue
+        }
+        hostsProgress.value = {
+          attempt,
+          maxAttempts,
+          message_key: status.message_key || 'hosts.progress_done',
+        }
+        return { status, pendingSync: false }
+      } catch (_) {
+        hostsProgress.value = {
+          attempt,
+          maxAttempts,
+          message_key: 'hosts.progress_retry',
+        }
+      }
+    }
+    return { status: latestBusy, pendingSync }
+  }
+
+  function launchHostsWriteProtocol() {
+    const ua = String(navigator.userAgent || '')
+    const platform = String(navigator.platform || '')
+    if (!/Win/i.test(ua) && !/Win/i.test(platform)) return false
+    try {
+      const frame = document.createElement('iframe')
+      frame.style.display = 'none'
+      frame.src = 'multi-php-hosts:write'
+      document.body.appendChild(frame)
+      setTimeout(() => frame.remove(), 2500)
+      return true
+    } catch (_) {
+      return false
+    }
+  }
+
+  async function finishHostsWrite(result) {
+    const previousUpdatedAt = data.hosts_status?.updated_at || null
+    if (result?.bootstrap) applyBootstrap(result.bootstrap)
+    else if (result?.hosts_status) data.hosts_status = result.hosts_status
+
+    const launched = launchHostsWriteProtocol()
+    hostsProgress.value = {
+      attempt: 0,
+      maxAttempts: 15,
+      message_key: launched ? 'hosts.progress_protocol' : 'hosts.progress_starting',
+    }
+
+    try {
+      const outcome = await waitForHostsResult(previousUpdatedAt, 15)
+      const status = outcome?.status || null
+      await loadBootstrap()
+      data.pending_sync = !!outcome?.pendingSync || !!data.pending_sync
+
+      if (status?.status === 'success') {
+        data.pending_sync = false
+        showToast('success', trKey(status.message_key || 'hosts.sync_success'))
+        return
+      }
+
+      if (outcome?.pendingSync || data.pending_sync) {
+        data.pending_sync = true
+        showToast('failure', t(launched ? 'hosts.protocol_pending' : 'hosts.protocol_required'))
+      }
+
+      const manual = status?.manual || result?.manual || null
+      if (manual?.lines?.length) {
+        if (!(outcome?.pendingSync || data.pending_sync)) {
+          showToast('failure', trKey(status?.message_key || 'hosts.manual_required'))
+        }
+        showHostsManual(manual)
+        return
+      }
+
+      if (!(outcome?.pendingSync || data.pending_sync)) {
+        showToast('failure', t('hosts.manual_required'))
+      }
+      if (result?.manual) showHostsManual(result.manual)
+    } finally {
+      hostsProgress.value = null
+    }
+  }
+
+  async function saveDomain() {
+    busy.value = true
+    pendingAction.value = { kind: 'domain-save' }
+    domainFieldErrors.value = {}
+    const mode = domainModalMode.value
+    const editingKeySnapshot = domainEditingKey.value
+    try {
+      let result
+      if (mode === 'add') {
+        result = await apiSend('POST', '/api/domains', {
+          domain_name: domainForm.domain_name,
+        })
+      } else if (String(editingKeySnapshot).startsWith('hosts:')) {
+        const current = String(editingKeySnapshot).slice('hosts:'.length)
+        result = await apiSend('PUT', `/api/domains/extra/${encodeURIComponent(current)}`, {
+          domain_name: domainForm.domain_name,
+        })
+      } else {
+        result = await apiSend('PUT', `/api/domains/${editingKeySnapshot}`, {
+          domain_name: domainForm.domain_name,
+        })
+      }
+      closeDomainModal()
+      // Write request + Windows protocol multi-php-hosts:write (see ensure_hosts_env.ps1).
+      showToast('success', trKey(result.message_key || 'hosts.domain_added'))
+      await finishHostsWrite(result)
+    } catch (error) {
+      const fields = error.payload?.error?.fields || {}
+      domainFieldErrors.value = Object.fromEntries(
+        Object.entries(fields).map(([k, v]) => [k, trKey(v.key, v.parameters || {})]),
+      )
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function syncHosts() {
+    busy.value = true
+    pendingAction.value = { kind: 'hosts-sync' }
+    try {
+      // Read-only: refresh badges from mounted OS hosts file (no Watch / no write).
+      const result = await apiSend('POST', '/api/hosts/sync', {})
+      if (result.hosts_status) data.hosts_status = result.hosts_status
+      data.pending_sync = !!result.pending_sync
+      showToast('success', trKey(result.message_key || 'hosts.status_refreshed'))
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function writeDomainHostsAdmin(domainName) {
+    const domain = String(domainName || '').toLowerCase()
+    if (!domain) return
+    busy.value = true
+    pendingAction.value = { kind: 'hosts-admin', domain }
+    try {
+      const result = await apiSend('POST', '/api/hosts/sync', {
+        force_admin: true,
+        domain_name: domain,
+      })
+      data.pending_sync = !!result.pending_sync
+      await finishHostsWrite({
+        ...result,
+        manual: result.manual || data.hosts_status?.manual || null,
+      })
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  function hostsStateLabel(state) {
+    const map = {
+      synced: 'domains.state.synced',
+      missing: 'domains.state.missing',
+      stale: 'domains.state.stale',
+      unknown: 'domains.state.unknown',
+    }
+    return t(map[state] || 'domains.state.unknown')
+  }
+
+  function hostsStateClass(state) {
+    if (state === 'synced') return 'state-running'
+    if (state === 'missing' || state === 'stale') return 'state-busy'
+    return ''
+  }
+
+  function hostsStatusText() {
+    const status = data.hosts_status
+    if (!status) return t('hosts.controller_unavailable')
+    if (status.message_key) return trKey(status.message_key)
+    return t('hosts.controller_unavailable')
   }
 
   function nginxStatusText() {
@@ -299,16 +639,37 @@ export function useManager() {
     bootstrapped,
     data,
     form,
+    domainForm,
+    domainModalOpen,
+    domainModalMode,
+    domainEditingKey,
+    domainFieldErrors,
+    hostsManualOpen,
+    hostsManual,
+    hostsProgress,
     serverEntries,
+    domainEntries,
     versionLabel,
     loadBootstrap,
     openAddModal,
+    openHostsDomainAdd,
     closeModal,
     startEdit,
     saveServer,
     deleteServer,
+    deleteDomain,
     reloadNginx,
     phpAction,
+    openDomainEdit,
+    closeDomainModal,
+    saveDomain,
+    syncHosts,
+    writeDomainHostsAdmin,
+    closeHostsManual,
+    showHostsManual,
+    hostsStateLabel,
+    hostsStateClass,
+    hostsStatusText,
     nginxStatusText,
     nginxStatusOk,
     stateClass,

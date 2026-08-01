@@ -6,6 +6,7 @@
 *.log
 /.ai/
 /env.json
+/.env
 /server/manager/frontend/node_modules/
 /server/manager/frontend/dist/
 /configs/supervisor.d/*
