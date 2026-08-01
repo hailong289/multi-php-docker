@@ -432,7 +432,7 @@ Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-networ
 
 ### Using Supervisor with other PHP versions
 
-Each Supervisor container contains one PHP runtime. PHP (+ Supervisor) lives in `compose/php-X.Y.yml`. Redis and RabbitMQ are shared and defined in `compose/redis.yml` and `compose/rabbitmq.yml`. The root `docker-compose.yml` `include`s those files.
+Each Supervisor container contains one PHP runtime. PHP (+ Supervisor) lives in `compose/php-X.Y.yml`. MySQL, Redis, and RabbitMQ are shared and defined in `compose/mysql.yml`, `compose/redis.yml`, and `compose/rabbitmq.yml`. The root `docker-compose.yml` `include`s those files.
 
 | PHP-FPM service | Supervisor service | File | Shared image |
 | --- | --- | --- | --- |
@@ -717,7 +717,7 @@ docker compose start mysql
 
 ### A port is already in use
 
-Stop the application using the port or change the host side of the mapping in `docker-compose.yml`. For example, change `"3306:3306"` to `"3307:3306"` to expose MySQL on host port `3307`.
+Stop the application using the port or change the host side of the mapping in `compose/mysql.yml`. For example, change `"3306:3306"` to `"3307:3306"` to expose MySQL on host port `3307`.
 
 ### PHP cannot connect to MySQL, Redis, or RabbitMQ
 
@@ -851,7 +851,8 @@ See the official [Docker Compose Build Specification](https://docs.docker.com/re
 
 ```text
 .
-├── compose/                 # Compose fragments (PHP+Supervisor, redis, rabbitmq)
+├── compose/                 # Compose fragments (PHP+Supervisor, mysql, redis, rabbitmq)
+│   ├── mysql.yml
 │   ├── php-7.4.yml
 │   ├── php-8.0.yml
 │   ├── php-8.1.yml
@@ -873,7 +874,7 @@ See the official [Docker Compose Build Specification](https://docs.docker.com/re
 │   ├── source_php8.0/       # PHP 8.0 projects
 │   ├── source_php8.1/       # PHP 8.1 projects
 │   └── source_php8.2/       # PHP 8.2 projects
-├── docker-compose.yml       # Root: include + nginx/mysql/manager/php-controller/env-init
+├── docker-compose.yml       # Root: include + nginx/manager/php-controller/env-init
 ├── env.example.json         # Committed project/domain template
 └── env.json                 # Local configuration ignored by Git
 ```

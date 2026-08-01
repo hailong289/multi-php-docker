@@ -11,6 +11,8 @@ include:
     project_directory: .
   - path: compose/rabbitmq.yml
     project_directory: .
+  - path: compose/mysql.yml
+    project_directory: .
 
 services:
   env-init:
@@ -128,31 +130,6 @@ services:
       - /tmp
     restart: unless-stopped
     network_mode: none
-
-  mysql:
-    image: long301001/multi-php-docker:mysql
-    build:
-      context: .
-      dockerfile: ./docker_files/mysql.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
-    container_name: mysql_container
-    environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
-      MYSQL_ROOT_PASSWORD: "1"
-    ports:
-      - "3306:3306"  # Ánh xạ cổng 3306
-    volumes:
-      - mysql-data:/var/lib/mysql
-      - ./mysql/my.cnf:/etc/mysql/my.cnf
-    networks:
-      - app-network
-
-volumes:
-  mysql-data:  # Khai báo volume mysql-data
-    driver: local  # Dùng driver local (mặc định)
-    name: mysql-data  # Tên volume
 
 networks:
   app-network:
