@@ -2,14 +2,17 @@
 <#
 .SYNOPSIS
   Run ensure_hosts_env, then forward all args to docker compose.
+
+.NOTES
+  Do not invoke as: powershell -File compose.ps1 up -d
+  PowerShell.exe treats bare -d as -Debug, so only "up" reaches the script and
+  `docker compose up` attaches forever. Use compose.cmd instead, or:
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\compose.ps1' up -d"
+
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File .\scripts\compose.ps1 up -d
-  powershell -ExecutionPolicy Bypass -File .\scripts\compose.ps1 --profile php-8.1 up -d
+  .\scripts\compose.cmd up -d
+  .\scripts\compose.cmd --profile php-8.1 up -d
 #>
-param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$ComposeArgs
-)
 
 $ErrorActionPreference = 'Stop'
 
@@ -21,14 +24,11 @@ if (-not (Test-Path -LiteralPath $EnsureScript)) {
 }
 
 & $EnsureScript
-if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
-    exit $LASTEXITCODE
-}
 
-if ($null -eq $ComposeArgs -or $ComposeArgs.Count -eq 0) {
+if ($args.Count -eq 0) {
     docker compose
     exit $LASTEXITCODE
 }
 
-docker compose @ComposeArgs
+docker compose @args
 exit $LASTEXITCODE

@@ -205,7 +205,7 @@ Lần chạy đầu tiên, tải các image được cung cấp sẵn rồi tạ
 
 ```powershell
 docker compose pull
-powershell -ExecutionPolicy Bypass -File .\scripts\compose.ps1 up -d
+.\scripts\compose.cmd up -d
 ```
 
 macOS / Linux / WSL:
@@ -218,7 +218,9 @@ chmod +x scripts/compose.sh scripts/ensure_hosts_env.sh
 
 Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager và PHP Controller. Các PHP version cũ không được khởi động.
 
-> Nếu gọi thẳng `docker compose up -d` mà chưa có `.env`, Compose vẫn lên được nhờ fallback `configs/hosts.default`, nhưng đồng bộ hosts OS và `php-controller create` cần đã chạy `ensure_hosts_env` (hoặc dùng wrapper ở trên).
+> Không dùng `powershell -File .\scripts\compose.ps1 up -d`: PowerShell sẽ nuốt `-d` thành `-Debug`, thành ra chạy `docker compose up` (gắn log, không thoát). Dùng `.\scripts\compose.cmd` như trên.
+>
+> Nếu gọi thẳng `docker compose up -d` mà chưa có `.env`, Compose vẫn lên được nhờ fallback `configs/hosts.default`, nhưng đồng bộ hosts OS và `php-controller create` cần đã chạy `ensure_hosts_env` (hoặc dùng wrapper).
 
 ### Bật phiên bản PHP tùy chọn
 

@@ -94,7 +94,7 @@ services:
       MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
-      MANAGER_HOSTS_PATH: /host-hostshosts.default
+      MANAGER_HOSTS_PATH: /host-hosts
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:
