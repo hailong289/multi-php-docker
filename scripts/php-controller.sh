@@ -113,19 +113,18 @@ while true; do
             fi
             tmp_dir="/tmp/compose-create.$$"
             mkdir -p "$tmp_dir/compose"
-            # Rewrite ./ bind sources to absolute host paths in root + all included fragments.
-            # Also point include project_directory at the host repo (not the temp dir).
+            # Rewrite ./ bind sources to absolute *host* paths (Docker Engine bind-mounts
+            # the host FS via the mounted docker.sock). Include paths must stay readable
+            # inside this container — do NOT rewrite project_directory to a Windows path
+            # (Linux treats "D:/..." as relative → /project/D:/... which does not exist).
             # shellcheck disable=SC2016
-            sed -e "s|- \\./|- ${host_project}/|g" \
-                -e "s|project_directory: \\.|project_directory: ${host_project}|g" \
-                /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
+            sed "s|- \\./|- ${host_project}/|g" /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
             for f in /project/compose/*.yml; do
                 [ -f "$f" ] || continue
                 sed "s|- \\./|- ${host_project}/|g" "$f" > "$tmp_dir/compose/$(basename "$f")"
             done
             if docker compose -p "$project_name" --env-file /project/.env \
                 -f "$tmp_dir/docker-compose.yml" \
-                --project-directory "$host_project" \
                 --profile "$profile" create "$service" >/tmp/php-create.log 2>&1; then
                 ok=1
             else
