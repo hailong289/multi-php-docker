@@ -432,7 +432,7 @@ Supervisor dùng hostname `mysql`, `redis` và `rabbitmq` để kết nối các
 
 ### Dùng Supervisor với phiên bản PHP khác
 
-Mỗi container Supervisor chỉ có một PHP runtime. PHP (+ Supervisor) nằm trong `compose/php-X.Y.yml`. Redis và RabbitMQ dùng chung, khai báo ở `compose/redis.yml` và `compose/rabbitmq.yml`. Root `docker-compose.yml` `include` các file đó.
+Mỗi container Supervisor chỉ có một PHP runtime. PHP (+ Supervisor) nằm trong `compose/php-X.Y.yml`. MySQL, Redis và RabbitMQ dùng chung, khai báo ở `compose/mysql.yml`, `compose/redis.yml` và `compose/rabbitmq.yml`. Root `docker-compose.yml` `include` các file đó.
 
 | PHP-FPM service | Supervisor service | File | Image dùng chung |
 | --- | --- | --- | --- |
@@ -717,7 +717,7 @@ docker compose start mysql
 
 ### Cổng đã được sử dụng
 
-Tắt ứng dụng đang chiếm cổng hoặc đổi cổng host trong `docker-compose.yml`. Ví dụ, đổi `"3306:3306"` thành `"3307:3306"` để MySQL dùng cổng `3307` trên host.
+Tắt ứng dụng đang chiếm cổng hoặc đổi cổng host trong `compose/mysql.yml`. Ví dụ, đổi `"3306:3306"` thành `"3307:3306"` để MySQL dùng cổng `3307` trên host.
 
 ### Không kết nối được MySQL, Redis hoặc RabbitMQ từ PHP
 
@@ -733,7 +733,8 @@ Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `loca
 
 ```text
 .
-├── compose/                 # Compose fragments (PHP+Supervisor, redis, rabbitmq)
+├── compose/                 # Compose fragments (PHP+Supervisor, mysql, redis, rabbitmq)
+│   ├── mysql.yml
 │   ├── php-7.4.yml
 │   ├── php-8.0.yml
 │   ├── php-8.1.yml
@@ -755,7 +756,7 @@ Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `loca
 │   ├── source_php8.0/       # Source chạy PHP 8.0
 │   ├── source_php8.1/       # Source chạy PHP 8.1
 │   └── source_php8.2/       # Source chạy PHP 8.2
-├── docker-compose.yml       # Root: include + nginx/mysql/manager/php-controller/env-init
+├── docker-compose.yml       # Root: include + nginx/manager/php-controller/env-init
 ├── env.example.json         # Cấu hình project/domain mẫu được commit
 └── env.json                 # Cấu hình local, được Git bỏ qua
 ```

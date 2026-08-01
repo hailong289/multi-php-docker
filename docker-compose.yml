@@ -11,6 +11,8 @@ include:
     project_directory: .
   - path: compose/rabbitmq.yml
     project_directory: .
+  - path: compose/mysql.yml
+    project_directory: .
 
 services:
   env-init:
@@ -74,24 +76,54 @@ services:
     networks:
       - app-network
 
-  mysql:
-    image: long301001/multi-php-docker:mysql
-    container_name: mysql_container
-    environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
-      MYSQL_ROOT_PASSWORD: "1"
+  manager:
+    image: long301001/multi-php-docker:php-8.2
+    container_name: manager_container
     ports:
-      - "3306:3306"  # Ánh xạ cổng 3306
+      - "127.0.0.1:8080:8080"
     volumes:
-      - mysql-data:/var/lib/mysql
-      - ./mysql/my.cnf:/etc/mysql/my.cnf
+      - ./server/manager:/app:ro
+      - ./runtime:/runtime
+      - ./php-controller-runtime:/runtime/php-controller
+      - .:/var/host-project
+      # OS hosts (read-only). Path comes from .env HOSTS_FILE (run scripts/ensure_hosts_env.*).
+      - ${HOSTS_FILE}:/host-hosts:ro
+    working_dir: /app
+    environment:
+      MANAGER_ENV_PATH: /var/host-project/env.json
+      MANAGER_RUNTIME_PATH: /runtime
+      MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
+      MANAGER_HOSTS_PATH: /host-hosts
+    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
+    depends_on:
+      env-init:
+        condition: service_completed_successfully
     networks:
       - app-network
 
-volumes:
-  mysql-data:  # Khai báo volume mysql-data
-    driver: local  # Dùng driver local (mặc định)
-    name: mysql-data  # Tên volume
+  php-controller:
+    image: docker:cli
+    container_name: php_controller_container
+    entrypoint: ["/bin/sh", "/scripts/php-controller.sh"]
+    environment:
+      # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
+      # rewrite compose bind mounts when creating optional PHP containers.
+      HOST_PROJECT_PATH: ${HOST_PROJECT_PATH:-/project}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts:/scripts:ro
+      - ./php-controller-runtime:/runtime
+      # Long syntax avoids "too many colons" with Windows D:/ paths in short form.
+      - type: bind
+        source: ${HOST_PROJECT_PATH:-.}
+        target: /project
+        read_only: true
+    working_dir: /project
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    network_mode: none
 
 networks:
   app-network:

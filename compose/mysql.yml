@@ -1,0 +1,29 @@
+services:
+  mysql:
+    image: long301001/multi-php-docker:mysql
+    build:
+      context: .
+      dockerfile: ./docker_files/mysql.Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: mysql_container
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
+      MYSQL_ROOT_PASSWORD: "1"
+    ports:
+      - "3306:3306"  # Ánh xạ cổng 3306
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/my.cnf
+    networks:
+      - app-network
+
+volumes:
+  mysql-data:
+    driver: local
+    name: mysql-data
+
+networks:
+  app-network:
+    driver: bridge
