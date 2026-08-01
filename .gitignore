@@ -5,6 +5,8 @@
 *.log
 /.ai/
 /env.json
+/.env
+/php-controller-runtime/
 /configs/supervisor.d/*
 !/configs/supervisor.d/*.example
 /.nx
@@ -26,3 +28,8 @@
 
 /server/source_php7.4/*/
 !/server/source_php7.4/index.php
+
+# Manager frontend (Vite)
+/server/manager/frontend/node_modules/
+/server/manager/frontend/dist/
+/server/manager/frontend/.vite/
