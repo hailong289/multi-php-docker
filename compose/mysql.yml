@@ -1,12 +1,6 @@
 services:
   mysql:
     image: long301001/multi-php-docker:mysql
-    build:
-      context: .
-      dockerfile: ./docker_files/mysql.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: mysql_container
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
