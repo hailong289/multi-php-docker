@@ -406,7 +406,10 @@ export function useManager() {
   function launchHostsWriteProtocol() {
     const ua = String(navigator.userAgent || '')
     const platform = String(navigator.platform || '')
-    if (!/Win/i.test(ua) && !/Win/i.test(platform)) return false
+    const isWin = /Win/i.test(ua) || /Win/i.test(platform)
+    const isMac = /Mac/i.test(platform) || /Mac OS/i.test(ua) || /Macintosh/i.test(ua)
+    // Windows + macOS: custom URL scheme registered by ensure_hosts_env.*
+    if (!isWin && !isMac) return false
     try {
       const frame = document.createElement('iframe')
       frame.style.display = 'none'
@@ -489,7 +492,7 @@ export function useManager() {
         })
       }
       closeDomainModal()
-      // Write request + Windows protocol multi-php-hosts:write (see ensure_hosts_env.ps1).
+      // Write request + multi-php-hosts:write protocol (ensure_hosts_env.*).
       showToast('success', trKey(result.message_key || 'hosts.domain_added'))
       await finishHostsWrite(result)
     } catch (error) {

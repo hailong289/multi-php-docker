@@ -158,7 +158,9 @@ Nếu đổi máy / OS, chạy lại `ensure_hosts_env` rồi `docker compose up
 
 **Ghi hosts (cần script trên host + quyền admin):**
 
-1. Trên Windows, chạy một lần (ghi `HOSTS_FILE` + đăng ký protocol `multi-php-hosts:`):
+1. Chạy một lần để ghi `HOSTS_FILE` và đăng ký protocol `multi-php-hosts:`:
+
+Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
@@ -166,9 +168,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
 
 Gỡ protocol: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
 
-2. Trong Manager dùng **Thêm domain** / **Ghi hosts (Admin)**. Trình duyệt mở `multi-php-hosts:write` → chạy `add_hostname.ps1` (có UAC). Cho phép mở ứng dụng nếu trình duyệt hỏi.
+macOS:
 
-macOS / Linux / WSL (không dùng protocol Windows):
+```bash
+chmod +x scripts/ensure_hosts_env.sh scripts/add_hostname.sh scripts/hosts_protocol_macos.sh
+./scripts/ensure_hosts_env.sh
+```
+
+Gỡ protocol: `./scripts/ensure_hosts_env.sh --unregister-protocol`
+
+2. Trong Manager dùng **Thêm domain** / **Ghi hosts (Admin)**. Trình duyệt mở `multi-php-hosts:write` → ghi hosts (UAC trên Windows / hộp thoại admin trên macOS). Cho phép mở ứng dụng nếu trình duyệt hỏi.
+
+Linux / WSL (không có protocol trình duyệt):
 
 ```bash
 chmod +x scripts/add_hostname.sh

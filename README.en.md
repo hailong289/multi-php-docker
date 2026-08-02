@@ -158,7 +158,9 @@ If you switch machines/OS, re-run `ensure_hosts_env` and `docker compose up -d m
 
 **Write hosts (needs host script + admin):**
 
-1. On Windows, run once (writes `HOSTS_FILE` + registers `multi-php-hosts:`):
+1. Run once to write `HOSTS_FILE` and register the `multi-php-hosts:` protocol:
+
+Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
@@ -166,9 +168,18 @@ powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
 
 Unregister: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
 
-2. In Manager use **Add domain** / **Write hosts (Admin)**. The browser opens `multi-php-hosts:write` → runs `add_hostname.ps1` (UAC). Allow the app if the browser prompts.
+macOS:
 
-macOS / Linux / WSL (no Windows protocol):
+```bash
+chmod +x scripts/ensure_hosts_env.sh scripts/add_hostname.sh scripts/hosts_protocol_macos.sh
+./scripts/ensure_hosts_env.sh
+```
+
+Unregister: `./scripts/ensure_hosts_env.sh --unregister-protocol`
+
+2. In Manager use **Add domain** / **Write hosts (Admin)**. The browser opens `multi-php-hosts:write` → writes hosts (UAC on Windows / admin prompt on macOS). Allow the app if the browser prompts.
+
+Linux / WSL (no browser protocol):
 
 ```bash
 chmod +x scripts/add_hostname.sh

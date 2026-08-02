@@ -85,6 +85,17 @@ read_domains() {
   } | tr '[:upper:]' '[:lower:]' | sed '/^$/d' | sort -u
 }
 
+# Bash 3.2 (macOS /bin/bash) has no mapfile/readarray.
+load_domains() {
+  domains=()
+  while IFS= read -r domain || [ -n "$domain" ]; do
+    [ -n "$domain" ] || continue
+    domains+=("$domain")
+  done <<EOF
+$(read_domains || true)
+EOF
+}
+
 domains_map_json() {
   state="$1"
   shift
@@ -152,20 +163,30 @@ build_hosts_tmp() {
   printf '%s' "$tmp"
 }
 
+# Copy tmp hosts file into place (sudo, or macOS GUI elevation when no TTY).
+install_hosts_file() {
+  local src="$1"
+  if [ "$PLATFORM" = 'mac' ] && [ ! -t 0 ] && command -v osascript >/dev/null 2>&1; then
+    osascript -e "do shell script \"cp $(printf %q "$src") $(printf %q "$HOSTS_FILE")\" with administrator privileges"
+    return $?
+  fi
+  sudo cp "$src" "$HOSTS_FILE"
+}
+
 apply_unix() {
   domains=("$@")
   tmp="$(build_hosts_tmp "${domains[@]}")"
+  local rc=0
+
   if [ "$FORCE_ADMIN" -eq 1 ]; then
-    sudo cp "$tmp" "$HOSTS_FILE"
-    rm -f "$tmp"
-    return 0
+    install_hosts_file "$tmp" || rc=$?
+  elif cp "$tmp" "$HOSTS_FILE" 2>/dev/null; then
+    rc=0
+  else
+    install_hosts_file "$tmp" || rc=$?
   fi
-  if cp "$tmp" "$HOSTS_FILE" 2>/dev/null; then
-    rm -f "$tmp"
-    return 0
-  fi
-  sudo cp "$tmp" "$HOSTS_FILE"
   rm -f "$tmp"
+  return "$rc"
 }
 
 apply_wsl() {
@@ -183,7 +204,7 @@ apply_wsl() {
 }
 
 apply_hosts() {
-  mapfile -t domains < <(read_domains || true)
+  load_domains
   echo "Applying domains: ${domains[*]:-}"
   if [ "$PLATFORM" = 'wsl' ]; then
     apply_wsl "${domains[@]:-}"
@@ -197,7 +218,7 @@ apply_and_status() {
   if [ "$force_from_sync" = "1" ]; then
     FORCE_ADMIN=1
   fi
-  mapfile -t domains < <(read_domains || true)
+  load_domains
   domains_json="$(domains_map_json unknown "${domains[@]:-}")"
   if [ "$FORCE_ADMIN" -eq 1 ]; then
     write_status busy hosts.elevation_required "$domains_json"
@@ -206,10 +227,12 @@ apply_and_status() {
   fi
   if apply_hosts; then
     write_status success hosts.sync_success "$(domains_map_json synced "${domains[@]:-}")"
+    rm -f "$SYNC_FILE"
     echo "Hosts updated successfully."
     return 0
   fi
   write_status error hosts.manual_required "$(domains_map_json unknown "${domains[@]:-}")" "$(manual_json "${domains[@]:-}")"
+  rm -f "$SYNC_FILE"
   echo "Hosts update failed. Add entries manually if needed."
   return 1
 }

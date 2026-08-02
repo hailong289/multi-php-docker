@@ -9,6 +9,8 @@
 /.env
 /server/manager/frontend/node_modules/
 /server/manager/frontend/dist/
+/scripts/macos/
+*.app/
 /configs/supervisor.d/*
 !/configs/supervisor.d/*.example
 /.nx
