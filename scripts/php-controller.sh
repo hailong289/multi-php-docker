@@ -14,6 +14,7 @@ container_for_service() {
         php-8.1) printf '%s' 'php8.1_container' ;;
         php-8.0) printf '%s' 'php8.0_container' ;;
         php-7.4) printf '%s' 'php7.4_container' ;;
+        nginx) printf '%s' 'nginx_container' ;;
         *) return 1 ;;
     esac
 }
@@ -61,8 +62,11 @@ run_compose_recreate_start() {
     if [ -f /project/.env ]; then
         set -- "$@" --env-file /project/.env
     fi
-    set -- "$@" -f "$compose_file" --profile "$profile" \
-        up -d --no-deps --force-recreate "$service"
+    set -- "$@" -f "$compose_file"
+    if [ -n "$profile" ]; then
+        set -- "$@" --profile "$profile"
+    fi
+    set -- "$@" up -d --no-deps --force-recreate "$service"
     "$@"
 }
 
@@ -108,7 +112,7 @@ reject_request() {
     rm -f "$request_file"
 }
 
-for service in php-8.2 php-8.1 php-8.0 php-7.4; do
+for service in php-8.2 php-8.1 php-8.0 php-7.4 nginx; do
     refresh_service "$service"
 done
 
@@ -118,7 +122,7 @@ while true; do
         [ -e "$request_file" ] || break
         request=$(tr -d '\r\n' < "$request_file")
 
-        if ! printf '%s' "$request" | grep -Eq '^\{"request_id":"[0-9a-f]{32}","service":"php-(8\.2|8\.1|8\.0|7\.4)","action":"(start|stop|restart|create)","requested_at":"[0-9T:+-]+"\}$'; then
+        if ! printf '%s' "$request" | grep -Eq '^\{"request_id":"[0-9a-f]{32}","service":"(php-(8\.2|8\.1|8\.0|7\.4)|nginx)","action":"(start|stop|restart|create)","requested_at":"[0-9T:+-]+"\}$'; then
             reject_request "$request_file"
             continue
         fi
@@ -126,6 +130,10 @@ while true; do
         request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
         service=$(printf '%s' "$request" | sed -n 's/^.*"service":"\([^"]*\)".*$/\1/p')
         action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
+        if [ "$service" = "nginx" ] && [ "$action" = "create" ]; then
+            reject_request "$request_file"
+            continue
+        fi
         container=$(container_for_service "$service") || {
             reject_request "$request_file"
             continue
@@ -178,7 +186,7 @@ while true; do
             else
                 profile=$(profile_for_service "$service") || true
                 host_project=$(resolve_host_project) || true
-                if [ -n "$profile" ] && [ -n "$host_project" ]; then
+                if { [ "$service" = "nginx" ] || [ -n "$profile" ]; } && [ -n "$host_project" ]; then
                     project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
                     if [ -z "$project_name" ]; then
                         project_name=$(basename "$host_project")
@@ -211,13 +219,13 @@ while true; do
         fi
         rm -f "$request_file"
 
-        for refresh_target in php-8.2 php-8.1 php-8.0 php-7.4; do
+        for refresh_target in php-8.2 php-8.1 php-8.0 php-7.4 nginx; do
             [ "$refresh_target" = "$service" ] || refresh_service "$refresh_target"
         done
     done
     refresh_tick=$((refresh_tick + 1))
     if [ "$refresh_tick" -ge 5 ]; then
-        for refresh_target in php-8.2 php-8.1 php-8.0 php-7.4; do
+        for refresh_target in php-8.2 php-8.1 php-8.0 php-7.4 nginx; do
             refresh_service "$refresh_target"
         done
         refresh_tick=0

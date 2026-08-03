@@ -1,13 +1,18 @@
 #!/bin/sh
 
-TRIGGER_FILE="/var/runtime/nginx.reload"
+RELOAD_TRIGGER="/var/runtime/nginx.reload"
+TEST_TRIGGER="/var/runtime/nginx.test"
 
 mkdir -p /var/runtime
 
 while true; do
-    if [ -f "$TRIGGER_FILE" ]; then
-        rm -f "$TRIGGER_FILE"
+    if [ -f "$RELOAD_TRIGGER" ]; then
+        rm -f "$RELOAD_TRIGGER"
         sh /var/scripts/reload-nginx.sh || true
+    fi
+    if [ -f "$TEST_TRIGGER" ]; then
+        rm -f "$TEST_TRIGGER"
+        sh /var/scripts/test-nginx.sh || true
     fi
     sleep 1
 done

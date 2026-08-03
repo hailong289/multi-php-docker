@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import DomainsView from '../views/DomainsView.vue'
 import HomeView from '../views/HomeView.vue'
 import PhpVersionsView from '../views/PhpVersionsView.vue'
+import NginxView from '../views/NginxView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +18,12 @@ const router = createRouter({
       name: 'domains',
       component: DomainsView,
       meta: { titleKey: 'nav.domains' },
+    },
+    {
+      path: '/nginx',
+      name: 'nginx',
+      component: NginxView,
+      meta: { titleKey: 'nav.nginx' },
     },
     {
       path: '/php-versions',

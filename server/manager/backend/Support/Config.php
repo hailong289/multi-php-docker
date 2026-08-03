@@ -21,4 +21,9 @@ final class Config
         return getenv('MANAGER_PHP_CONTROLLER_PATH') ?: '/runtime/php-controller';
     }
 
+    public static function nginxLogsPath(): string
+    {
+        return getenv('MANAGER_NGINX_LOGS_PATH') ?: '/nginx-logs';
+    }
+
 }

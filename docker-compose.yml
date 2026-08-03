@@ -85,12 +85,14 @@ services:
       - ./server/manager:/app:ro
       - ./runtime:/runtime
       - ./php-controller-runtime:/runtime/php-controller
+      - ./nginx/logs:/nginx-logs:ro
       - .:/var/host-project
     working_dir: /app
     environment:
       MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
+      MANAGER_NGINX_LOGS_PATH: /nginx-logs
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:
