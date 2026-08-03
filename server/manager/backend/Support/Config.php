@@ -21,8 +21,4 @@ final class Config
         return getenv('MANAGER_PHP_CONTROLLER_PATH') ?: '/runtime/php-controller';
     }
 
-    public static function hostsPath(): string
-    {
-        return getenv('MANAGER_HOSTS_PATH') ?: '/host-hosts';
-    }
 }

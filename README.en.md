@@ -136,29 +136,11 @@ For Laravel or frameworks with a separate public directory, `SERVER_PATH` must p
 
 ### 4. Add domains to the `hosts` file
 
-**Refresh status from hosts (no admin):**
-
-1. The `scripts/compose.*` wrapper runs this automatically before every compose command. Or run it manually to write `HOSTS_FILE` and `HOST_PROJECT_PATH` into `.env`:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
-```
-
-macOS / Linux / WSL:
-
-```bash
-chmod +x scripts/ensure_hosts_env.sh
-./scripts/ensure_hosts_env.sh
-```
-
-2. Open Server Manager → **Domains**.
-3. Click **Sync domains from hosts file**. Manager reads the mounted hosts file and updates synced/missing badges.
-
-If you switch machines/OS, re-run `ensure_hosts_env` and `docker compose up -d manager --force-recreate`.
+The stack starts without mounting the OS hosts file. Manager reads the latest status from `runtime/hosts.status.json`, which is written by the optional helper running on the host. Before the helper runs, domains show **Unknown** and the UI still provides a manual hosts fallback.
 
 **Write hosts (needs host script + admin):**
 
-1. Run once to write `HOSTS_FILE` and register the `multi-php-hosts:` protocol:
+1. Run once to register the `multi-php-hosts:` helper/protocol. This setup is only needed for automatic hosts writing; it is not required to start Docker or create PHP containers:
 
 Windows:
 
@@ -212,26 +194,23 @@ The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.js
 
 ### 5. Pull images and start the environment
 
-On the first run, pull the provided images before creating the containers. Use the `scripts/compose.*` wrapper so **`ensure_hosts_env` runs automatically** (writes `HOSTS_FILE` + `HOST_PROJECT_PATH` into `.env`) before `docker compose`:
+On the first run, pull the images and start directly. Zero-config startup does not require a `.env` file:
 
 ```powershell
 docker compose pull
-.\scripts\compose.cmd up -d
+docker compose up -d
 ```
 
 macOS / Linux / WSL:
 
 ```bash
 docker compose pull
-chmod +x scripts/compose.sh scripts/ensure_hosts_env.sh
-./scripts/compose.sh up -d
+docker compose up -d
 ```
 
 The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager, and PHP Controller. Older PHP versions are not started.
 
-> Do not use `powershell -File .\scripts\compose.ps1 up -d`: PowerShell swallows `-d` as `-Debug`, so you get `docker compose up` (attached logs, never returns). Use `.\scripts\compose.cmd` instead.
->
-> If you call plain `docker compose up -d` without a `.env`, Compose still starts via the `configs/hosts.default` fallback, but OS hosts sync and `php-controller create` need `ensure_hosts_env` (or the wrapper above).
+`php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` overrides and the `scripts/compose.*` wrappers remain backward-compatible, but neither is required. The host helper is an optional OS integration with a manual hosts fallback.
 
 ### Enable an optional PHP version
 
@@ -291,7 +270,7 @@ The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Process
 docker compose --profile php-8.1 create php-8.1
 ```
 
-Then refresh Server Manager to use the controls. The controller accepts PHP 8.2, 8.1, 8.0, and 7.4 plus Create (profiled services only), Start, Stop, and Restart; it does not delete containers. `ensure_hosts_env` also writes `HOST_PROJECT_PATH` into `.env` so `php-controller` can run compose create with host-correct bind mounts — after changing machines, re-run the script and `docker compose up -d php-controller --force-recreate`.
+Then refresh Server Manager to use the controls. The controller accepts PHP 8.2, 8.1, 8.0, and 7.4 plus Create (profiled services only), Start, Stop, and Restart; it does not delete containers. The controller infers the repository path on the Docker host from the `/project` mount; `HOST_PROJECT_PATH` in `.env` is only a backward-compatible override.
 
 The `php-controller` service publishes no ports and is the only container that mounts `/var/run/docker.sock`. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source and never expose Server Manager publicly.
 

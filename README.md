@@ -136,29 +136,11 @@ Với Laravel hoặc framework có thư mục public riêng, `SERVER_PATH` phả
 
 ### 4. Thêm domain vào file `hosts`
 
-**Đồng bộ trạng thái từ file hosts (không cần admin):**
-
-1. Wrapper `scripts/compose.*` tự chạy bước này trước mọi lệnh compose. Hoặc chạy thủ công để ghi `HOSTS_FILE` và `HOST_PROJECT_PATH` vào `.env`:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
-```
-
-macOS / Linux / WSL:
-
-```bash
-chmod +x scripts/ensure_hosts_env.sh
-./scripts/ensure_hosts_env.sh
-```
-
-2. Mở Server Manager → **Quản lý domain**.
-3. Bấm **Đồng bộ domain từ file hosts**. Manager đọc file hosts đã mount và cập nhật badge đã đồng bộ / thiếu.
-
-Nếu đổi máy / OS, chạy lại `ensure_hosts_env` rồi `docker compose up -d manager --force-recreate`.
+Stack không cần mount file hosts để khởi động. Manager đọc trạng thái gần nhất từ `runtime/hosts.status.json`; file này do helper tùy chọn chạy trên máy host ghi lại. Khi helper chưa chạy, domain hiển thị trạng thái **Chưa rõ** và UI vẫn cung cấp các dòng để thêm thủ công.
 
 **Ghi hosts (cần script trên host + quyền admin):**
 
-1. Chạy một lần để ghi `HOSTS_FILE` và đăng ký protocol `multi-php-hosts:`:
+1. Chạy một lần để đăng ký helper/protocol `multi-php-hosts:`. Bước này chỉ cần cho thao tác ghi hosts tự động, không phải điều kiện để chạy Docker hoặc tạo PHP container:
 
 Windows:
 
@@ -212,26 +194,23 @@ Script đọc `DOMAIN_NAME` trong `env.json` (và `runtime/hosts.extra.json` n�
 
 ### 5. Pull image và khởi động
 
-Lần chạy đầu tiên, tải các image được cung cấp sẵn rồi tạo container. Dùng wrapper `scripts/compose.*` để **tự chạy `ensure_hosts_env`** (ghi `HOSTS_FILE` + `HOST_PROJECT_PATH` vào `.env`) rồi mới gọi `docker compose`:
+Lần chạy đầu tiên, tải image rồi khởi động trực tiếp; không cần tạo `.env`:
 
 ```powershell
 docker compose pull
-.\scripts\compose.cmd up -d
+docker compose up -d
 ```
 
 macOS / Linux / WSL:
 
 ```bash
 docker compose pull
-chmod +x scripts/compose.sh scripts/ensure_hosts_env.sh
-./scripts/compose.sh up -d
+docker compose up -d
 ```
 
 Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager và PHP Controller. Các PHP version cũ không được khởi động.
 
-> Không dùng `powershell -File .\scripts\compose.ps1 up -d`: PowerShell sẽ nuốt `-d` thành `-Debug`, thành ra chạy `docker compose up` (gắn log, không thoát). Dùng `.\scripts\compose.cmd` như trên.
->
-> Nếu gọi thẳng `docker compose up -d` mà chưa có `.env`, Compose vẫn lên được nhờ fallback `configs/hosts.default`, nhưng đồng bộ hosts OS và `php-controller create` cần đã chạy `ensure_hosts_env` (hoặc dùng wrapper).
+`HOST_PROJECT_PATH` được `php-controller` tự suy ra từ bind mount `/project`. `.env` cũ và wrapper `scripts/compose.*` vẫn được hỗ trợ để giữ tương thích, nhưng không còn bắt buộc. Helper hosts là tích hợp hệ điều hành tùy chọn và có fallback thêm hosts thủ công.
 
 ### Bật phiên bản PHP tùy chọn
 
@@ -291,7 +270,7 @@ Card **Các phiên bản PHP** hiển thị trạng thái `Đang chạy`, `Đã 
 docker compose --profile php-8.1 create php-8.1
 ```
 
-Sau đó làm mới Server Manager để dùng các nút điều khiển. Controller chấp nhận PHP 8.2, 8.1, 8.0, 7.4 và các thao tác Create (chỉ bản có profile), Start, Stop, Restart; nó không xóa container. `ensure_hosts_env` cũng ghi `HOST_PROJECT_PATH` vào `.env` để `php-controller` chạy compose create với bind mount đúng đường dẫn host — sau khi đổi máy, chạy lại script rồi `docker compose up -d php-controller --force-recreate`.
+Sau đó làm mới Server Manager để dùng các nút điều khiển. Controller chấp nhận PHP 8.2, 8.1, 8.0, 7.4 và các thao tác Create (chỉ bản có profile), Start, Stop, Restart; nó không xóa container. Controller tự suy ra đường dẫn repository trên Docker host từ mount `/project`; `HOST_PROJECT_PATH` trong `.env` chỉ là override tương thích ngược.
 
 Service `php-controller` không public cổng và là container duy nhất được mount `/var/run/docker.sock`. Docker socket có quyền tương đương root trên Docker host, vì vậy chỉ chạy stack từ source tin cậy và không mở Server Manager ra mạng công cộng.
 

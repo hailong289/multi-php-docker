@@ -51,6 +51,21 @@ run_compose_create() {
     "$@"
 }
 
+run_compose_recreate_start() {
+    project_name="$1"
+    compose_file="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" \
+        up -d --no-deps --force-recreate "$service"
+    "$@"
+}
+
 container_state() {
     container="$1"
     state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null) || {
@@ -157,6 +172,33 @@ while true; do
                 cp /tmp/php-create.log "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
             fi
             rm -rf "$tmp_dir"
+        elif [ "$action" = "start" ]; then
+            if docker start "$container" >/dev/null 2>&1; then
+                ok=1
+            else
+                profile=$(profile_for_service "$service") || true
+                host_project=$(resolve_host_project) || true
+                if [ -n "$profile" ] && [ -n "$host_project" ]; then
+                    project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
+                    if [ -z "$project_name" ]; then
+                        project_name=$(basename "$host_project")
+                    fi
+                    tmp_dir="/tmp/compose-start.$$"
+                    mkdir -p "$tmp_dir/compose"
+                    sed "s|- \\./|- ${host_project}/|g" /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
+                    for f in /project/compose/*.yml; do
+                        [ -f "$f" ] || continue
+                        sed "s|- \\./|- ${host_project}/|g" "$f" > "$tmp_dir/compose/$(basename "$f")"
+                    done
+                    if run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" \
+                        "$profile" "$service" >/tmp/php-start.log 2>&1; then
+                        ok=1
+                    else
+                        cp /tmp/php-start.log "$STATUS_DIR/last-start-error.log" 2>/dev/null || true
+                    fi
+                    rm -rf "$tmp_dir"
+                fi
+            fi
         elif docker "$action" "$container" >/dev/null 2>&1; then
             ok=1
         fi

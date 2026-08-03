@@ -86,15 +86,11 @@ services:
       - ./runtime:/runtime
       - ./php-controller-runtime:/runtime/php-controller
       - .:/var/host-project
-      # OS hosts (read-only). Defaults to configs/hosts.default so `compose up` works
-      # without .env; run scripts/ensure_hosts_env.* to use the real OS hosts file.
-      - ${HOSTS_FILE:-./configs/hosts.default}:/host-hosts:ro
     working_dir: /app
     environment:
       MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
-      MANAGER_HOSTS_PATH: /host-hosts
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:

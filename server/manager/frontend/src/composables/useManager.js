@@ -511,11 +511,15 @@ export function useManager() {
     busy.value = true
     pendingAction.value = { kind: 'hosts-sync' }
     try {
-      // Read-only: refresh badges from mounted OS hosts file (no Watch / no write).
+      // Refresh badges from the latest status written by the optional host helper.
       const result = await apiSend('POST', '/api/hosts/sync', {})
-      if (result.hosts_status) data.hosts_status = result.hosts_status
       data.pending_sync = !!result.pending_sync
-      showToast('success', trKey(result.message_key || 'hosts.status_refreshed'))
+      if (result.hosts_status) {
+        data.hosts_status = result.hosts_status
+        showToast('success', trKey(result.message_key || 'hosts.status_refreshed'))
+      } else {
+        showToast('failure', t('hosts.controller_unavailable'))
+      }
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {

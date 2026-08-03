@@ -31,17 +31,9 @@ final class HostsController extends Controller
         $env = new EnvConfig();
         $servers = $env->all();
 
-        // Default Sync button: read mounted hosts file and refresh status only.
+        // Default refresh reads the latest status written by the optional host helper.
         if (!$forceAdmin) {
-            $status = $hosts->refreshStatusFromHostsFile($servers);
-
-            return Response::json([
-                'message_key' => 'hosts.status_refreshed',
-                'hosts_status' => $status,
-                'pending_sync' => false,
-                'domains' => $hosts->listedDomains($servers, $status),
-                'force_admin' => false,
-            ]);
+            return Response::json($hosts->refreshStatus($servers) + ['force_admin' => false]);
         }
 
         $hosts->request(true, $focusDomain);
