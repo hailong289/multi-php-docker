@@ -210,7 +210,7 @@ docker compose up -d
 
 Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager và PHP Controller. Các PHP version cũ không được khởi động.
 
-`HOST_PROJECT_PATH` được `php-controller` tự suy ra từ bind mount `/project`. `.env` cũ và wrapper `scripts/compose.*` vẫn được hỗ trợ để giữ tương thích, nhưng không còn bắt buộc. Helper hosts là tích hợp hệ điều hành tùy chọn và có fallback thêm hosts thủ công.
+`HOST_PROJECT_PATH` được `php-controller` tự suy ra từ bind mount `/project`. `.env` cũ vẫn được hỗ trợ làm override tương thích ngược, nhưng không còn bắt buộc. Helper hosts là tích hợp hệ điều hành tùy chọn và có fallback thêm hosts thủ công.
 
 ### Bật phiên bản PHP tùy chọn
 

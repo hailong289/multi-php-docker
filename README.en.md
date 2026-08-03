@@ -210,7 +210,7 @@ docker compose up -d
 
 The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager, and PHP Controller. Older PHP versions are not started.
 
-`php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` overrides and the `scripts/compose.*` wrappers remain backward-compatible, but neither is required. The host helper is an optional OS integration with a manual hosts fallback.
+`php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required. The host helper is an optional OS integration with a manual hosts fallback.
 
 ### Enable an optional PHP version
 
