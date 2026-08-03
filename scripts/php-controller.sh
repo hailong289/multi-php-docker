@@ -25,6 +25,32 @@ profile_for_service() {
     esac
 }
 
+resolve_host_project() {
+    host_project="${HOST_PROJECT_PATH:-}"
+    if [ -n "$host_project" ] && [ "$host_project" != "/project" ]; then
+        printf '%s' "$host_project"
+        return 0
+    fi
+
+    docker inspect php_controller_container \
+        --format '{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' \
+        2>/dev/null
+}
+
+run_compose_create() {
+    project_name="$1"
+    compose_file="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" create "$service"
+    "$@"
+}
+
 container_state() {
     container="$1"
     state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null) || {
@@ -100,9 +126,10 @@ while true; do
             }
             # Compose bind sources must be host paths. Short Windows mounts like
             # D:/repo:D:/repo:ro break ("too many colons"), so the project is at
-            # /project and we rewrite "./" volume sources to HOST_PROJECT_PATH.
-            host_project="${HOST_PROJECT_PATH:-}"
-            if [ -z "$host_project" ] || [ "$host_project" = "/project" ]; then
+            # /project. Prefer HOST_PROJECT_PATH, or infer the host source of that
+            # mount when the stack was started without a generated .env file.
+            host_project=$(resolve_host_project) || true
+            if [ -z "$host_project" ]; then
                 write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
                 rm -f "$request_file"
                 continue
@@ -123,9 +150,8 @@ while true; do
                 [ -f "$f" ] || continue
                 sed "s|- \\./|- ${host_project}/|g" "$f" > "$tmp_dir/compose/$(basename "$f")"
             done
-            if docker compose -p "$project_name" --env-file /project/.env \
-                -f "$tmp_dir/docker-compose.yml" \
-                --profile "$profile" create "$service" >/tmp/php-create.log 2>&1; then
+            if run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
+                "$profile" "$service" >/tmp/php-create.log 2>&1; then
                 ok=1
             else
                 cp /tmp/php-create.log "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
