@@ -98,6 +98,14 @@ run_compose_create() {
     profile="$3"
     service="$4"
 
+    # Generated PHP images are not published; build before create.
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" build "$service"
+    "$@" || return 1
+
     set -- docker compose -p "$project_name"
     if [ -f /project/.env ]; then
         set -- "$@" --env-file /project/.env
