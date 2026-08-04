@@ -11,11 +11,8 @@ final class PhpIniEditor
 {
     private const MAX_BYTES = 262144; // 256 KiB
 
-    private static array $paths = [
+    private static array $legacyPaths = [
         'php-8.2' => 'configs/php8/php.ini',
-        'php-8.1' => 'configs/php8.1/php.ini',
-        'php-8.0' => 'configs/php8.0/php.ini',
-        'php-7.4' => 'configs/php7.4/php.ini',
     ];
 
     public function __construct(private readonly string $projectPath = '')
@@ -29,11 +26,11 @@ final class PhpIniEditor
 
     public static function relativePath(string $service): string
     {
-        if (!isset(self::$paths[$service])) {
-            throw new HttpException('php_controller.invalid_service', 404);
+        if (isset(self::$legacyPaths[$service])) {
+            return self::$legacyPaths[$service];
         }
 
-        return self::$paths[$service];
+        return PhpVersionId::iniRelativePath($service);
     }
 
     public function absolutePath(string $service): string

@@ -11,6 +11,8 @@ use Manager\Models\PhpDetails;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 use Manager\Models\PhpRuntime;
+use Manager\Models\DockerHubPhpTags;
+use Manager\Models\PhpVersionInstaller;
 
 final class PhpControllerController extends Controller
 {
@@ -22,6 +24,24 @@ final class PhpControllerController extends Controller
             'targets' => PhpRuntime::targets(),
             'statuses' => $runtime->statuses(),
         ]);
+    }
+
+    public function availableVersions(Request $request, array $params = []): Response
+    {
+        return Response::json([
+            'versions' => (new DockerHubPhpTags())->available(),
+        ]);
+    }
+
+    public function installVersion(Request $request, array $params = []): Response
+    {
+        $version = $request->json()['version'] ?? null;
+        if (!is_string($version) || $version === '') {
+            throw new HttpException('php_controller.invalid_version', 400);
+        }
+        $result = (new PhpVersionInstaller())->install($version);
+
+        return Response::json($result);
     }
 
     public function action(Request $request, array $params = []): Response

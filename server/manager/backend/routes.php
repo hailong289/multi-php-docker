@@ -26,6 +26,8 @@ return [
     ['DELETE', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'destroyExtra']],
     ['PUT', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'update']],
     ['GET', '/php-controllers', [PhpControllerController::class, 'index']],
+    ['GET', '/php-controllers/available-versions', [PhpControllerController::class, 'availableVersions']],
+    ['POST', '/php-controllers/install-version', [PhpControllerController::class, 'installVersion']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+)/(?P<action>start|stop|restart|create)', [PhpControllerController::class, 'action']],
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+)/details', [PhpControllerController::class, 'details']],
     ['PUT', '/php-controllers/(?P<service>php-[0-9.]+)/ini', [PhpControllerController::class, 'saveIni']],

@@ -11,20 +11,70 @@ mkdir -p "$REQUEST_DIR" "$STATUS_DIR"
 
 container_for_service() {
     case "$1" in
-        php-8.2) printf '%s' 'php8.2_container' ;;
-        php-8.1) printf '%s' 'php8.1_container' ;;
-        php-8.0) printf '%s' 'php8.0_container' ;;
-        php-7.4) printf '%s' 'php7.4_container' ;;
         nginx) printf '%s' 'nginx_container' ;;
+        php-*)
+            # php-8.3 → php8.3_container
+            printf 'php%s_container' "${1#php-}"
+            ;;
         *) return 1 ;;
     esac
 }
 
 profile_for_service() {
     case "$1" in
-        php-8.1|php-8.0|php-7.4) printf '%s' "$1" ;;
+        php-8.2) return 1 ;;
+        php-*)
+            printf '%s' "$1"
+            ;;
         *) return 1 ;;
     esac
+}
+
+list_php_services() {
+    for f in /project/compose/php-*.yml; do
+        [ -e "$f" ] || continue
+        base=$(basename "$f" .yml)
+        case "$base" in
+            php-*.*) printf '%s\n' "$base" ;;
+        esac
+    done
+}
+
+prepare_compose_tmp() {
+    host_project="$1"
+    tmp_dir="$2"
+    mkdir -p "$tmp_dir/compose"
+    # Rewrite relative bind mounts and build contexts to absolute host paths.
+    sed -e "s|- \\./|- ${host_project}/|g" \
+        -e "s|context: \\./|context: ${host_project}/|g" \
+        /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
+    for f in /project/compose/*.yml; do
+        [ -f "$f" ] || continue
+        sed -e "s|- \\./|- ${host_project}/|g" \
+            -e "s|context: \\./|context: ${host_project}/|g" \
+            "$f" > "$tmp_dir/compose/$(basename "$f")"
+    done
+}
+
+run_compose_build_up() {
+    project_name="$1"
+    compose_file="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" build "$service"
+    "$@" || return 1
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" up -d --no-deps "$service"
+    "$@"
 }
 
 resolve_host_project() {
@@ -195,7 +245,7 @@ parse_request_fields() {
         *) return 1 ;;
     esac
     case "$action" in
-        start|stop|restart|create)
+        start|stop|restart|create|install-version)
             [ -z "$extension" ] || return 1
             ;;
         modules|available-ext)
@@ -211,7 +261,7 @@ parse_request_fields() {
     return 0
 }
 
-for service in php-8.2 php-8.1 php-8.0 php-7.4 nginx; do
+for service in $(list_php_services) nginx; do
     refresh_service "$service"
 done
 
@@ -230,7 +280,7 @@ while true; do
         service=$(printf '%s' "$request" | sed -n 's/^.*"service":"\([^"]*\)".*$/\1/p')
         action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
         extension=$(printf '%s' "$request" | sed -n 's/^.*"extension":"\([a-z0-9_]*\)".*$/\1/p')
-        if [ "$service" = "nginx" ] && [ "$action" = "create" ]; then
+        if [ "$service" = "nginx" ] && { [ "$action" = "create" ] || [ "$action" = "install-version" ]; }; then
             reject_request "$request_file"
             continue
         fi
@@ -302,16 +352,12 @@ while true; do
 
         write_status "$service" "busy" "php_controller.processing" "$request_id"
         ok=0
-        if [ "$action" = "create" ]; then
+        if [ "$action" = "install-version" ] || [ "$action" = "create" ]; then
             profile=$(profile_for_service "$service") || {
                 write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
                 rm -f "$request_file"
                 continue
             }
-            # Compose bind sources must be host paths. Short Windows mounts like
-            # D:/repo:D:/repo:ro break ("too many colons"), so the project is at
-            # /project. Prefer HOST_PROJECT_PATH, or infer the host source of that
-            # mount when the stack was started without a generated .env file.
             host_project=$(resolve_host_project) || true
             if [ -z "$host_project" ]; then
                 write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
@@ -323,18 +369,13 @@ while true; do
                 project_name=$(basename "$host_project")
             fi
             tmp_dir="/tmp/compose-create.$$"
-            mkdir -p "$tmp_dir/compose"
-            # Rewrite ./ bind sources to absolute *host* paths (Docker Engine bind-mounts
-            # the host FS via the mounted docker.sock). Include paths must stay readable
-            # inside this container — do NOT rewrite project_directory to a Windows path
-            # (Linux treats "D:/..." as relative → /project/D:/... which does not exist).
-            # shellcheck disable=SC2016
-            sed "s|- \\./|- ${host_project}/|g" /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
-            for f in /project/compose/*.yml; do
-                [ -f "$f" ] || continue
-                sed "s|- \\./|- ${host_project}/|g" "$f" > "$tmp_dir/compose/$(basename "$f")"
-            done
-            if run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
+            prepare_compose_tmp "$host_project" "$tmp_dir"
+            if [ "$action" = "install-version" ]; then
+                if run_compose_build_up "$project_name" "$tmp_dir/docker-compose.yml" \
+                    "$profile" "$service" >"$STATUS_DIR/$service.last-install-version.log" 2>&1; then
+                    ok=1
+                fi
+            elif run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
                 "$profile" "$service" >/tmp/php-create.log 2>&1; then
                 ok=1
             else
@@ -353,12 +394,7 @@ while true; do
                         project_name=$(basename "$host_project")
                     fi
                     tmp_dir="/tmp/compose-start.$$"
-                    mkdir -p "$tmp_dir/compose"
-                    sed "s|- \\./|- ${host_project}/|g" /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
-                    for f in /project/compose/*.yml; do
-                        [ -f "$f" ] || continue
-                        sed "s|- \\./|- ${host_project}/|g" "$f" > "$tmp_dir/compose/$(basename "$f")"
-                    done
+                    prepare_compose_tmp "$host_project" "$tmp_dir"
                     if run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" \
                         "$profile" "$service" >/tmp/php-start.log 2>&1; then
                         ok=1
@@ -380,13 +416,13 @@ while true; do
         fi
         rm -f "$request_file"
 
-        for refresh_target in php-8.2 php-8.1 php-8.0 php-7.4 nginx; do
+        for refresh_target in $(list_php_services) nginx; do
             [ "$refresh_target" = "$service" ] || refresh_service "$refresh_target"
         done
     done
     refresh_tick=$((refresh_tick + 1))
     if [ "$refresh_tick" -ge 5 ]; then
-        for refresh_target in php-8.2 php-8.1 php-8.0 php-7.4 nginx; do
+        for refresh_target in $(list_php_services) nginx; do
             refresh_service "$refresh_target"
         done
         refresh_tick=0

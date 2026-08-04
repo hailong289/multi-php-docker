@@ -16,34 +16,23 @@ final class PhpRuntime
         $this->basePath = rtrim($basePath ?? Config::phpControllerPath(), '/');
     }
 
-    public static function targets(): array
+    public static function targets(?string $projectPath = null): array
     {
-        return [
-            'php-8.2' => [
-                'label' => 'PHP 8.2',
-                'container' => 'php8.2_container',
-                'profile' => null,
-                'create_command' => 'docker compose create php-8.2',
-            ],
-            'php-8.1' => [
-                'label' => 'PHP 8.1',
-                'container' => 'php8.1_container',
-                'profile' => 'php-8.1',
-                'create_command' => 'docker compose --profile php-8.1 create php-8.1',
-            ],
-            'php-8.0' => [
-                'label' => 'PHP 8.0',
-                'container' => 'php8.0_container',
-                'profile' => 'php-8.0',
-                'create_command' => 'docker compose --profile php-8.0 create php-8.0',
-            ],
-            'php-7.4' => [
-                'label' => 'PHP 7.4',
-                'container' => 'php7.4_container',
-                'profile' => 'php-7.4',
-                'create_command' => 'docker compose --profile php-7.4 create php-7.4',
-            ],
-        ];
+        $targets = [];
+        foreach (PhpVersionCatalog::versions($projectPath) as $service => $config) {
+            $profile = $config['profile'];
+            $create = $profile === null
+                ? ('docker compose create ' . $service)
+                : ('docker compose --profile ' . $profile . ' create ' . $service);
+            $targets[$service] = [
+                'label' => $config['label'],
+                'container' => $config['container'],
+                'profile' => $profile,
+                'create_command' => $create,
+            ];
+        }
+
+        return $targets;
     }
 
     public function statuses(): array
@@ -80,11 +69,11 @@ final class PhpRuntime
         return $statuses;
     }
 
-    /** True when start/stop/restart/create/install-ext/uninstall-ext is queued — not modules probes. */
+    /** True when start/stop/restart/create/install-version/install-ext/uninstall-ext is queued — not modules probes. */
     public function hasBlockingRequests(string $service): bool
     {
         foreach (glob($this->basePath . '/requests/*__' . $service . '__*.json') ?: [] as $file) {
-            if (preg_match('/__(?:start|stop|restart|create|install-ext|uninstall-ext)/', basename($file))) {
+            if (preg_match('/__(?:start|stop|restart|create|install-version|install-ext|uninstall-ext)/', basename($file))) {
                 return true;
             }
         }
@@ -98,11 +87,11 @@ final class PhpRuntime
         if (!isset($targets[$service])) {
             throw new HttpException('php_controller.invalid_service', 400);
         }
-        $allowed = ['start', 'stop', 'restart', 'create', 'modules', 'available-ext', 'install-ext', 'uninstall-ext'];
+        $allowed = ['start', 'stop', 'restart', 'create', 'install-version', 'modules', 'available-ext', 'install-ext', 'uninstall-ext'];
         if (!in_array($action, $allowed, true)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
-        if ($action === 'create' && ($targets[$service]['profile'] ?? null) === null) {
+        if (($action === 'create' || $action === 'install-version') && ($targets[$service]['profile'] ?? null) === null) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
         if ($action === 'install-ext' || $action === 'uninstall-ext') {
