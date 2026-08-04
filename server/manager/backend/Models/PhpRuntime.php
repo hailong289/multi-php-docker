@@ -80,16 +80,27 @@ final class PhpRuntime
         return $statuses;
     }
 
-    public function request(string $service, string $action): string
+    public function request(string $service, string $action, ?string $extension = null): string
     {
         $targets = self::targets();
         if (!isset($targets[$service])) {
             throw new HttpException('php_controller.invalid_service', 400);
         }
-        if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
+        $allowed = ['start', 'stop', 'restart', 'create', 'modules', 'install-ext'];
+        if (!in_array($action, $allowed, true)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
         if ($action === 'create' && ($targets[$service]['profile'] ?? null) === null) {
+            throw new HttpException('php_controller.invalid_action', 400);
+        }
+        if ($action === 'install-ext') {
+            if ($extension === null || !PhpExtensionCatalog::isCurated($extension) || !preg_match('/^[a-z0-9_]+$/', $extension)) {
+                throw new HttpException('php_controller.invalid_extension', 400);
+            }
+            if (PhpExtensionCatalog::unsupportedOn($service, $extension)) {
+                throw new HttpException('php_controller.unsupported_extension', 400);
+            }
+        } elseif ($extension !== null) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
 
@@ -99,13 +110,18 @@ final class PhpRuntime
         }
 
         $requestId = bin2hex(random_bytes(16));
-        $request = json_encode([
+        $payload = [
             'request_id' => $requestId,
             'service' => $service,
             'action' => $action,
             'requested_at' => date(DATE_ATOM),
-        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
-        $finalPath = $requestDir . '/' . $requestId . '__' . $service . '__' . $action . '.json';
+        ];
+        if ($action === 'install-ext') {
+            $payload['extension'] = $extension;
+        }
+        $request = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
+        $suffix = $action === 'install-ext' ? ($action . '-' . $extension) : $action;
+        $finalPath = $requestDir . '/' . $requestId . '__' . $service . '__' . $suffix . '.json';
         $tempPath = $finalPath . '.tmp';
 
         if (file_put_contents($tempPath, $request, LOCK_EX) === false || !rename($tempPath, $finalPath)) {
@@ -116,5 +132,51 @@ final class PhpRuntime
         }
 
         return $requestId;
+    }
+
+    public function readModules(string $service): array
+    {
+        $defaults = [
+            'service' => $service,
+            'modules' => [],
+            'updated_at' => '',
+            'request_id' => '',
+            'ok' => false,
+        ];
+        $file = $this->basePath . '/status/' . $service . '.modules.json';
+        if (!is_file($file) || !is_readable($file)) {
+            return $defaults;
+        }
+        $decoded = json_decode((string) file_get_contents($file), true);
+        if (!is_array($decoded) || ($decoded['service'] ?? null) !== $service) {
+            return $defaults;
+        }
+        $modules = $decoded['modules'] ?? [];
+        if (!is_array($modules)) {
+            $modules = [];
+        }
+        $modules = array_values(array_filter($modules, 'is_string'));
+
+        return [
+            'service' => $service,
+            'modules' => $modules,
+            'updated_at' => (string) ($decoded['updated_at'] ?? ''),
+            'request_id' => (string) ($decoded['request_id'] ?? ''),
+            'ok' => (bool) ($decoded['ok'] ?? false),
+        ];
+    }
+
+    public function modulesStale(string $service, int $maxAgeSeconds = 30): bool
+    {
+        $info = $this->readModules($service);
+        if ($info['updated_at'] === '') {
+            return true;
+        }
+        $ts = strtotime($info['updated_at']);
+        if ($ts === false) {
+            return true;
+        }
+
+        return (time() - $ts) > $maxAgeSeconds;
     }
 }
