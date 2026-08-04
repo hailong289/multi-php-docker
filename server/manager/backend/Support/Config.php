@@ -26,4 +26,9 @@ final class Config
         return getenv('MANAGER_NGINX_LOGS_PATH') ?: '/nginx-logs';
     }
 
+    public static function projectPath(): string
+    {
+        return rtrim(getenv('MANAGER_PROJECT_PATH') ?: '/var/host-project', '/');
+    }
+
 }
