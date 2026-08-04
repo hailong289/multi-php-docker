@@ -134,6 +134,12 @@ const {
                       : $t('php_controller.restart')
                   }}
                 </button>
+                <button
+                  type="button"
+                  @click="$router.push({ name: 'php-version-detail', params: { service } })"
+                >
+                  {{ $t('php_controller.details') }}
+                </button>
               </div>
             </td>
           </tr>
