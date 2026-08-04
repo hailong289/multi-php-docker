@@ -68,6 +68,48 @@ async function saveIni() {
   }
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+function extensionStatus(list, name) {
+  return (list || []).find((ext) => ext.name === name)?.status || ''
+}
+
+/**
+ * Wait until install/uninstall request finishes, refreshing details along the way.
+ * pecl installs can take well over the old fixed 3s delay.
+ */
+async function waitForExtJob(requestId, maxAttempts = 120) {
+  let latest = details.value
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    await sleep(1000)
+    try {
+      const result = await apiGet(`/api/php-controllers/${service.value}/details`)
+      latest = result.php_details
+      details.value = latest
+      iniDraft.value = latest?.ini?.content || ''
+      const status = latest?.status || {}
+      if (status.state === 'busy') {
+        continue
+      }
+      if (requestId && status.request_id === requestId) {
+        if (status.message_key === 'php_controller.action_failed') {
+          return { ok: false, details: latest }
+        }
+        if (status.message_key === 'php_controller.action_success') {
+          return { ok: true, details: latest }
+        }
+      }
+      // Job left the queue; status may already be overwritten by periodic refresh.
+      return { ok: null, details: latest }
+    } catch {
+      // Keep waiting through transient read errors.
+    }
+  }
+  return { ok: null, timedOut: true, details: latest }
+}
+
 async function extAction(name, action) {
   if (action === 'uninstall') {
     if (!window.confirm(t('php_controller.ext_uninstall_confirm', { extension: name }))) {
@@ -75,24 +117,42 @@ async function extAction(name, action) {
     }
   }
   pending.value = `${action}:${name}`
+  const previousStatus = extensionStatus(details.value?.extensions, name)
   try {
     const path = `/api/php-controllers/${service.value}/extensions/${name}/${action}`
     const result = await apiSend('POST', path, {})
-    showToast(
-      'success',
-      t(result.message_key || 'php_controller.action_success', result.message_parameters || {}),
-    )
     if (action === 'install' || action === 'uninstall') {
-      await new Promise((r) => setTimeout(r, 3000))
+      showToast(
+        'success',
+        t(result.message_key || 'php_controller.action_success', result.message_parameters || {}),
+      )
+      const outcome = await waitForExtJob(result.request_id)
       await loadBootstrap()
-    } else if (action === 'enable' || action === 'disable') {
-      showToast('success', t('php_controller.ext_restart_hint'))
-      if (window.confirm(t('php_controller.ini_restart_confirm'))) {
-        await phpAction(service.value, 'restart')
-        await new Promise((r) => setTimeout(r, 1500))
+      await load()
+      const nextStatus = extensionStatus(details.value?.extensions, name)
+      if (outcome.ok === false) {
+        showToast('failure', t('php_controller.action_failed'))
+      } else if (outcome.timedOut) {
+        showToast('failure', t('php_controller.action_failed'))
+      } else if (
+        action === 'install' &&
+        nextStatus !== 'loaded' &&
+        nextStatus !== 'enabled_in_ini' &&
+        nextStatus === previousStatus
+      ) {
+        showToast('failure', t('php_controller.action_failed'))
+      } else if (
+        action === 'uninstall' &&
+        nextStatus !== 'available_to_install' &&
+        nextStatus === previousStatus
+      ) {
+        showToast('failure', t('php_controller.action_failed'))
+      } else if (outcome.ok === true || nextStatus !== previousStatus) {
+        showToast('success', t('php_controller.action_success'))
       }
+    } else {
+      await load()
     }
-    await load()
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -217,7 +277,7 @@ onMounted(async () => {
                 <td>
                   <div class="controller-actions">
                     <button
-                      v-if="ext.status === 'available_to_install' || ext.status === 'enabled_in_ini'"
+                      v-if="ext.status === 'available_to_install'"
                       type="button"
                       class="primary"
                       :disabled="state !== 'running' || !!pending"
@@ -230,31 +290,11 @@ onMounted(async () => {
                       }}
                     </button>
                     <button
-                      v-if="ext.status === 'disabled_in_ini'"
-                      type="button"
-                      :disabled="!!pending"
-                      @click="extAction(ext.name, 'enable')"
-                    >
-                      {{
-                        pending === `enable:${ext.name}`
-                          ? t('action.working')
-                          : t('php_controller.ext_enable')
-                      }}
-                    </button>
-                    <button
-                      v-if="ext.status === 'loaded' || ext.status === 'enabled_in_ini'"
-                      type="button"
-                      :disabled="!!pending"
-                      @click="extAction(ext.name, 'disable')"
-                    >
-                      {{
-                        pending === `disable:${ext.name}`
-                          ? t('action.working')
-                          : t('php_controller.ext_disable')
-                      }}
-                    </button>
-                    <button
-                      v-if="ext.status === 'loaded' || ext.status === 'enabled_in_ini'"
+                      v-if="
+                        ext.status === 'loaded' ||
+                        ext.status === 'enabled_in_ini' ||
+                        ext.status === 'disabled_in_ini'
+                      "
                       type="button"
                       :disabled="state !== 'running' || !!pending"
                       @click="extAction(ext.name, 'uninstall')"
