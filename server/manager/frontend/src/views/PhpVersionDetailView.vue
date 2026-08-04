@@ -34,9 +34,23 @@ const state = computed(() => details.value?.status?.state || phpServiceState(ser
 const target = computed(() => details.value?.target || data.php_controllers?.targets?.[service.value] || {})
 const availableExtensions = computed(() => details.value?.available?.extensions || [])
 const datalistId = computed(() => `ext-suggestions-${service.value}`)
+const loadedCount = computed(() => (details.value?.modules?.modules || []).length)
+const loadedModulePreview = computed(() => {
+  const mods = details.value?.modules?.modules || []
+  if (mods.length <= 8) return mods.join(', ')
+  return `${mods.slice(0, 8).join(', ')}…`
+})
 
 function statusLabel(status) {
   return t(`php_controller.ext_status_${status}`)
+}
+
+function extStatusClass(status) {
+  return `ext-status ext-status--${status}`
+}
+
+function rowPending(name) {
+  return pending.value === `install:${name}` || pending.value === `uninstall:${name}`
 }
 
 function normalizeExtName(value) {
@@ -200,12 +214,29 @@ onMounted(async () => {
 <template>
   <section class="panel">
     <div class="panel-heading nginx-heading">
-      <div>
-        <button type="button" @click="router.push({ name: 'php-versions' })">
-          {{ t('php_controller.back') }}
+      <div class="php-detail-heading">
+        <button
+          type="button"
+          class="icon-back"
+          :aria-label="t('php_controller.back')"
+          :title="t('php_controller.back')"
+          @click="router.push({ name: 'php-versions' })"
+        >
+          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+            <path
+              d="M12.5 4.5 7 10l5.5 5.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </button>
-        <h2>{{ t('php_controller.details_title', { version: label }) }}</h2>
-        <p>{{ t('php_controller.details_subtitle') }}</p>
+        <div>
+          <h2>{{ t('php_controller.details_title', { version: label }) }}</h2>
+          <p>{{ t('php_controller.details_subtitle') }}</p>
+        </div>
       </div>
       <button type="button" :disabled="loading || !!pending" @click="load">
         {{ t('php_controller.refresh') }}
@@ -255,77 +286,108 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="panel-body">
-        <div class="controller-actions">
+      <div class="panel-body php-detail-tabs-wrap">
+        <div class="php-detail-tabs" role="tablist">
           <button
             type="button"
-            :class="{ primary: tab === 'extensions' }"
+            role="tab"
+            :aria-selected="tab === 'extensions'"
+            :class="{ active: tab === 'extensions' }"
             @click="tab = 'extensions'"
           >
             {{ t('php_controller.tab_extensions') }}
           </button>
-          <button type="button" :class="{ primary: tab === 'ini' }" @click="tab = 'ini'">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="tab === 'ini'"
+            :class="{ active: tab === 'ini' }"
+            @click="tab = 'ini'"
+          >
             {{ t('php_controller.tab_ini') }}
           </button>
         </div>
       </div>
 
-      <div v-if="tab === 'extensions'" class="panel-body">
-        <p class="create-hint">{{ t('php_controller.extensions_banner') }}</p>
-        <p v-if="state !== 'running'" class="create-hint">
+      <div v-if="tab === 'extensions'" class="panel-body php-ext-panel">
+        <p class="php-ext-banner">{{ t('php_controller.extensions_banner') }}</p>
+        <p v-if="state !== 'running'" class="php-ext-warn">
           {{ t('php_controller.extensions_need_running') }}
         </p>
 
-        <form class="controller-actions ext-custom-form" @submit.prevent="installCustomExt">
-          <label class="ext-custom-label" :for="datalistId + '-input'">
-            {{ t('php_controller.ext_custom_label') }}
-          </label>
-          <input
-            :id="datalistId + '-input'"
-            v-model="customExt"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            :list="datalistId"
-            :disabled="state !== 'running' || !!pending"
-            :placeholder="t('php_controller.ext_custom_placeholder')"
-          />
-          <datalist :id="datalistId">
-            <option v-for="name in availableExtensions" :key="name" :value="name" />
-          </datalist>
-          <button
-            type="submit"
-            class="primary"
-            :disabled="state !== 'running' || !!pending || !normalizeExtName(customExt)"
-          >
-            {{
-              pending.startsWith('install:')
-                ? t('action.working')
-                : t('php_controller.ext_custom_install')
-            }}
-          </button>
-        </form>
+        <div class="php-ext-add">
+          <div class="php-ext-add-copy">
+            <h3>{{ t('php_controller.ext_custom_label') }}</h3>
+            <p>{{ t('php_controller.ext_custom_hint') }}</p>
+          </div>
+          <form class="php-ext-add-form" @submit.prevent="installCustomExt">
+            <input
+              :id="datalistId + '-input'"
+              v-model="customExt"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              :list="datalistId"
+              :disabled="state !== 'running' || !!pending"
+              :placeholder="t('php_controller.ext_custom_placeholder')"
+              :aria-label="t('php_controller.ext_custom_label')"
+            />
+            <datalist :id="datalistId">
+              <option v-for="name in availableExtensions" :key="name" :value="name" />
+            </datalist>
+            <button
+              type="submit"
+              class="primary"
+              :disabled="state !== 'running' || !!pending || !normalizeExtName(customExt)"
+            >
+              <span
+                v-if="pending.startsWith('install:')"
+                class="btn-spinner"
+                aria-hidden="true"
+              ></span>
+              {{
+                pending.startsWith('install:')
+                  ? t('action.working')
+                  : t('php_controller.ext_custom_install')
+              }}
+            </button>
+          </form>
+        </div>
 
-        <p v-if="details.modules?.modules?.length">
-          <strong>{{ t('php_controller.loaded_modules') }}:</strong>
-          {{ details.modules.modules.join(', ') }}
-        </p>
+        <div v-if="loadedCount" class="php-ext-loaded">
+          <span class="php-ext-loaded-count">
+            {{ t('php_controller.loaded_count', { count: loadedCount }) }}
+          </span>
+          <span class="php-ext-loaded-preview" :title="(details.modules?.modules || []).join(', ')">
+            {{ loadedModulePreview }}
+          </span>
+        </div>
 
-        <div class="table-wrap">
-          <table>
+        <div class="table-wrap php-ext-table-wrap">
+          <table class="php-ext-table">
             <thead>
               <tr>
                 <th>{{ t('php_controller.extension') }}</th>
                 <th>{{ t('php_controller.state') }}</th>
-                <th>{{ t('php_controller.actions') }}</th>
+                <th class="php-ext-actions-col">{{ t('php_controller.actions') }}</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="ext in details.extensions" :key="ext.name">
-                <td><code>{{ ext.name }}</code></td>
-                <td>{{ statusLabel(ext.status) }}</td>
+              <tr
+                v-for="ext in details.extensions"
+                :key="ext.name"
+                :class="{ 'is-pending': rowPending(ext.name) }"
+              >
                 <td>
-                  <div class="controller-actions">
+                  <code class="php-ext-name">{{ ext.name }}</code>
+                </td>
+                <td>
+                  <span class="state-badge" :class="extStatusClass(ext.status)">
+                    {{ statusLabel(ext.status) }}
+                  </span>
+                </td>
+                <td class="php-ext-actions-col">
+                  <div class="php-ext-row-actions">
                     <button
                       v-if="ext.status === 'available_to_install'"
                       type="button"
@@ -333,6 +395,11 @@ onMounted(async () => {
                       :disabled="state !== 'running' || !!pending"
                       @click="extAction(ext.name, 'install')"
                     >
+                      <span
+                        v-if="pending === `install:${ext.name}`"
+                        class="btn-spinner"
+                        aria-hidden="true"
+                      ></span>
                       {{
                         pending === `install:${ext.name}`
                           ? t('action.working')
@@ -346,9 +413,15 @@ onMounted(async () => {
                         ext.status === 'disabled_in_ini'
                       "
                       type="button"
+                      class="danger"
                       :disabled="state !== 'running' || !!pending"
                       @click="extAction(ext.name, 'uninstall')"
                     >
+                      <span
+                        v-if="pending === `uninstall:${ext.name}`"
+                        class="btn-spinner"
+                        aria-hidden="true"
+                      ></span>
                       {{
                         pending === `uninstall:${ext.name}`
                           ? t('action.working')
@@ -363,17 +436,17 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-else class="panel-body">
-        <p v-if="details.ini.relative_path">
+      <div v-else class="panel-body php-ini-panel">
+        <p v-if="details.ini.relative_path" class="php-ini-path">
           <code>{{ details.ini.relative_path }}</code>
         </p>
         <textarea
           v-model="iniDraft"
+          class="php-ini-editor"
           rows="18"
-          style="width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace"
           :disabled="!!pending || !details.ini.readable"
         ></textarea>
-        <div class="controller-actions" style="margin-top: 0.75rem">
+        <div class="controller-actions php-ini-actions">
           <button
             type="button"
             class="primary"
