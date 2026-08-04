@@ -11,7 +11,6 @@ use Manager\Models\PhpDetails;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 use Manager\Models\PhpRuntime;
-use Manager\Support\Config;
 
 final class PhpControllerController extends Controller
 {
@@ -77,7 +76,7 @@ final class PhpControllerController extends Controller
         $name = (string) ($params['name'] ?? '');
         $runtime = new PhpRuntime();
         $state = $runtime->statuses()[$service]['state'] ?? 'not_created';
-        if ($state === 'busy' || glob(rtrim(Config::phpControllerPath(), '/') . '/requests/*__' . $service . '__*.json')) {
+        if ($state === 'busy' || $runtime->hasBlockingRequests($service)) {
             throw new HttpException('php_controller.busy', 409);
         }
         if ($state !== 'running') {

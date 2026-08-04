@@ -70,7 +70,7 @@ final class PhpRuntime
                     $status = array_merge($status, array_intersect_key($decoded, $status));
                 }
             }
-            if (glob($this->basePath . '/requests/*__' . $service . '__*.json')) {
+            if ($this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
                 $status['message_key'] = 'php_controller.processing';
             }
@@ -78,6 +78,18 @@ final class PhpRuntime
         }
 
         return $statuses;
+    }
+
+    /** True when start/stop/restart/create/install-ext is queued — not modules probes. */
+    public function hasBlockingRequests(string $service): bool
+    {
+        foreach (glob($this->basePath . '/requests/*__' . $service . '__*.json') ?: [] as $file) {
+            if (preg_match('/__(?:start|stop|restart|create|install-ext)/', basename($file))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function request(string $service, string $action, ?string $extension = null): string

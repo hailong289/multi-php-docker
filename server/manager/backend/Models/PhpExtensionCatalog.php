@@ -45,6 +45,9 @@ final class PhpExtensionCatalog
             $line = $editor->extensionLineStatus($iniContent, $name);
             if ($line === 'commented') {
                 $out[] = ['name' => $name, 'status' => 'disabled_in_ini'];
+            } elseif ($line === 'active') {
+                // Enabled in php.ini but not loaded yet (needs install and/or FPM restart).
+                $out[] = ['name' => $name, 'status' => 'enabled_in_ini'];
             } else {
                 $out[] = ['name' => $name, 'status' => 'available_to_install'];
             }

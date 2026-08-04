@@ -78,7 +78,14 @@ async function extAction(name, action) {
       t(result.message_key || 'php_controller.action_success', result.message_parameters || {}),
     )
     if (action === 'install') {
-      await new Promise((r) => setTimeout(r, 2500))
+      await new Promise((r) => setTimeout(r, 3000))
+      await loadBootstrap()
+    } else if (action === 'enable' || action === 'disable') {
+      showToast('success', t('php_controller.ext_restart_hint'))
+      if (window.confirm(t('php_controller.ini_restart_confirm'))) {
+        await phpAction(service.value, 'restart')
+        await new Promise((r) => setTimeout(r, 1500))
+      }
     }
     await load()
   } catch (error) {
@@ -205,7 +212,7 @@ onMounted(async () => {
                 <td>
                   <div class="controller-actions">
                     <button
-                      v-if="ext.status === 'available_to_install'"
+                      v-if="ext.status === 'available_to_install' || ext.status === 'enabled_in_ini'"
                       type="button"
                       class="primary"
                       :disabled="state !== 'running' || !!pending"
@@ -230,7 +237,7 @@ onMounted(async () => {
                       }}
                     </button>
                     <button
-                      v-if="ext.status === 'loaded'"
+                      v-if="ext.status === 'loaded' || ext.status === 'enabled_in_ini'"
                       type="button"
                       :disabled="!!pending"
                       @click="extAction(ext.name, 'disable')"

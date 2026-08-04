@@ -209,7 +209,7 @@ while true; do
         }
 
         if [ "$action" = "modules" ]; then
-            write_status "$service" "busy" "php_controller.processing" "$request_id"
+            # Do not flip lifecycle status to busy — probes must not block install/enable UI.
             if [ "$(container_state "$container")" = "running" ] && write_modules_sidecar "$service" "$container" "$request_id"; then
                 write_status "$service" "running" "php_controller.action_success" "$request_id"
             else

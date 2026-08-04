@@ -9,12 +9,17 @@ run() {
     docker exec "$container" sh -c "$1"
 }
 
+apt_install() {
+    run "apt-get update && apt-get install -y --no-install-recommends $1 && rm -rf /var/lib/apt/lists/*"
+}
+
 case "$ext" in
     redis)
         run "pecl install -f redis && docker-php-ext-enable redis"
         ;;
     imagick)
-        run "apt-get update && apt-get install -y --no-install-recommends libmagickwand-dev && pecl install -f imagick && docker-php-ext-enable imagick && rm -rf /var/lib/apt/lists/*"
+        apt_install "libmagickwand-dev"
+        run "pecl install -f imagick && docker-php-ext-enable imagick"
         ;;
     mongodb)
         run "pecl install -f mongodb && docker-php-ext-enable mongodb"
@@ -22,8 +27,20 @@ case "$ext" in
     xdebug)
         run "pecl install -f xdebug && docker-php-ext-enable xdebug"
         ;;
-    bcmath|intl|soap|exif|gmp)
+    bcmath|exif)
         run "docker-php-ext-install $ext"
+        ;;
+    intl)
+        apt_install "libicu-dev"
+        run "docker-php-ext-install intl"
+        ;;
+    soap)
+        apt_install "libxml2-dev"
+        run "docker-php-ext-install soap"
+        ;;
+    gmp)
+        apt_install "libgmp-dev"
+        run "docker-php-ext-install gmp"
         ;;
     opcache)
         run "docker-php-ext-install opcache || docker-php-ext-enable opcache"

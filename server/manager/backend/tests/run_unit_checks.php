@@ -55,6 +55,14 @@ foreach ($entries as $e) {
 assert_true($byName['redis'] === 'loaded', 'redis loaded');
 assert_true($byName['imagick'] === 'disabled_in_ini', 'imagick disabled_in_ini');
 assert_true($byName['mongodb'] === 'available_to_install', 'mongodb available');
+
+$iniActive = "extension=imagick.so;\n";
+$entriesActive = PhpExtensionCatalog::entries('php-8.2', ['Core'], $iniActive);
+$byActive = [];
+foreach ($entriesActive as $e) {
+    $byActive[$e['name']] = $e['status'];
+}
+assert_true($byActive['imagick'] === 'enabled_in_ini', 'imagick enabled_in_ini');
 assert_true(PhpExtensionCatalog::isCurated('redis'), 'curated redis');
 assert_true(!PhpExtensionCatalog::isCurated('foobar'), 'not curated foobar');
 
