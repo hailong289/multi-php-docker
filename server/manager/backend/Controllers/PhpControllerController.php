@@ -28,18 +28,48 @@ final class PhpControllerController extends Controller
 
     public function availableVersions(Request $request, array $params = []): Response
     {
+        $page = max(1, (int) $request->queryParam('page', 1));
+        $perPage = (int) $request->queryParam('per_page', 20);
+        if ($perPage < 1) {
+            $perPage = 20;
+        }
+        if ($perPage > 100) {
+            $perPage = 100;
+        }
+        $q = strtolower(trim((string) $request->queryParam('q', '')));
+        $variantFilter = strtolower(trim((string) $request->queryParam('variant', 'all')));
+        if (!in_array($variantFilter, ['all', 'default', 'alpine', 'trixie'], true)) {
+            $variantFilter = 'all';
+        }
+        $bundle = (new DockerHubPhpTags())->page($page, $perPage, $q, $variantFilter);
+
         return Response::json([
-            'versions' => (new DockerHubPhpTags())->available(),
+            'versions' => $bundle['versions'],
+            'pagination' => [
+                'page' => $bundle['page'],
+                'per_page' => $bundle['per_page'],
+                'total' => $bundle['total'],
+                'total_pages' => $bundle['total_pages'],
+            ],
+            'filters' => [
+                'q' => $q,
+                'variant' => $variantFilter,
+                'name' => $bundle['name'] ?? 'fpm',
+            ],
         ]);
     }
 
     public function installVersion(Request $request, array $params = []): Response
     {
         $version = $request->json()['version'] ?? null;
+        $variant = $request->json()['variant'] ?? 'default';
         if (!is_string($version) || $version === '') {
             throw new HttpException('php_controller.invalid_version', 400);
         }
-        $result = (new PhpVersionInstaller())->install($version);
+        if (!is_string($variant)) {
+            $variant = 'default';
+        }
+        $result = (new PhpVersionInstaller())->install($version, $variant);
 
         return Response::json($result);
     }

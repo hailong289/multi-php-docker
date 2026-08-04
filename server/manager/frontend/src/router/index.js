@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import DomainsView from '../views/DomainsView.vue'
 import HomeView from '../views/HomeView.vue'
 import PhpVersionsView from '../views/PhpVersionsView.vue'
+import PhpVersionCatalogView from '../views/PhpVersionCatalogView.vue'
 import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import NginxView from '../views/NginxView.vue'
 
@@ -31,6 +32,12 @@ const router = createRouter({
       name: 'php-versions',
       component: PhpVersionsView,
       meta: { titleKey: 'nav.php_versions' },
+    },
+    {
+      path: '/php-versions/catalog',
+      name: 'php-version-catalog',
+      component: PhpVersionCatalogView,
+      meta: { titleKey: 'nav.php_catalog' },
     },
     {
       path: '/php-versions/:service',

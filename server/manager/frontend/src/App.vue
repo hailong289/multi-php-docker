@@ -103,7 +103,13 @@ watch(() => route.fullPath, updateTitle)
       </RouterLink>
       <RouterLink
         to="/php-versions"
-        :aria-current="route.name === 'php-versions' ? 'page' : undefined"
+        :aria-current="
+          route.name === 'php-versions' ||
+          route.name === 'php-version-detail' ||
+          route.name === 'php-version-catalog'
+            ? 'page'
+            : undefined
+        "
       >
         {{ t('nav.php_versions') }}
       </RouterLink>

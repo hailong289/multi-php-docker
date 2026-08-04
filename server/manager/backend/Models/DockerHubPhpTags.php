@@ -5,121 +5,172 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
-use Manager\Support\Config;
+use RuntimeException;
 
-/** Fetches installable PHP minor versions from Docker Hub library/php (*-fpm tags). */
 final class DockerHubPhpTags
 {
-    private const FALLBACK = ['8.4', '8.3', '8.2', '8.1', '8.0', '7.4'];
-
-    public function __construct(private readonly string $projectPath = '')
-    {
-    }
-
-    private function root(): string
-    {
-        return rtrim($this->projectPath !== '' ? $this->projectPath : Config::projectPath(), '/');
-    }
+    private const HUB_TAGS_URL = 'https://hub.docker.com/v2/repositories/library/php/tags';
 
     /**
-     * @return list<array{version:string,tag:string,service:string,label:string,installed:bool}>
+     * Proxy one Docker Hub tags page (no post-filtering of results).
+     * name=fpm by default; when the user searches, the query is joined as "{q}-fpm".
+     *
+     * @return array{versions: list<array<string,mixed>>, page: int, per_page: int, total: int, total_pages: int, name: string}
      */
-    public function available(): array
+    public function page(int $page, int $perPage, string $q, string $variant): array
     {
-        $installed = [];
-        foreach (array_keys(PhpVersionCatalog::versions($this->root())) as $service) {
-            $installed[PhpVersionId::minorFromService($service)] = true;
-        }
+        $page = max(1, $page);
+        $perPage = max(1, min(100, $perPage));
+        $q = strtolower(trim($q));
+        $variant = in_array($variant, ['all', 'default', 'alpine', 'trixie'], true) ? $variant : 'all';
 
-        $minors = array_values(array_unique(array_merge($this->fetchMinors(), self::FALLBACK)));
-        sort($minors, SORT_NATURAL);
-
-        $out = [];
-        foreach ($minors as $version) {
-            if (!PhpVersionId::isValidMinor($version)) {
+        $name = $this->hubNameFilter($q, $variant);
+        $hub = $this->fetchHubPage($page, $perPage, $name);
+        $installed = $this->installedTags();
+        $versions = [];
+        foreach ($hub['results'] as $row) {
+            if (!is_array($row)) {
                 continue;
             }
-            // Skip very old unsupported for this stack.
-            if (version_compare($version, '7.4', '<')) {
+            $tag = strtolower(trim((string) ($row['name'] ?? '')));
+            if ($tag === '') {
                 continue;
             }
-            $service = PhpVersionId::serviceFromMinor($version);
-            $out[] = [
-                'version' => $version,
-                'tag' => $version . '-fpm',
+
+            $rowVariant = $this->variantFromTag($tag);
+            $version = explode('-', $tag, 2)[0];
+            $installable = PhpVersionId::isValidMinor($version)
+                && str_starts_with($tag, $version . '-fpm');
+            $service = $installable
+                ? PhpVersionId::serviceFrom($version, $rowVariant)
+                : ('php-tag-' . preg_replace('/[^a-z0-9.]+/', '-', $tag));
+            $label = $installable ? PhpVersionId::label($service) : ('php:' . $tag);
+
+            $versions[] = [
+                'version' => $installable ? $version : '',
+                'variant' => $rowVariant,
+                'label' => $label,
                 'service' => $service,
-                'label' => PhpVersionId::label($service),
-                'installed' => isset($installed[$version]),
+                'tag' => $tag,
+                'installable' => $installable,
+                'last_updated' => (string) ($row['last_updated'] ?? ''),
+                'installed' => $installable
+                    && (isset($installed[$tag])
+                        || isset($installed[PhpVersionId::dockerTag($version, $rowVariant)])),
             ];
         }
 
-        usort($out, static fn (array $a, array $b): int => version_compare($b['version'], $a['version']));
+        $total = (int) $hub['count'];
 
-        return $out;
+        return [
+            'versions' => $versions,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total' => $total,
+            'total_pages' => max(1, (int) ceil($total / $perPage)),
+            'name' => $name,
+        ];
     }
 
-    /** @return list<string> */
-    private function fetchMinors(): array
+    private function variantFromTag(string $tag): string
     {
-        $found = [];
-        // Query by major prefix so we do not only see stale 5.x tags under name=fpm.
-        foreach (['8.', '7.4-fpm'] as $query) {
-            $url = 'https://hub.docker.com/v2/repositories/library/php/tags?page_size=100&ordering=last_updated&name='
-                . rawurlencode($query);
-            $pages = 0;
-            while ($url !== null && $pages < 4) {
-                $pages++;
-                $payload = $this->httpGetJson($url);
-                if ($payload === null) {
-                    break;
-                }
-                foreach ($payload['results'] ?? [] as $row) {
-                    $name = (string) ($row['name'] ?? '');
-                    if (preg_match('/^(\d+\.\d+)-fpm$/', $name, $m)) {
-                        $found[$m[1]] = true;
-                    }
-                }
-                $next = $payload['next'] ?? null;
-                $url = is_string($next) && $next !== '' ? $next : null;
-            }
+        if (str_contains($tag, 'alpine')) {
+            return 'alpine';
+        }
+        if (str_contains($tag, 'trixie')) {
+            return 'trixie';
         }
 
-        return array_keys($found);
+        return 'default';
     }
 
-    private function httpGetJson(string $url): ?array
+    private function hubNameFilter(string $q, string $variant): string
     {
-        if (function_exists('curl_init')) {
-            $ch = curl_init($url);
-            if ($ch === false) {
-                return null;
-            }
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_TIMEOUT => 12,
-                CURLOPT_HTTPHEADER => ['Accept: application/json', 'User-Agent: multi-php-manager/1.0'],
-            ]);
-            $body = curl_exec($ch);
-            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            if (!is_string($body) || $code < 200 || $code >= 300) {
-                return null;
-            }
-        } else {
-            $ctx = stream_context_create([
-                'http' => [
-                    'timeout' => 12,
-                    'header' => "Accept: application/json\r\nUser-Agent: multi-php-manager/1.0\r\n",
-                ],
-            ]);
-            $body = @file_get_contents($url, false, $ctx);
-            if (!is_string($body)) {
-                return null;
-            }
+        $q = strtolower(trim($q));
+        $q = preg_replace('/\s+/', '', $q) ?? '';
+        // Keep only the version/search stem; fpm(+suffix) is appended below.
+        $stem = preg_replace('/-?(fpm)(-alpine|-trixie)?$/i', '', $q) ?? '';
+        $stem = rtrim($stem, '-./');
+
+        if ($variant === 'alpine') {
+            return $stem === '' ? 'fpm-alpine' : $stem . '-fpm-alpine';
         }
+        if ($variant === 'trixie') {
+            return $stem === '' ? 'fpm-trixie' : $stem . '-fpm-trixie';
+        }
+        if ($variant === 'default') {
+            // Hub has no negative filter; keep name=fpm and let the UI show mixed debian tags.
+            return $stem === '' ? 'fpm' : $stem . '-fpm';
+        }
+
+        // all: name=fpm; user search is joined in front.
+        return $stem === '' ? 'fpm' : $stem . '-fpm';
+    }
+
+    /**
+     * @return array{count: int, results: list<mixed>}
+     */
+    private function fetchHubPage(int $page, int $pageSize, string $name): array
+    {
+        $url = self::HUB_TAGS_URL . '?' . http_build_query([
+            'page' => $page,
+            'page_size' => $pageSize,
+            'ordering' => 'last_updated',
+            'name' => $name,
+        ]);
+
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new RuntimeException('Unable to query Docker Hub tags.');
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'User-Agent: MultiPhpManager/1.0',
+            ],
+        ]);
+
+        $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if (!is_string($body) || $status < 200 || $status >= 300) {
+            throw new RuntimeException('Docker Hub tags request failed' . ($error !== '' ? (': ' . $error) : ''));
+        }
+
         $decoded = json_decode($body, true);
+        if (!is_array($decoded) || !isset($decoded['results']) || !is_array($decoded['results'])) {
+            throw new RuntimeException('Docker Hub returned an unexpected payload.');
+        }
 
-        return is_array($decoded) ? $decoded : null;
+        return [
+            'count' => (int) ($decoded['count'] ?? count($decoded['results'])),
+            'results' => array_values($decoded['results']),
+        ];
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function installedTags(): array
+    {
+        $keys = [];
+        foreach (PhpVersionCatalog::versions() as $svc => $_meta) {
+            try {
+                $version = PhpVersionId::minorFromService($svc);
+                $variant = PhpVersionId::variantFromService($svc);
+            } catch (HttpException) {
+                continue;
+            }
+            $keys[PhpVersionId::dockerTag($version, $variant)] = true;
+        }
+
+        return $keys;
     }
 }

@@ -13,8 +13,8 @@ container_for_service() {
     case "$1" in
         nginx) printf '%s' 'nginx_container' ;;
         php-*)
-            # php-8.3 → php8.3_container
-            printf 'php%s_container' "${1#php-}"
+            # php-8.3 → php8.3_container ; php-8.3-alpine → php8.3alpine_container
+            printf 'php%s_container' "$(printf '%s' "${1#php-}" | tr -d '-')"
             ;;
         *) return 1 ;;
     esac
@@ -241,7 +241,10 @@ parse_request_fields() {
 
     printf '%s' "$request_id" | grep -Eq '^[0-9a-f]{32}$' || return 1
     case "$service" in
-        php-8.2|php-8.1|php-8.0|php-7.4|nginx) ;;
+        nginx) ;;
+        php-*)
+            printf '%s' "$service" | grep -Eq '^php-[0-9]+(\.[0-9]+)+(-alpine|-trixie)?$' || return 1
+            ;;
         *) return 1 ;;
     esac
     case "$action" in

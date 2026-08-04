@@ -7,7 +7,7 @@ namespace Manager\Models;
 use Manager\Http\HttpException;
 use Manager\Support\Config;
 
-/** Writes compose/Dockerfile/ini/source assets for a new PHP minor version. */
+/** Writes compose/Dockerfile/ini/source assets for a new PHP version (+ alpine/trixie). */
 final class PhpVersionInstaller
 {
     public function __construct(private readonly string $projectPath = '')
@@ -19,17 +19,15 @@ final class PhpVersionInstaller
         return rtrim($this->projectPath !== '' ? $this->projectPath : Config::projectPath(), '/');
     }
 
-    public function install(string $version): array
+    public function install(string $version, string $variant = 'default'): array
     {
         $version = trim($version);
+        $variant = PhpVersionId::normalizeVariant($variant);
         if (!PhpVersionId::isValidMinor($version)) {
             throw new HttpException('php_controller.invalid_version', 400);
         }
-        if (version_compare($version, '7.4', '<')) {
-            throw new HttpException('php_controller.unsupported_version', 400);
-        }
 
-        $service = PhpVersionId::serviceFromMinor($version);
+        $service = PhpVersionId::serviceFrom($version, $variant);
         if (PhpVersionId::isDefault($service)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
@@ -38,8 +36,8 @@ final class PhpVersionInstaller
         }
 
         $root = $this->root();
-        $this->writeDockerfile($version);
-        $this->writeCompose($service, $version);
+        $this->writeDockerfile($version, $variant);
+        $this->writeCompose($service, $version, $variant);
         $this->ensureIni($service);
         $this->ensureSourceDir($service);
         $this->ensureSupervisorDir($service);
@@ -48,13 +46,19 @@ final class PhpVersionInstaller
 
         $runtime = new PhpRuntime();
         $requestId = $runtime->request($service, 'install-version');
+        $labelVersion = match ($variant) {
+            'alpine' => $version . ' alpine',
+            'trixie' => $version . ' trixie',
+            default => $version,
+        };
 
         return [
             'service' => $service,
             'version' => $version,
+            'variant' => $variant,
             'request_id' => $requestId,
             'message_key' => 'php_controller.version_install_requested',
-            'message_parameters' => ['version' => $version],
+            'message_parameters' => ['version' => $labelVersion],
             'php_controllers' => [
                 'targets' => PhpRuntime::targets($root),
                 'statuses' => $runtime->statuses(),
@@ -63,13 +67,45 @@ final class PhpVersionInstaller
         ];
     }
 
-    private function writeDockerfile(string $version): void
+    private function writeDockerfile(string $version, string $variant): void
     {
         $dir = $this->root() . '/docker_files/generated';
         $this->mkdir($dir);
-        $path = $dir . '/php-' . $version . '.Dockerfile';
-        $content = <<<DOCKER
-FROM php:{$version}-fpm
+        $path = $dir . '/' . PhpVersionId::dockerfileName($version, $variant);
+        $tag = PhpVersionId::dockerTag($version, $variant);
+        // Alpine uses apk; debian/default and trixie use apt.
+        if ($variant === 'alpine') {
+            $content = <<<DOCKER
+FROM php:{$tag}
+
+RUN apk add --no-cache \\
+    \$PHPIZE_DEPS \\
+    git \\
+    curl \\
+    unzip \\
+    freetype-dev \\
+    libjpeg-turbo-dev \\
+    libpng-dev \\
+    libzip-dev \\
+    libxml2-dev \\
+    oniguruma-dev \\
+    linux-headers \\
+    supervisor \\
+    && pecl install redis \\
+    && docker-php-ext-enable redis \\
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \\
+    && docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl \\
+    && curl -sS https://getcomposer.org/installer | php \\
+    && mv composer.phar /usr/local/bin/composer \\
+    && apk del \$PHPIZE_DEPS
+
+EXPOSE 9000
+
+CMD ["php-fpm"]
+DOCKER;
+        } else {
+            $content = <<<DOCKER
+FROM php:{$tag}
 
 RUN apt-get update && apt-get install -y \\
     git \\
@@ -95,18 +131,22 @@ EXPOSE 9000
 
 CMD ["php-fpm"]
 DOCKER;
+        }
         $this->writeFile($path, $content);
     }
 
-    private function writeCompose(string $service, string $version): void
+    private function writeCompose(string $service, string $version, string $variant): void
     {
         $container = PhpVersionId::container($service);
         $supervisorContainer = PhpVersionId::supervisorContainer($service);
         $source = PhpVersionId::sourceDirName($service);
         $iniRel = PhpVersionId::iniRelativePath($service);
         $supervisorDir = PhpVersionId::supervisorConfDir($service);
-        $dockerfile = 'generated/php-' . $version . '.Dockerfile';
-        $image = 'multi-php-local:php-' . $version;
+        $dockerfile = 'generated/' . PhpVersionId::dockerfileName($version, $variant);
+        $image = 'multi-php-local:' . $service;
+        $suffix = PhpVersionId::pathSuffix($service);
+        $supervisorName = 'supervisor-' . $version . $suffix;
+        $logDir = 'logs/supervisor-' . $version . $suffix;
 
         $content = <<<YAML
 services:
@@ -126,7 +166,7 @@ services:
     networks:
       - app-network
 
-  supervisor-{$version}:
+  {$supervisorName}:
     profiles: ["{$service}"]
     image: {$image}
     container_name: {$supervisorContainer}
@@ -136,7 +176,7 @@ services:
       - ./{$iniRel}:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf:ro
       - ./{$supervisorDir}:/etc/supervisor/conf.d:ro
-      - ./logs/supervisor-{$version}:/var/log/supervisor
+      - ./{$logDir}:/var/log/supervisor
     working_dir: /var/www/{$source}
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
@@ -191,7 +231,7 @@ YAML;
 
     private function ensureLogsDir(string $service): void
     {
-        $this->mkdir($this->root() . '/logs/supervisor-' . PhpVersionId::minorFromService($service));
+        $this->mkdir($this->root() . '/logs/supervisor-' . PhpVersionId::minorFromService($service) . PhpVersionId::pathSuffix($service));
     }
 
     private function ensureComposeInclude(string $service): void
@@ -206,7 +246,6 @@ YAML;
             return;
         }
         $entry = "  - path: compose/{$service}.yml\n    project_directory: .\n";
-        // Insert before redis include when present; otherwise after last php include.
         if (preg_match('/^  - path: compose\/redis\.yml$/m', $content)) {
             $content = preg_replace(
                 '/^  - path: compose\/redis\.yml$/m',
@@ -214,9 +253,9 @@ YAML;
                 $content,
                 1,
             );
-        } elseif (preg_match('/^  - path: compose\/php-[0-9.]+\.yml$/m', $content)) {
+        } elseif (preg_match('/^  - path: compose\/php-[0-9.a-z-]+\.yml$/m', $content)) {
             $content = preg_replace(
-                '/(^  - path: compose\/php-[0-9.]+\.yml$\n    project_directory: \.\n)(?!(?:  - path: compose\/php-))/m',
+                '/(^  - path: compose\/php-[0-9.a-z-]+\.yml$\n    project_directory: \.\n)(?!(?:  - path: compose\/php-))/m',
                 '$1' . $entry,
                 $content,
                 1,
