@@ -112,6 +112,74 @@ reject_request() {
     rm -f "$request_file"
 }
 
+write_modules_sidecar() {
+    service="$1"
+    container="$2"
+    request_id="$3"
+    updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    modules_json=$(docker exec "$container" php -m 2>/dev/null | tr -d '\r' | awk '
+        BEGIN { printf "[" }
+        /^\[/ { next }
+        NF==0 { next }
+        {
+          if (n++) printf ","
+          gsub(/\\/,"\\\\"); gsub(/"/,"\\\"")
+          printf "\"%s\"", $0
+        }
+        END { printf "]" }
+    ')
+    if [ -z "$modules_json" ]; then
+        modules_json='[]'
+        ok=0
+    else
+        ok=1
+    fi
+    temp_file="$STATUS_DIR/$service.modules.json.tmp"
+    printf '{"service":"%s","modules":%s,"updated_at":"%s","request_id":"%s","ok":%s}\n' \
+        "$service" "$modules_json" "$updated_at" "$request_id" "$ok" > "$temp_file"
+    mv "$temp_file" "$STATUS_DIR/$service.modules.json"
+    [ "$ok" -eq 1 ]
+}
+
+extension_allowed() {
+    case "$1" in
+        redis|imagick|mongodb|xdebug|bcmath|intl|opcache|soap|exif|gmp) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Validate request via field extraction (avoids brittle JSON key-order regex).
+# Lifecycle keys: request_id, service, action, requested_at.
+# install-ext also requires extension in the curated allowlist.
+parse_request_fields() {
+    request="$1"
+    request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
+    service=$(printf '%s' "$request" | sed -n 's/^.*"service":"\([^"]*\)".*$/\1/p')
+    action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
+    extension=$(printf '%s' "$request" | sed -n 's/^.*"extension":"\([a-z0-9_]*\)".*$/\1/p')
+
+    printf '%s' "$request_id" | grep -Eq '^[0-9a-f]{32}$' || return 1
+    case "$service" in
+        php-8.2|php-8.1|php-8.0|php-7.4|nginx) ;;
+        *) return 1 ;;
+    esac
+    case "$action" in
+        start|stop|restart|create)
+            [ -z "$extension" ] || return 1
+            ;;
+        modules)
+            [ "$service" != "nginx" ] || return 1
+            [ -z "$extension" ] || return 1
+            ;;
+        install-ext)
+            [ "$service" != "nginx" ] || return 1
+            extension_allowed "$extension" || return 1
+            ;;
+        *) return 1 ;;
+    esac
+    return 0
+}
+
 for service in php-8.2 php-8.1 php-8.0 php-7.4 nginx; do
     refresh_service "$service"
 done
@@ -122,7 +190,7 @@ while true; do
         [ -e "$request_file" ] || break
         request=$(tr -d '\r\n' < "$request_file")
 
-        if ! printf '%s' "$request" | grep -Eq '^\{"request_id":"[0-9a-f]{32}","service":"(php-(8\.2|8\.1|8\.0|7\.4)|nginx)","action":"(start|stop|restart|create)","requested_at":"[0-9T:+-]+"\}$'; then
+        if ! parse_request_fields "$request"; then
             reject_request "$request_file"
             continue
         fi
@@ -130,6 +198,7 @@ while true; do
         request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
         service=$(printf '%s' "$request" | sed -n 's/^.*"service":"\([^"]*\)".*$/\1/p')
         action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
+        extension=$(printf '%s' "$request" | sed -n 's/^.*"extension":"\([a-z0-9_]*\)".*$/\1/p')
         if [ "$service" = "nginx" ] && [ "$action" = "create" ]; then
             reject_request "$request_file"
             continue
@@ -138,6 +207,37 @@ while true; do
             reject_request "$request_file"
             continue
         }
+
+        if [ "$action" = "modules" ]; then
+            write_status "$service" "busy" "php_controller.processing" "$request_id"
+            if [ "$(container_state "$container")" = "running" ] && write_modules_sidecar "$service" "$container" "$request_id"; then
+                write_status "$service" "running" "php_controller.action_success" "$request_id"
+            else
+                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
+            fi
+            rm -f "$request_file"
+            continue
+        fi
+
+        if [ "$action" = "install-ext" ]; then
+            write_status "$service" "busy" "php_controller.processing" "$request_id"
+            ok=0
+            if [ "$(container_state "$container")" = "running" ]; then
+                if /scripts/php-ext-install.sh "$container" "$extension" \
+                    >"$STATUS_DIR/$service.last-install.log" 2>&1; then
+                    ok=1
+                    write_modules_sidecar "$service" "$container" "$request_id" || true
+                fi
+            fi
+            state=$(container_state "$container")
+            if [ "$ok" -eq 1 ]; then
+                write_status "$service" "$state" "php_controller.action_success" "$request_id"
+            else
+                write_status "$service" "$state" "php_controller.action_failed" "$request_id"
+            fi
+            rm -f "$request_file"
+            continue
+        fi
 
         write_status "$service" "busy" "php_controller.processing" "$request_id"
         ok=0
