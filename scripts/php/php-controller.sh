@@ -8,6 +8,8 @@ REQUEST_DIR="$BASE_DIR/requests"
 STATUS_DIR="$BASE_DIR/status"
 
 mkdir -p "$REQUEST_DIR" "$STATUS_DIR"
+# php-controller runs with a read-only rootfs; point Docker CLI config at tmpfs.
+mkdir -p "${DOCKER_CONFIG:-/tmp/docker-config}"
 
 container_for_service() {
     case "$1" in
@@ -44,14 +46,15 @@ prepare_compose_tmp() {
     host_project="$1"
     tmp_dir="$2"
     mkdir -p "$tmp_dir/compose"
-    # Rewrite relative bind mounts and build contexts to absolute host paths.
+    # Bind mounts must use host paths (daemon-side). Build context must stay
+    # container-visible (/project/...) because the Docker CLI reads it locally.
     sed -e "s|- \\./|- ${host_project}/|g" \
-        -e "s|context: \\./|context: ${host_project}/|g" \
+        -e "s|context: \\./|context: /project/|g" \
         /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
     for f in /project/compose/*.yml; do
         [ -f "$f" ] || continue
         sed -e "s|- \\./|- ${host_project}/|g" \
-            -e "s|context: \\./|context: ${host_project}/|g" \
+            -e "s|context: \\./|context: /project/|g" \
             "$f" > "$tmp_dir/compose/$(basename "$f")"
     done
 }

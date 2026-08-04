@@ -108,6 +108,8 @@ services:
       # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
       # rewrite compose bind mounts when creating optional PHP containers.
       HOST_PROJECT_PATH: ${HOST_PROJECT_PATH:-/project}
+      # docker:cli image is read-only; compose build needs a writable Docker config dir.
+      DOCKER_CONFIG: /tmp/docker-config
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./scripts:/scripts:ro
