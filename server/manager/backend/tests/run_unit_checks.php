@@ -14,6 +14,7 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 
 function assert_true(bool $cond, string $msg): void
@@ -43,5 +44,18 @@ assert_true(PhpIniEditor::relativePath('php-8.2') === 'configs/php8/php.ini', 'p
 assert_true(PhpIniEditor::relativePath('php-8.1') === 'configs/php8.1/php.ini', 'path 8.1');
 assert_true(PhpIniEditor::relativePath('php-8.0') === 'configs/php8.0/php.ini', 'path 8.0');
 assert_true(PhpIniEditor::relativePath('php-7.4') === 'configs/php7.4/php.ini', 'path 7.4');
+
+$modules = ['Core', 'redis', 'sockets'];
+$ini = "extension=sockets.so;\n;extension=imagick.so;\n";
+$entries = PhpExtensionCatalog::entries('php-8.2', $modules, $ini);
+$byName = [];
+foreach ($entries as $e) {
+    $byName[$e['name']] = $e['status'];
+}
+assert_true($byName['redis'] === 'loaded', 'redis loaded');
+assert_true($byName['imagick'] === 'disabled_in_ini', 'imagick disabled_in_ini');
+assert_true($byName['mongodb'] === 'available_to_install', 'mongodb available');
+assert_true(PhpExtensionCatalog::isCurated('redis'), 'curated redis');
+assert_true(!PhpExtensionCatalog::isCurated('foobar'), 'not curated foobar');
 
 echo "All checks passed\n";
