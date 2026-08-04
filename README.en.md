@@ -145,27 +145,27 @@ The stack starts without mounting the OS hosts file. Manager reads the latest st
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1
 ```
 
-Unregister: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
+Unregister: `powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1 -UnregisterProtocol`
 
 macOS:
 
 ```bash
-chmod +x scripts/ensure_hosts_env.sh scripts/add_hostname.sh scripts/hosts_protocol_macos.sh
-./scripts/ensure_hosts_env.sh
+chmod +x scripts/hosts/ensure_hosts_env.sh scripts/hosts/add_hostname.sh scripts/hosts/hosts_protocol_macos.sh
+./scripts/hosts/ensure_hosts_env.sh
 ```
 
-Unregister: `./scripts/ensure_hosts_env.sh --unregister-protocol`
+Unregister: `./scripts/hosts/ensure_hosts_env.sh --unregister-protocol`
 
 2. In Manager use **Add domain** / **Write hosts (Admin)**. The browser opens `multi-php-hosts:write` → writes hosts (UAC on Windows / admin prompt on macOS). Allow the app if the browser prompts.
 
 Linux / WSL (no browser protocol):
 
 ```bash
-chmod +x scripts/add_hostname.sh
-./scripts/add_hostname.sh --watch
+chmod +x scripts/hosts/add_hostname.sh
+./scripts/hosts/add_hostname.sh --watch
 ```
 
 The script only edits the `# multi-php-docker-serve:managed:*` block in the hosts file.
@@ -173,13 +173,13 @@ The script only edits the `# multi-php-docker-serve:managed:*` block in the host
 **One-shot (without Manager):**
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 ```
 
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1
 ```
 
 The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.json` if present) and maps it to `127.0.0.1`. To configure domains manually, edit:
@@ -299,7 +299,7 @@ Then click **Apply & Reload Nginx**. Refresh the page to see the latest result b
 New domains must still be added to the `hosts` file:
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 ```
 
 Stop the UI separately when it is not needed:
@@ -320,7 +320,7 @@ Check the container status:
 docker compose ps
 ```
 
-When Nginx starts, `scripts/auto-add-template.sh` reads `env.json`, generates virtual hosts from `nginx/examples/server_example.txt`, and loads the resulting configuration. Open a configured domain such as `http://my-php8-app.test`.
+When Nginx starts, `scripts/nginx/auto-add-template.sh` reads `env.json`, generates virtual hosts from `nginx/examples/server_example.txt`, and loads the resulting configuration. Open a configured domain such as `http://my-php8-app.test`.
 
 ## Common commands
 
@@ -509,7 +509,7 @@ Create `compose/php-8.3.yml` (PHP-FPM + Supervisor sharing one image), then add 
       - ./configs/supervisor.d/php8.3:/etc/supervisor/conf.d:ro
       - ./logs/supervisor-8.3:/var/log/supervisor
     working_dir: /var/www/source_php8.3
-    command: ["/var/scripts/supervisord.sh"]
+    command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       - mysql
       - redis
@@ -568,7 +568,7 @@ Applications running directly on the host should use `127.0.0.1` and the host po
 
 1. Place the source code in the appropriate PHP directory.
 2. Add or update the project in `env.json`.
-3. Run `./scripts/add_hostname.sh` again when adding a domain.
+3. Run `./scripts/hosts/add_hostname.sh` again when adding a domain.
 4. Recreate Nginx to regenerate the virtual hosts:
 
 ```bash
@@ -663,7 +663,7 @@ Add the project to `env.json`. `CONTAINER_PHP_VERSION` must match the new `conta
 ### 6. Build and verify
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 docker compose up -d --build php-8-3
 docker compose up -d --force-recreate nginx
 
@@ -760,6 +760,11 @@ Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of
 │   ├── logs/                # Nginx logs
 │   └── templates/           # Configuration generated from env.json
 ├── scripts/                 # Startup and configuration scripts
+│   ├── php/                 # php-controller + install/uninstall extension
+│   ├── nginx/               # auto-add-template, reload, watch
+│   ├── hosts/               # add_hostname, ensure_hosts_env, protocol handlers
+│   ├── docker/              # entrypoint, supervisord, compose wrappers
+│   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
 │   ├── manager/             # env.json management UI
 │   ├── source_php7.4/       # PHP 7.4 projects

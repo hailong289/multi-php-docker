@@ -2,15 +2,15 @@
 # Detect OS hosts path and write HOSTS_FILE into project .env for docker compose.
 # On macOS also registers the multi-php-hosts: URL protocol (Manager → write hosts).
 # Usage:
-#   ./scripts/ensure_hosts_env.sh
-#   ./scripts/ensure_hosts_env.sh --unregister-protocol
+#   ./scripts/hosts/ensure_hosts_env.sh
+#   ./scripts/hosts/ensure_hosts_env.sh --unregister-protocol
 
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
-MACOS_APP="$SCRIPT_DIR/macos/MultiPhpHosts.app"
+MACOS_APP="$SCRIPT_DIR/../macos/MultiPhpHosts.app"
 PROTOCOL_HANDLER="$SCRIPT_DIR/hosts_protocol_macos.sh"
 UNREGISTER=0
 
@@ -38,7 +38,7 @@ case "$OS_TYPE" in
     HOSTS_FILE='/etc/hosts'
     ;;
   msys*|mingw*|cygwin*)
-    echo "On native Windows use: powershell -ExecutionPolicy Bypass -File .\\scripts\\ensure_hosts_env.ps1"
+    echo "On native Windows use: powershell -ExecutionPolicy Bypass -File .\\scripts\\hosts\\ensure_hosts_env.ps1"
     exit 1
     ;;
   *)
@@ -73,7 +73,7 @@ register_macos_protocol() {
   mkdir -p "$(dirname "$MACOS_APP")"
   rm -rf "$MACOS_APP"
 
-  # Relocatable: resolve hosts_protocol_macos.sh next to scripts/macos/*.app
+  # Relocatable: resolve scripts/hosts/hosts_protocol_macos.sh from scripts/macos/*.app
   local tmp_script
   tmp_script="$(mktemp /tmp/multi-php-hosts-XXXXXX.applescript)"
   cat > "$tmp_script" <<'APPLESCRIPT'
@@ -81,7 +81,7 @@ on handlerPath()
   set appPOSIX to POSIX path of (path to me as alias)
   if appPOSIX ends with "/" then set appPOSIX to text 1 thru -2 of appPOSIX
   set scriptsDir to do shell script "dirname \"$(dirname " & quoted form of appPOSIX & ")\""
-  return scriptsDir & "/hosts_protocol_macos.sh"
+  return scriptsDir & "/hosts/hosts_protocol_macos.sh"
 end handlerPath
 
 on open location theURL

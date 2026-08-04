@@ -24,7 +24,7 @@ services:
       - ./configs/supervisor.d/php8.1:/etc/supervisor/conf.d:ro
       - ./logs/supervisor-8.1:/var/log/supervisor
     working_dir: /var/www/source_php8.1
-    command: ["/var/scripts/supervisord.sh"]
+    command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       - mysql
       - redis

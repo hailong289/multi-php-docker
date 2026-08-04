@@ -39,7 +39,7 @@ done
 
 : > "$LOG_FILE"
 
-if ! sh /var/scripts/auto-add-template.sh >> "$LOG_FILE" 2>&1; then
+if ! sh /var/scripts/nginx/auto-add-template.sh >> "$LOG_FILE" 2>&1; then
     write_status "error" "Could not generate Nginx templates. See runtime/nginx.reload.log."
     exit 1
 fi

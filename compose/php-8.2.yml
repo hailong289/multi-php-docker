@@ -22,7 +22,7 @@ services:
       - ./configs/supervisor.d:/etc/supervisor/conf.d:ro
       - ./logs/supervisor:/var/log/supervisor
     working_dir: /var/www/source_php8.2
-    command: ["/var/scripts/supervisord.sh"]
+    command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       - mysql
       - redis

@@ -67,7 +67,7 @@ services:
       - .:/var/host-project:ro
     environment:
       ENV_JSON_FILE: /var/host-project/env.json
-    command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
+    command: ["sh", "-c", "/var/scripts/nginx/auto-add-template.sh && /var/scripts/docker/entrypoint.sh"]
     depends_on:
       env-init:
         condition: service_completed_successfully
@@ -103,7 +103,7 @@ services:
   php-controller:
     image: docker:cli
     container_name: php_controller_container
-    entrypoint: ["/bin/sh", "/scripts/php-controller.sh"]
+    entrypoint: ["/bin/sh", "/scripts/php/php-controller.sh"]
     environment:
       # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
       # rewrite compose bind mounts when creating optional PHP containers.

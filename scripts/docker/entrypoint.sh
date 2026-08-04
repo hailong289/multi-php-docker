@@ -11,6 +11,6 @@ for template in /etc/nginx/templates/*.template; do
 done
 
 # Theo dõi yêu cầu reload từ Server Manager trong background.
-sh /var/scripts/watch-nginx-reload.sh &
+sh /var/scripts/nginx/watch-nginx-reload.sh &
 
 exec nginx -g 'daemon off;'

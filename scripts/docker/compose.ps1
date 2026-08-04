@@ -7,17 +7,17 @@
   Do not invoke as: powershell -File compose.ps1 up -d
   PowerShell.exe treats bare -d as -Debug, so only "up" reaches the script and
   `docker compose up` attaches forever. Use compose.cmd instead, or:
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\compose.ps1' up -d"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\docker\compose.ps1' up -d"
 
 .EXAMPLE
-  .\scripts\compose.cmd up -d
-  .\scripts\compose.cmd --profile php-8.1 up -d
+  .\scripts\docker\compose.cmd up -d
+  .\scripts\docker\compose.cmd --profile php-8.1 up -d
 #>
 
 $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$EnsureScript = Join-Path $ScriptDir 'ensure_hosts_env.ps1'
+$EnsureScript = Join-Path (Split-Path -Parent $ScriptDir) 'hosts\ensure_hosts_env.ps1'
 
 if (-not (Test-Path -LiteralPath $EnsureScript)) {
     throw "Missing $EnsureScript"

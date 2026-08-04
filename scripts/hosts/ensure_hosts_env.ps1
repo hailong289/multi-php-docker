@@ -3,8 +3,8 @@
 .SYNOPSIS
   Detect OS hosts path for docker compose, and register the multi-php-hosts: protocol.
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
-  powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol
+  powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1
+  powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1 -UnregisterProtocol
 #>
 param(
     [switch]$UnregisterProtocol,
@@ -13,9 +13,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 $EnvFile = Join-Path $RepoRoot '.env'
-$ProtocolScript = Join-Path $RepoRoot 'scripts\hosts_protocol.ps1'
+$ProtocolScript = Join-Path $RepoRoot 'scripts\hosts\hosts_protocol.ps1'
 $ProtocolName = 'multi-php-hosts'
 $ClassesRoot = "HKCU:\Software\Classes\$ProtocolName"
 

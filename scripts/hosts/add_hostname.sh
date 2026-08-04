@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Apply domains from env.json (+ runtime/hosts.extra.json) into the OS hosts file.
 # Usage:
-#   ./scripts/add_hostname.sh              # one-shot apply
-#   ./scripts/add_hostname.sh --watch       # watch runtime/hosts.sync for Manager
-#   ./scripts/add_hostname.sh --force-admin # prefer elevated write
+#   ./scripts/hosts/add_hostname.sh              # one-shot apply
+#   ./scripts/hosts/add_hostname.sh --watch       # watch runtime/hosts.sync for Manager
+#   ./scripts/hosts/add_hostname.sh --force-admin # prefer elevated write
 
 set -eu
 
@@ -12,7 +12,7 @@ BEGIN='# multi-php-docker-serve:managed:begin'
 END='# multi-php-docker-serve:managed:end'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
 JSON_FILE="$REPO_ROOT/env.json"
@@ -65,7 +65,7 @@ case "$OS_TYPE" in
     HOSTS_FILE='/etc/hosts'
     ;;
   msys*|mingw*|cygwin*)
-    echo "On native Windows use: powershell -ExecutionPolicy Bypass -File .\\scripts\\add_hostname.ps1"
+    echo "On native Windows use: powershell -ExecutionPolicy Bypass -File .\\scripts\\hosts\\add_hostname.ps1"
     exit 1
     ;;
   *)

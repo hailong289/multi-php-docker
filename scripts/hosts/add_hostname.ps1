@@ -3,16 +3,16 @@
 .SYNOPSIS
   Apply env.json (+ runtime/hosts.extra.json) domains into the Windows hosts file.
 .DESCRIPTION
-  Same role as scripts/add_hostname.sh, for native Windows PowerShell.
+  Same role as scripts/hosts/add_hostname.sh, for native Windows PowerShell.
 
   One-shot:
-    powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1
+    powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1
 
   Watch Manager requests (runtime/hosts.sync):
-    powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1 -Watch
+    powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1 -Watch
 
   Force UAC elevation:
-    powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1 -ForceAdmin
+    powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1 -ForceAdmin
 #>
 param(
     [switch]$Watch,
@@ -23,7 +23,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = Split-Path -Parent $ScriptDir
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 $RuntimeDir = Join-Path $RepoRoot 'runtime'
 $EnvJson = Join-Path $RepoRoot 'env.json'
 $SyncFile = Join-Path $RuntimeDir 'hosts.sync'

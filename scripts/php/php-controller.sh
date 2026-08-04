@@ -221,7 +221,7 @@ while true; do
             write_status "$service" "busy" "php_controller.processing" "$request_id"
             ok=0
             if [ "$(container_state "$container")" = "running" ]; then
-                if /scripts/php-ext-install.sh "$container" "$extension" \
+                if /scripts/php/php-ext-install.sh "$container" "$extension" \
                     >"$STATUS_DIR/$service.last-install.log" 2>&1; then
                     ok=1
                     write_modules_sidecar "$service" "$container" "$request_id" || true
@@ -241,7 +241,7 @@ while true; do
             write_status "$service" "busy" "php_controller.processing" "$request_id"
             ok=0
             if [ "$(container_state "$container")" = "running" ]; then
-                if /scripts/php-ext-uninstall.sh "$container" "$extension" \
+                if /scripts/php/php-ext-uninstall.sh "$container" "$extension" \
                     >"$STATUS_DIR/$service.last-uninstall.log" 2>&1; then
                     ok=1
                     write_modules_sidecar "$service" "$container" "$request_id" || true

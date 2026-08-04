@@ -145,27 +145,27 @@ Stack không cần mount file hosts để khởi động. Manager đọc trạng
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1
 ```
 
-Gỡ protocol: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
+Gỡ protocol: `powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1 -UnregisterProtocol`
 
 macOS:
 
 ```bash
-chmod +x scripts/ensure_hosts_env.sh scripts/add_hostname.sh scripts/hosts_protocol_macos.sh
-./scripts/ensure_hosts_env.sh
+chmod +x scripts/hosts/ensure_hosts_env.sh scripts/hosts/add_hostname.sh scripts/hosts/hosts_protocol_macos.sh
+./scripts/hosts/ensure_hosts_env.sh
 ```
 
-Gỡ protocol: `./scripts/ensure_hosts_env.sh --unregister-protocol`
+Gỡ protocol: `./scripts/hosts/ensure_hosts_env.sh --unregister-protocol`
 
 2. Trong Manager dùng **Thêm domain** / **Ghi hosts (Admin)**. Trình duyệt mở `multi-php-hosts:write` → ghi hosts (UAC trên Windows / hộp thoại admin trên macOS). Cho phép mở ứng dụng nếu trình duyệt hỏi.
 
 Linux / WSL (không có protocol trình duyệt):
 
 ```bash
-chmod +x scripts/add_hostname.sh
-./scripts/add_hostname.sh --watch
+chmod +x scripts/hosts/add_hostname.sh
+./scripts/hosts/add_hostname.sh --watch
 ```
 
 Script chỉ sửa block `# multi-php-docker-serve:managed:*` trong file hosts.
@@ -173,13 +173,13 @@ Script chỉ sửa block `# multi-php-docker-serve:managed:*` trong file hosts.
 **One-shot (không cần Manager):**
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 ```
 
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1
 ```
 
 Script đọc `DOMAIN_NAME` trong `env.json` (và `runtime/hosts.extra.json` nếu có) rồi ánh xạ tới `127.0.0.1`. Nếu không dùng script, thêm thủ công vào:
@@ -299,7 +299,7 @@ Sau đó nhấn **Apply & Reload Nginx**. Kết quả gần nhất được hi�
 Domain mới vẫn cần được thêm vào file `hosts`:
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 ```
 
 Nếu không cần UI, có thể dừng riêng service này:
@@ -320,7 +320,7 @@ Kiểm tra trạng thái:
 docker compose ps
 ```
 
-Khi Nginx khởi động, `scripts/auto-add-template.sh` đọc `env.json`, tạo virtual host từ `nginx/examples/server_example.txt` rồi nạp cấu hình. Truy cập project bằng domain đã khai báo, ví dụ `http://my-php8-app.test`.
+Khi Nginx khởi động, `scripts/nginx/auto-add-template.sh` đọc `env.json`, tạo virtual host từ `nginx/examples/server_example.txt` rồi nạp cấu hình. Truy cập project bằng domain đã khai báo, ví dụ `http://my-php8-app.test`.
 
 ## Lệnh thường dùng
 
@@ -509,7 +509,7 @@ Tạo `compose/php-8.3.yml` (PHP-FPM + Supervisor dùng chung image), rồi thê
       - ./configs/supervisor.d/php8.3:/etc/supervisor/conf.d:ro
       - ./logs/supervisor-8.3:/var/log/supervisor
     working_dir: /var/www/source_php8.3
-    command: ["/var/scripts/supervisord.sh"]
+    command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       - mysql
       - redis
@@ -568,7 +568,7 @@ RabbitMQ Management UI: [http://localhost:15672](http://localhost:15672).
 
 1. Đặt source vào thư mục PHP phù hợp.
 2. Thêm hoặc sửa project trong `env.json`.
-3. Chạy lại `./scripts/add_hostname.sh` nếu có domain mới.
+3. Chạy lại `./scripts/hosts/add_hostname.sh` nếu có domain mới.
 4. Tạo lại Nginx để sinh lại virtual host:
 
 ```bash
@@ -663,7 +663,7 @@ Thêm project vào `env.json`; `CONTAINER_PHP_VERSION` phải trùng với `cont
 ### 6. Build và kiểm tra
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 docker compose up -d --build php-8-3
 docker compose up -d --force-recreate nginx
 
@@ -760,6 +760,11 @@ Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `loca
 │   ├── logs/                # Log Nginx
 │   └── templates/           # Cấu hình được sinh từ env.json
 ├── scripts/                 # Script khởi động và tạo cấu hình
+│   ├── php/                 # php-controller + install/uninstall extension
+│   ├── nginx/               # auto-add-template, reload, watch
+│   ├── hosts/               # add_hostname, ensure_hosts_env, protocol handlers
+│   ├── docker/              # entrypoint, supervisord, compose wrappers
+│   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
 │   ├── manager/             # UI quản lý env.json
 │   ├── source_php7.4/       # Source chạy PHP 7.4
