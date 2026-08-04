@@ -257,6 +257,22 @@ code {
   align-items: flex-start;
 }
 
+.ext-custom-form {
+  align-items: center;
+  margin: 0 0 14px;
+}
+
+.ext-custom-label {
+  font-weight: 650;
+  font-size: 13px;
+  margin-right: 4px;
+}
+
+.ext-custom-form input[type='text'] {
+  min-width: min(240px, 100%);
+  flex: 1 1 180px;
+}
+
 button,
 .button,
 select {

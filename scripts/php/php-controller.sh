@@ -143,13 +143,45 @@ write_modules_sidecar() {
 }
 
 extension_allowed() {
-    case "$1" in
-        redis|imagick|mongodb|xdebug|bcmath|intl|opcache|soap|exif|gmp) return 0 ;;
-        *) return 1 ;;
-    esac
+    # Any php extension name: starts with a letter, then a-z / digits / underscore.
+    printf '%s' "$1" | grep -Eq '^[a-z][a-z0-9_]*$'
 }
 
-# install-ext / uninstall-ext also require extension in the curated allowlist.
+write_available_sidecar() {
+    service="$1"
+    container="$2"
+    request_id="$3"
+    updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    # docker-php-ext-install prints "Possible values for ext-name:" then a space-separated list.
+    ext_json=$(docker exec "$container" sh -c 'docker-php-ext-install 2>&1' | tr -d '\r' | awk '
+        BEGIN { printf "["; n=0 }
+        /^Possible values for ext-name:/ { grab=1; next }
+        grab && NF {
+            for (i=1; i<=NF; i++) {
+                name=tolower($i)
+                if (name ~ /^[a-z][a-z0-9_]*$/) {
+                    if (n++) printf ","
+                    printf "\"%s\"", name
+                }
+            }
+            grab=0
+        }
+        END { printf "]" }
+    ')
+    if [ -z "$ext_json" ] || [ "$ext_json" = '[]' ]; then
+        ext_json='[]'
+        ok=0
+    else
+        ok=1
+    fi
+    temp_file="$STATUS_DIR/$service.available-ext.json.tmp"
+    printf '{"service":"%s","extensions":%s,"updated_at":"%s","request_id":"%s","ok":%s}\n' \
+        "$service" "$ext_json" "$updated_at" "$request_id" "$ok" > "$temp_file"
+    mv "$temp_file" "$STATUS_DIR/$service.available-ext.json"
+    [ "$ok" -eq 1 ]
+}
+
+# install-ext / uninstall-ext require a valid extension name ([a-z][a-z0-9_]*).
 parse_request_fields() {
     request="$1"
     request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
@@ -166,7 +198,7 @@ parse_request_fields() {
         start|stop|restart|create)
             [ -z "$extension" ] || return 1
             ;;
-        modules)
+        modules|available-ext)
             [ "$service" != "nginx" ] || return 1
             [ -z "$extension" ] || return 1
             ;;
@@ -210,6 +242,16 @@ while true; do
         if [ "$action" = "modules" ]; then
             # Do not flip lifecycle status to busy — probes must not block install/enable UI.
             if [ "$(container_state "$container")" = "running" ] && write_modules_sidecar "$service" "$container" "$request_id"; then
+                write_status "$service" "running" "php_controller.action_success" "$request_id"
+            else
+                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
+            fi
+            rm -f "$request_file"
+            continue
+        fi
+
+        if [ "$action" = "available-ext" ]; then
+            if [ "$(container_state "$container")" = "running" ] && write_available_sidecar "$service" "$container" "$request_id"; then
                 write_status "$service" "running" "php_controller.action_success" "$request_id"
             else
                 write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"

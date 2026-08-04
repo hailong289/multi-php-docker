@@ -98,7 +98,7 @@ final class PhpRuntime
         if (!isset($targets[$service])) {
             throw new HttpException('php_controller.invalid_service', 400);
         }
-        $allowed = ['start', 'stop', 'restart', 'create', 'modules', 'install-ext', 'uninstall-ext'];
+        $allowed = ['start', 'stop', 'restart', 'create', 'modules', 'available-ext', 'install-ext', 'uninstall-ext'];
         if (!in_array($action, $allowed, true)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
@@ -106,7 +106,8 @@ final class PhpRuntime
             throw new HttpException('php_controller.invalid_action', 400);
         }
         if ($action === 'install-ext' || $action === 'uninstall-ext') {
-            if ($extension === null || !PhpExtensionCatalog::isCurated($extension) || !preg_match('/^[a-z0-9_]+$/', $extension)) {
+            $extension = $extension !== null ? strtolower($extension) : null;
+            if ($extension === null || !PhpExtensionCatalog::isValidName($extension)) {
                 throw new HttpException('php_controller.invalid_extension', 400);
             }
             if (PhpExtensionCatalog::unsupportedOn($service, $extension)) {
@@ -183,6 +184,62 @@ final class PhpRuntime
     public function modulesStale(string $service, int $maxAgeSeconds = 30): bool
     {
         $info = $this->readModules($service);
+        if ($info['updated_at'] === '') {
+            return true;
+        }
+        $ts = strtotime($info['updated_at']);
+        if ($ts === false) {
+            return true;
+        }
+
+        return (time() - $ts) > $maxAgeSeconds;
+    }
+
+    public function readAvailable(string $service): array
+    {
+        $defaults = [
+            'service' => $service,
+            'extensions' => PhpExtensionCatalog::NAMES,
+            'updated_at' => '',
+            'request_id' => '',
+            'ok' => false,
+        ];
+        $file = $this->basePath . '/status/' . $service . '.available-ext.json';
+        $names = PhpExtensionCatalog::NAMES;
+        if (is_file($file) && is_readable($file)) {
+            $decoded = json_decode((string) file_get_contents($file), true);
+            if (is_array($decoded) && ($decoded['service'] ?? null) === $service) {
+                $listed = $decoded['extensions'] ?? [];
+                if (is_array($listed)) {
+                    foreach ($listed as $item) {
+                        if (!is_string($item)) {
+                            continue;
+                        }
+                        $item = strtolower(trim($item));
+                        if (PhpExtensionCatalog::isValidName($item) && !in_array($item, $names, true)) {
+                            $names[] = $item;
+                        }
+                    }
+                }
+                sort($names);
+
+                return [
+                    'service' => $service,
+                    'extensions' => array_values($names),
+                    'updated_at' => (string) ($decoded['updated_at'] ?? ''),
+                    'request_id' => (string) ($decoded['request_id'] ?? ''),
+                    'ok' => (bool) ($decoded['ok'] ?? false),
+                ];
+            }
+        }
+        $defaults['extensions'] = array_values($names);
+
+        return $defaults;
+    }
+
+    public function availableStale(string $service, int $maxAgeSeconds = 300): bool
+    {
+        $info = $this->readAvailable($service);
         if ($info['updated_at'] === '') {
             return true;
         }

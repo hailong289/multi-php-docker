@@ -25,8 +25,8 @@ case "$ext" in
         disable_and_unlink "$ext"
         ;;
     *)
-        echo "unsupported extension: $ext" >&2
-        exit 1
+        run "pecl uninstall -r $ext 2>/dev/null || pecl uninstall $ext 2>/dev/null || true"
+        disable_and_unlink "$ext"
         ;;
 esac
 

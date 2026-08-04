@@ -40,6 +40,14 @@ final class PhpDetails
                 // ignore queue races; UI can refresh
             }
         }
+        $availableInfo = $this->runtime->readAvailable($service);
+        if (($status['state'] ?? '') === 'running' && $this->runtime->availableStale($service)) {
+            try {
+                $this->runtime->request($service, 'available-ext');
+            } catch (HttpException) {
+                // ignore queue races; UI can refresh
+            }
+        }
         $extensions = PhpExtensionCatalog::entries(
             $service,
             $modulesInfo['modules'],
@@ -56,6 +64,7 @@ final class PhpDetails
                 'readable' => $iniReadable,
             ],
             'modules' => $modulesInfo,
+            'available' => $availableInfo,
             'extensions' => $extensions,
         ];
     }

@@ -27,13 +27,33 @@ const pending = ref('')
 const tab = ref('extensions')
 const details = ref(null)
 const iniDraft = ref('')
+const customExt = ref('')
 
 const label = computed(() => details.value?.target?.label || service.value)
 const state = computed(() => details.value?.status?.state || phpServiceState(service.value))
 const target = computed(() => details.value?.target || data.php_controllers?.targets?.[service.value] || {})
+const availableExtensions = computed(() => details.value?.available?.extensions || [])
+const datalistId = computed(() => `ext-suggestions-${service.value}`)
 
 function statusLabel(status) {
   return t(`php_controller.ext_status_${status}`)
+}
+
+function normalizeExtName(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.so$/i, '')
+}
+
+async function installCustomExt() {
+  const name = normalizeExtName(customExt.value)
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+    showToast('failure', t('php_controller.invalid_extension'))
+    return
+  }
+  await extAction(name, 'install')
+  customExt.value = ''
 }
 
 async function load() {
@@ -255,6 +275,36 @@ onMounted(async () => {
         <p v-if="state !== 'running'" class="create-hint">
           {{ t('php_controller.extensions_need_running') }}
         </p>
+
+        <form class="controller-actions ext-custom-form" @submit.prevent="installCustomExt">
+          <label class="ext-custom-label" :for="datalistId + '-input'">
+            {{ t('php_controller.ext_custom_label') }}
+          </label>
+          <input
+            :id="datalistId + '-input'"
+            v-model="customExt"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            :list="datalistId"
+            :disabled="state !== 'running' || !!pending"
+            :placeholder="t('php_controller.ext_custom_placeholder')"
+          />
+          <datalist :id="datalistId">
+            <option v-for="name in availableExtensions" :key="name" :value="name" />
+          </datalist>
+          <button
+            type="submit"
+            class="primary"
+            :disabled="state !== 'running' || !!pending || !normalizeExtName(customExt)"
+          >
+            {{
+              pending.startsWith('install:')
+                ? t('action.working')
+                : t('php_controller.ext_custom_install')
+            }}
+          </button>
+        </form>
 
         <p v-if="details.modules?.modules?.length">
           <strong>{{ t('php_controller.loaded_modules') }}:</strong>

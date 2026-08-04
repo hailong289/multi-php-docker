@@ -73,7 +73,7 @@ final class PhpControllerController extends Controller
     public function installExtension(Request $request, array $params = []): Response
     {
         $service = (string) ($params['service'] ?? '');
-        $name = (string) ($params['name'] ?? '');
+        $name = strtolower((string) ($params['name'] ?? ''));
         $runtime = new PhpRuntime();
         $state = $runtime->statuses()[$service]['state'] ?? 'not_created';
         if ($state === 'busy' || $runtime->hasBlockingRequests($service)) {
@@ -109,7 +109,7 @@ final class PhpControllerController extends Controller
     public function uninstallExtension(Request $request, array $params = []): Response
     {
         $service = (string) ($params['service'] ?? '');
-        $name = (string) ($params['name'] ?? '');
+        $name = strtolower((string) ($params['name'] ?? ''));
         $runtime = new PhpRuntime();
         $state = $runtime->statuses()[$service]['state'] ?? 'not_created';
         if ($state === 'busy' || $runtime->hasBlockingRequests($service)) {

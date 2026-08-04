@@ -70,5 +70,17 @@ assert_true(str_contains($removed, 'extension=foo.so'), 'keep redis line');
 
 assert_true(PhpExtensionCatalog::isCurated('redis'), 'curated redis');
 assert_true(!PhpExtensionCatalog::isCurated('foobar'), 'not curated foobar');
+assert_true(PhpExtensionCatalog::isValidName('gd'), 'valid gd');
+assert_true(PhpExtensionCatalog::isValidName('pdo_mysql'), 'valid pdo_mysql');
+assert_true(!PhpExtensionCatalog::isValidName('PDO'), 'invalid uppercase');
+assert_true(!PhpExtensionCatalog::isValidName('1gd'), 'invalid leading digit');
+
+$customEntries = PhpExtensionCatalog::entries('php-8.2', ['Core', 'yaml'], '', ['yaml']);
+$byCustom = [];
+foreach ($customEntries as $e) {
+    $byCustom[$e['name']] = $e['status'];
+}
+assert_true(($byCustom['yaml'] ?? '') === 'loaded', 'custom yaml loaded');
+assert_true(($byCustom['redis'] ?? '') === 'available_to_install', 'curated still listed');
 
 echo "All checks passed\n";

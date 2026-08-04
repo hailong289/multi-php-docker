@@ -1,6 +1,6 @@
 #!/bin/sh
 # Usage: php-ext-install.sh <container> <extension>
-# extension is already validated by caller (curated + [a-z0-9_]+)
+# extension is already validated by caller ([a-z][a-z0-9_]*)
 set -eu
 container="$1"
 ext="$2"
@@ -11,6 +11,15 @@ run() {
 
 apt_install() {
     run "apt-get update && apt-get install -y --no-install-recommends $1 && rm -rf /var/lib/apt/lists/*"
+}
+
+install_generic() {
+    name="$1"
+    # Prefer official docker-php helper for builtins; fall back to pecl.
+    if run "docker-php-ext-install $name"; then
+        return 0
+    fi
+    run "pecl install -f $name && docker-php-ext-enable $name"
 }
 
 case "$ext" in
@@ -46,7 +55,6 @@ case "$ext" in
         run "docker-php-ext-install opcache || docker-php-ext-enable opcache"
         ;;
     *)
-        echo "unsupported extension: $ext" >&2
-        exit 1
+        install_generic "$ext"
         ;;
 esac
