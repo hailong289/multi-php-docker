@@ -63,6 +63,11 @@ foreach ($entriesActive as $e) {
     $byActive[$e['name']] = $e['status'];
 }
 assert_true($byActive['imagick'] === 'enabled_in_ini', 'imagick enabled_in_ini');
+
+$removed = $editor->removeExtensionContent("extension=foo.so;\n;extension=imagick.so;\nmemory_limit=1G\n", 'imagick');
+assert_true($editor->extensionLineStatus($removed, 'imagick') === 'absent', 'remove imagick lines');
+assert_true(str_contains($removed, 'extension=foo.so'), 'keep redis line');
+
 assert_true(PhpExtensionCatalog::isCurated('redis'), 'curated redis');
 assert_true(!PhpExtensionCatalog::isCurated('foobar'), 'not curated foobar');
 

@@ -148,9 +148,7 @@ extension_allowed() {
     esac
 }
 
-# Validate request via field extraction (avoids brittle JSON key-order regex).
-# Lifecycle keys: request_id, service, action, requested_at.
-# install-ext also requires extension in the curated allowlist.
+# install-ext / uninstall-ext also require extension in the curated allowlist.
 parse_request_fields() {
     request="$1"
     request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
@@ -171,7 +169,7 @@ parse_request_fields() {
             [ "$service" != "nginx" ] || return 1
             [ -z "$extension" ] || return 1
             ;;
-        install-ext)
+        install-ext|uninstall-ext)
             [ "$service" != "nginx" ] || return 1
             extension_allowed "$extension" || return 1
             ;;
@@ -225,6 +223,26 @@ while true; do
             if [ "$(container_state "$container")" = "running" ]; then
                 if /scripts/php-ext-install.sh "$container" "$extension" \
                     >"$STATUS_DIR/$service.last-install.log" 2>&1; then
+                    ok=1
+                    write_modules_sidecar "$service" "$container" "$request_id" || true
+                fi
+            fi
+            state=$(container_state "$container")
+            if [ "$ok" -eq 1 ]; then
+                write_status "$service" "$state" "php_controller.action_success" "$request_id"
+            else
+                write_status "$service" "$state" "php_controller.action_failed" "$request_id"
+            fi
+            rm -f "$request_file"
+            continue
+        fi
+
+        if [ "$action" = "uninstall-ext" ]; then
+            write_status "$service" "busy" "php_controller.processing" "$request_id"
+            ok=0
+            if [ "$(container_state "$container")" = "running" ]; then
+                if /scripts/php-ext-uninstall.sh "$container" "$extension" \
+                    >"$STATUS_DIR/$service.last-uninstall.log" 2>&1; then
                     ok=1
                     write_modules_sidecar "$service" "$container" "$request_id" || true
                 fi

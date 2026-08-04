@@ -30,6 +30,7 @@ return [
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+)/details', [PhpControllerController::class, 'details']],
     ['PUT', '/php-controllers/(?P<service>php-[0-9.]+)/ini', [PhpControllerController::class, 'saveIni']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+)/extensions/(?P<name>[a-z0-9_]+)/install', [PhpControllerController::class, 'installExtension']],
+    ['POST', '/php-controllers/(?P<service>php-[0-9.]+)/extensions/(?P<name>[a-z0-9_]+)/uninstall', [PhpControllerController::class, 'uninstallExtension']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+)/extensions/(?P<name>[a-z0-9_]+)/enable', [PhpControllerController::class, 'enableExtension']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+)/extensions/(?P<name>[a-z0-9_]+)/disable', [PhpControllerController::class, 'disableExtension']],
     ['POST', '/servers', [ServerController::class, 'store']],

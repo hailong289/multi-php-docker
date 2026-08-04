@@ -106,18 +106,29 @@ final class PhpControllerController extends Controller
         ]);
     }
 
-    public function disableExtension(Request $request, array $params = []): Response
+    public function uninstallExtension(Request $request, array $params = []): Response
     {
         $service = (string) ($params['service'] ?? '');
         $name = (string) ($params['name'] ?? '');
-        if (!PhpExtensionCatalog::isCurated($name)) {
-            throw new HttpException('php_controller.invalid_extension', 400);
+        $runtime = new PhpRuntime();
+        $state = $runtime->statuses()[$service]['state'] ?? 'not_created';
+        if ($state === 'busy' || $runtime->hasBlockingRequests($service)) {
+            throw new HttpException('php_controller.busy', 409);
         }
-        (new PhpIniEditor())->disableExtension($service, $name);
+        if ($state !== 'running') {
+            throw new HttpException('php_controller.container_not_running', 409);
+        }
+        $requestId = $runtime->request($service, 'uninstall-ext', $name);
+        try {
+            (new PhpIniEditor())->removeExtension($service, $name);
+        } catch (HttpException) {
+            // Prefer container uninstall even if ini cleanup fails.
+        }
 
         return Response::json([
-            'message_key' => 'php_controller.extension_disabled',
-            'php_details' => (new PhpDetails())->forService($service),
+            'request_id' => $requestId,
+            'message_key' => 'php_controller.extension_uninstall_requested',
+            'message_parameters' => ['extension' => $name],
         ]);
     }
 }

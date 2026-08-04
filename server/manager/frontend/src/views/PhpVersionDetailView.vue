@@ -69,6 +69,11 @@ async function saveIni() {
 }
 
 async function extAction(name, action) {
+  if (action === 'uninstall') {
+    if (!window.confirm(t('php_controller.ext_uninstall_confirm', { extension: name }))) {
+      return
+    }
+  }
   pending.value = `${action}:${name}`
   try {
     const path = `/api/php-controllers/${service.value}/extensions/${name}/${action}`
@@ -77,7 +82,7 @@ async function extAction(name, action) {
       'success',
       t(result.message_key || 'php_controller.action_success', result.message_parameters || {}),
     )
-    if (action === 'install') {
+    if (action === 'install' || action === 'uninstall') {
       await new Promise((r) => setTimeout(r, 3000))
       await loadBootstrap()
     } else if (action === 'enable' || action === 'disable') {
@@ -246,6 +251,18 @@ onMounted(async () => {
                         pending === `disable:${ext.name}`
                           ? t('action.working')
                           : t('php_controller.ext_disable')
+                      }}
+                    </button>
+                    <button
+                      v-if="ext.status === 'loaded' || ext.status === 'enabled_in_ini'"
+                      type="button"
+                      :disabled="state !== 'running' || !!pending"
+                      @click="extAction(ext.name, 'uninstall')"
+                    >
+                      {{
+                        pending === `uninstall:${ext.name}`
+                          ? t('action.working')
+                          : t('php_controller.ext_uninstall')
                       }}
                     </button>
                   </div>

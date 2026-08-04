@@ -80,11 +80,11 @@ final class PhpRuntime
         return $statuses;
     }
 
-    /** True when start/stop/restart/create/install-ext is queued — not modules probes. */
+    /** True when start/stop/restart/create/install-ext/uninstall-ext is queued — not modules probes. */
     public function hasBlockingRequests(string $service): bool
     {
         foreach (glob($this->basePath . '/requests/*__' . $service . '__*.json') ?: [] as $file) {
-            if (preg_match('/__(?:start|stop|restart|create|install-ext)/', basename($file))) {
+            if (preg_match('/__(?:start|stop|restart|create|install-ext|uninstall-ext)/', basename($file))) {
                 return true;
             }
         }
@@ -98,14 +98,14 @@ final class PhpRuntime
         if (!isset($targets[$service])) {
             throw new HttpException('php_controller.invalid_service', 400);
         }
-        $allowed = ['start', 'stop', 'restart', 'create', 'modules', 'install-ext'];
+        $allowed = ['start', 'stop', 'restart', 'create', 'modules', 'install-ext', 'uninstall-ext'];
         if (!in_array($action, $allowed, true)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
         if ($action === 'create' && ($targets[$service]['profile'] ?? null) === null) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
-        if ($action === 'install-ext') {
+        if ($action === 'install-ext' || $action === 'uninstall-ext') {
             if ($extension === null || !PhpExtensionCatalog::isCurated($extension) || !preg_match('/^[a-z0-9_]+$/', $extension)) {
                 throw new HttpException('php_controller.invalid_extension', 400);
             }
@@ -128,11 +128,13 @@ final class PhpRuntime
             'action' => $action,
             'requested_at' => date(DATE_ATOM),
         ];
-        if ($action === 'install-ext') {
+        if ($action === 'install-ext' || $action === 'uninstall-ext') {
             $payload['extension'] = $extension;
         }
         $request = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
-        $suffix = $action === 'install-ext' ? ($action . '-' . $extension) : $action;
+        $suffix = ($action === 'install-ext' || $action === 'uninstall-ext')
+            ? ($action . '-' . $extension)
+            : $action;
         $finalPath = $requestDir . '/' . $requestId . '__' . $service . '__' . $suffix . '.json';
         $tempPath = $finalPath . '.tmp';
 

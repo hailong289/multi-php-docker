@@ -137,4 +137,33 @@ final class PhpIniEditor
     {
         $this->write($service, $this->toggleExtensionContent($this->read($service), $name, false));
     }
+
+    /** Remove active/commented extension= lines for $name entirely. */
+    public function removeExtensionContent(string $iniContent, string $name): string
+    {
+        if (!preg_match('/^[a-z0-9_]+$/', $name)) {
+            throw new HttpException('php_controller.invalid_extension', 400);
+        }
+        $lines = preg_split("/\r\n|\n|\r/", $iniContent) ?: [];
+        $pattern = '/^\s*;?\s*extension\s*=\s*' . preg_quote($name, '/') . '(?:\.so)?\s*;?\s*$/i';
+        $zend = '/^\s*;?\s*zend_extension\s*=\s*.*' . preg_quote($name, '/') . '.*$/i';
+        $kept = [];
+        foreach ($lines as $line) {
+            if (preg_match($pattern, $line) || preg_match($zend, $line)) {
+                continue;
+            }
+            $kept[] = $line;
+        }
+        $out = implode("\n", $kept);
+        if (str_ends_with($iniContent, "\n") && !str_ends_with($out, "\n")) {
+            $out .= "\n";
+        }
+
+        return $out;
+    }
+
+    public function removeExtension(string $service, string $name): void
+    {
+        $this->write($service, $this->removeExtensionContent($this->read($service), $name));
+    }
 }
