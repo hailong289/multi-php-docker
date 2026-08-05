@@ -4,6 +4,7 @@ import { apiGet, apiSend, setCsrfToken } from '../api'
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
+  'Nginx templates were synced and reloaded successfully.': 'reload.status.synced',
   'Could not generate Nginx templates. See runtime/nginx.reload.log.': 'reload.status.generate_failed',
   'Nginx configuration is invalid. Previous configuration was restored.': 'reload.status.invalid',
   'Nginx could not reload. Previous configuration was restored.': 'reload.status.failed',

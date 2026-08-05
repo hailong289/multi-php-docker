@@ -1117,6 +1117,61 @@ select:focus {
   }
 }
 
+.nginx-templates-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.4fr);
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.nginx-templates-list {
+  border-right: 1px solid var(--line);
+  max-height: 640px;
+  overflow: auto;
+}
+
+.nginx-templates-list tbody tr {
+  cursor: pointer;
+}
+
+.nginx-template-editor {
+  min-width: 0;
+}
+
+.nginx-template-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.nginx-template-meta {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nginx-template-textarea {
+  width: 100%;
+  min-height: 420px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .nginx-templates-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .nginx-templates-list {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    max-height: 240px;
+  }
+}
+
 .supervisor-logs {
   border-top: 1px solid var(--line);
 }

@@ -133,6 +133,15 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="nginx-templates-tab"]',
+        popover: {
+          title: t('tour.nginx.templates_title'),
+          description: t('tour.nginx.templates_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="nginx-logs"]',
         popover: {
           title: t('tour.nginx.logs_title'),
