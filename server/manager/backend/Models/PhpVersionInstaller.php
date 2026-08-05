@@ -167,7 +167,7 @@ services:
       - app-network
 
   {$supervisorName}:
-    profiles: ["{$service}"]
+    profiles: ["{$supervisorName}"]
     image: {$image}
     container_name: {$supervisorContainer}
     volumes:
@@ -180,9 +180,15 @@ services:
     working_dir: /var/www/{$source}
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
-      - mysql
-      - redis
-      - rabbitmq
+      mysql:
+        condition: service_started
+        required: false
+      redis:
+        condition: service_started
+        required: false
+      rabbitmq:
+        condition: service_started
+        required: false
     networks:
       - app-network
 

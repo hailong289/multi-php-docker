@@ -159,6 +159,12 @@ onMounted(() => {
                 >
                   {{ $t('php_controller.details') }}
                 </button>
+                <button
+                  type="button"
+                  @click="$router.push({ name: 'php-version-supervisor', params: { service } })"
+                >
+                  {{ $t('php_controller.supervisor') }}
+                </button>
               </div>
             </td>
           </tr>

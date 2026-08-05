@@ -29,6 +29,7 @@ final class PhpRuntime
                 'container' => $config['container'],
                 'profile' => $profile,
                 'create_command' => $create,
+                'supervisor_service' => PhpVersionId::supervisorService($service),
             ];
         }
 

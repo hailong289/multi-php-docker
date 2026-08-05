@@ -5,10 +5,12 @@ declare(strict_types=1);
 use Manager\Controllers\BootstrapController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HostsController;
+use Manager\Controllers\InfraController;
 use Manager\Controllers\NginxController;
 use Manager\Controllers\PhpControllerController;
 use Manager\Controllers\ServerController;
 use Manager\Controllers\SessionController;
+use Manager\Controllers\SupervisorController;
 
 return [
     ['GET', '/session', [SessionController::class, 'show']],
@@ -25,6 +27,12 @@ return [
     ['PUT', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'updateExtra']],
     ['DELETE', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'destroyExtra']],
     ['PUT', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'update']],
+    ['GET', '/infra-services', [InfraController::class, 'index']],
+    ['POST', '/infra-services/(?P<service>mysql|redis|rabbitmq)/(?P<action>start|stop|restart|create)', [InfraController::class, 'action']],
+    ['GET', '/supervisor', [SupervisorController::class, 'index']],
+    ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)', [SupervisorController::class, 'details']],
+    ['POST', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/clear-log', [SupervisorController::class, 'clearLog']],
+    ['POST', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/(?P<action>start|stop|restart|create)', [SupervisorController::class, 'action']],
     ['GET', '/php-controllers', [PhpControllerController::class, 'index']],
     ['GET', '/php-controllers/available-versions', [PhpControllerController::class, 'availableVersions']],
     ['POST', '/php-controllers/install-version', [PhpControllerController::class, 'installVersion']],

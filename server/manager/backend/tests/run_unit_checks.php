@@ -14,8 +14,10 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+use Manager\Models\InfraRuntime;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
+use Manager\Models\PhpVersionId;
 
 function assert_true(bool $cond, string $msg): void
 {
@@ -82,5 +84,32 @@ foreach ($customEntries as $e) {
 }
 assert_true(($byCustom['yaml'] ?? '') === 'loaded', 'custom yaml loaded');
 assert_true(($byCustom['redis'] ?? '') === 'available_to_install', 'curated still listed');
+
+assert_true(PhpVersionId::supervisorService('php-8.2') === 'supervisor', 'default supervisor service');
+assert_true(PhpVersionId::supervisorContainer('php-8.2') === 'supervisor_container', 'default supervisor container');
+assert_true(PhpVersionId::supervisorService('php-8.1') === 'supervisor-8.1', '8.1 supervisor service');
+assert_true(PhpVersionId::supervisorContainer('php-8.1') === 'supervisor81_container', '8.1 supervisor container');
+assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor') === 'php-8.2', 'supervisor → php-8.2');
+assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor-8.1') === 'php-8.1', 'supervisor-8.1 → php-8.1');
+assert_true(PhpVersionId::isValidSupervisorService('supervisor'), 'valid supervisor');
+assert_true(PhpVersionId::isValidSupervisorService('supervisor-8.2.33-alpine'), 'valid alpine supervisor');
+
+$infraTargets = InfraRuntime::targets();
+assert_true(isset($infraTargets['mysql'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
+assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
+assert_true($infraTargets['redis']['container'] === 'redis_container', 'redis container');
+assert_true(str_contains($infraTargets['rabbitmq']['create_command'], '--profile rabbitmq'), 'rabbitmq create cmd');
+
+$infraTmp = sys_get_temp_dir() . '/infra-runtime-' . bin2hex(random_bytes(4));
+mkdir($infraTmp . '/requests', 0775, true);
+mkdir($infraTmp . '/status', 0775, true);
+$infra = new InfraRuntime($infraTmp);
+$statuses = $infra->statuses();
+assert_true(($statuses['mysql']['state'] ?? '') === 'not_created', 'mysql not_created default');
+$requestId = $infra->request('mysql', 'create');
+assert_true(strlen($requestId) === 32, 'infra request id');
+assert_true($infra->hasBlockingRequests('mysql'), 'mysql has blocking create');
+$busyStatuses = $infra->statuses();
+assert_true(($busyStatuses['mysql']['state'] ?? '') === 'busy', 'mysql busy while queued');
 
 echo "All checks passed\n";

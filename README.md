@@ -21,7 +21,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | PHP Controller | `php_controller_container` | Không public | Điều khiển allowlist PHP container qua Docker socket |
 | Env Init | `env_init_container` | Không public | Tạo `env.json` nếu thiếu rồi thoát với mã `0` |
 
-PHP 8.2 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.2; PHP 7.4, 8.0 và 8.1 được đặt trong profile riêng và mặc định không chạy.
+PHP 8.2 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.2; PHP 7.4, 8.0 và 8.1 được đặt trong profile riêng và mặc định không chạy. MySQL, Redis, RabbitMQ và Supervisor cũng nằm trong profile riêng: mặc định không khởi động cho đến khi bạn bật profile tương ứng.
 
 Các image được cung cấp sẵn:
 
@@ -208,7 +208,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Lệnh trên khởi động PHP 8.2 cùng Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager và PHP Controller. Các PHP version cũ không được khởi động.
+Lệnh trên khởi động PHP 8.2 cùng Nginx, Server Manager và PHP Controller. Các PHP version cũ, MySQL, Redis, RabbitMQ và Supervisor không được khởi động.
 
 `HOST_PROJECT_PATH` được `php-controller` tự suy ra từ bind mount `/project`. `.env` cũ vẫn được hỗ trợ làm override tương thích ngược, nhưng không còn bắt buộc. Helper hosts là tích hợp hệ điều hành tùy chọn và có fallback thêm hosts thủ công.
 
@@ -244,6 +244,61 @@ docker compose rm -f php-8.1
 ```
 
 Khi một project trong `env.json` dùng `php8.0_container`, `php8.1_container` hoặc `php7.4_container`, hãy bật profile tương ứng trước khi khởi động/tạo lại Nginx. Nếu không, Nginx không thể kết nối tới upstream PHP đó.
+
+### Bật MySQL, Redis hoặc RabbitMQ
+
+Mỗi dịch vụ có một Compose profile cùng tên. Chỉ khi bật profile, Compose mới pull image (nếu chưa có) và khởi động container — không build:
+
+```bash
+# MySQL
+docker compose --profile mysql up -d mysql
+
+# Redis
+docker compose --profile redis up -d redis
+
+# RabbitMQ
+docker compose --profile rabbitmq up -d rabbitmq
+```
+
+Bật nhiều dịch vụ cùng lúc:
+
+```bash
+docker compose \
+  --profile mysql \
+  --profile redis \
+  --profile rabbitmq \
+  up -d
+```
+
+Hoặc pull trước rồi mới chạy:
+
+```bash
+docker compose --profile mysql pull mysql
+docker compose --profile mysql up -d mysql
+```
+
+Tắt một dịch vụ:
+
+```bash
+docker compose stop mysql
+docker compose rm -f mysql
+```
+
+### Bật Supervisor
+
+Mỗi container Supervisor có profile riêng (không chạy cùng PHP). Bật qua Server Manager: trang **PHP versions** → nút **Supervisor** của từng phiên bản, hoặc CLI:
+
+```bash
+# Supervisor PHP 8.2 (mặc định)
+docker compose --profile supervisor up -d supervisor
+
+# Supervisor theo phiên bản PHP
+docker compose --profile supervisor-8.1 up -d supervisor-8.1
+docker compose --profile supervisor-8.0 up -d supervisor-8.0
+docker compose --profile supervisor-7.4 up -d supervisor-7.4
+```
+
+Trong UI có thể Tạo / Khởi động / Dừng / Khởi động lại và theo dõi log trong `logs/supervisor*` (làm mới thủ công hoặc bật Follow).
 
 ## Quản lý server bằng giao diện web
 
@@ -381,7 +436,7 @@ Build image riêng trước rồi khởi động container:
 
 ```bash
 docker compose build php-8.2
-docker compose up -d php-8.2 supervisor
+docker compose --profile supervisor up -d supervisor
 
 # Build và chạy một service khác
 docker compose build <service-name>
@@ -421,7 +476,7 @@ Có thể tạo nhiều file `.conf` trong `configs/supervisor.d/` để chạy 
 
 ```bash
 # Khởi động PHP-FPM và Supervisor từ image có sẵn
-docker compose up -d php-8.2 supervisor
+docker compose --profile supervisor up -d supervisor
 
 # Xem trạng thái worker
 docker compose exec supervisor supervisorctl status
@@ -438,7 +493,7 @@ docker compose logs -f supervisor
 ls logs/supervisor
 ```
 
-Supervisor dùng hostname `mysql`, `redis` và `rabbitmq` để kết nối các dịch vụ trong `app-network`. `depends_on` chỉ đảm bảo container được khởi động theo thứ tự, không đảm bảo dịch vụ đã sẵn sàng nhận kết nối; worker nên có cơ chế retry.
+Supervisor dùng hostname `mysql`, `redis` và `rabbitmq` để kết nối các dịch vụ trong `app-network`. `depends_on` với `required: false` chỉ sắp thứ tự khởi động khi các profile MySQL/Redis/RabbitMQ đang bật; không đảm bảo dịch vụ đã sẵn sàng nhận kết nối — worker nên có cơ chế retry.
 
 ### Dùng Supervisor với phiên bản PHP khác
 
@@ -462,11 +517,11 @@ cp configs/supervisor.d/worker.conf.example \
    configs/supervisor.d/php8.1/worker.conf
 # Sửa directory/command trong worker.conf
 
-docker compose --profile php-8.1 up -d php-8.1 supervisor-8.1
+docker compose --profile php-8.1 --profile supervisor-8.1 up -d php-8.1 supervisor-8.1
 docker compose exec supervisor-8.1 supervisorctl status
 ```
 
-Tương tự với profile `php-8.0` / service `supervisor-8.0`.
+Tương tự với profile `php-8.0` / `supervisor-8.0` và service tương ứng.
 
 #### Supervisor cho PHP 7.4
 
@@ -731,7 +786,7 @@ Tắt ứng dụng đang chiếm cổng hoặc đổi cổng host trong `compose
 
 ### Không kết nối được MySQL, Redis hoặc RabbitMQ từ PHP
 
-Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `localhost`. Kiểm tra trạng thái bằng `docker compose ps`.
+Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `localhost`. Kiểm tra trạng thái bằng `docker compose ps`. Nếu container chưa chạy, bật profile rồi khởi động, ví dụ `docker compose --profile mysql up -d mysql`.
 
 ### Build image thất bại
 

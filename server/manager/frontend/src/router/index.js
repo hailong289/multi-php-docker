@@ -5,6 +5,8 @@ import PhpVersionsView from '../views/PhpVersionsView.vue'
 import PhpVersionCatalogView from '../views/PhpVersionCatalogView.vue'
 import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import NginxView from '../views/NginxView.vue'
+import ServicesView from '../views/ServicesView.vue'
+import SupervisorView from '../views/SupervisorView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -28,6 +30,12 @@ const router = createRouter({
       meta: { titleKey: 'nav.nginx' },
     },
     {
+      path: '/services',
+      name: 'services',
+      component: ServicesView,
+      meta: { titleKey: 'nav.services' },
+    },
+    {
       path: '/php-versions',
       name: 'php-versions',
       component: PhpVersionsView,
@@ -40,10 +48,20 @@ const router = createRouter({
       meta: { titleKey: 'nav.php_catalog' },
     },
     {
+      path: '/php-versions/:service/supervisor',
+      name: 'php-version-supervisor',
+      component: SupervisorView,
+      meta: { titleKey: 'supervisor.title' },
+    },
+    {
       path: '/php-versions/:service',
       name: 'php-version-detail',
       component: PhpVersionDetailView,
       meta: { titleKey: 'nav.php_versions' },
+    },
+    {
+      path: '/supervisor',
+      redirect: '/php-versions',
     },
     {
       path: '/:pathMatch(.*)*',

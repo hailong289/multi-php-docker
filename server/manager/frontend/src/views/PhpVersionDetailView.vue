@@ -283,6 +283,13 @@ onMounted(async () => {
           >
             {{ isPending('php', { service, action: 'restart' }) ? t('action.working') : t('php_controller.restart') }}
           </button>
+          <button
+            type="button"
+            :disabled="!!pending"
+            @click="router.push({ name: 'php-version-supervisor', params: { service: service } })"
+          >
+            {{ t('php_controller.supervisor') }}
+          </button>
         </div>
       </div>
 

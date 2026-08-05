@@ -14,9 +14,19 @@ mkdir -p "${DOCKER_CONFIG:-/tmp/docker-config}"
 container_for_service() {
     case "$1" in
         nginx) printf '%s' 'nginx_container' ;;
+        mysql) printf '%s' 'mysql_container' ;;
+        redis) printf '%s' 'redis_container' ;;
+        rabbitmq) printf '%s' 'rabbitmq_container' ;;
+        supervisor) printf '%s' 'supervisor_container' ;;
+        supervisor-*)
+            # supervisor-8.1 → supervisor81_container
+            # supervisor-8.2.33-alpine → supervisor8233alpine_container
+            # BusyBox tr treats leading '-' in SET as options; use sed instead.
+            printf 'supervisor%s_container' "$(printf '%s' "${1#supervisor-}" | sed 's/[-.]//g')"
+            ;;
         php-*)
             # php-8.3 → php8.3_container ; php-8.3-alpine → php8.3alpine_container
-            printf 'php%s_container' "$(printf '%s' "${1#php-}" | tr -d '-')"
+            printf 'php%s_container' "$(printf '%s' "${1#php-}" | sed 's/-//g')"
             ;;
         *) return 1 ;;
     esac
@@ -25,9 +35,29 @@ container_for_service() {
 profile_for_service() {
     case "$1" in
         php-8.2) return 1 ;;
+        mysql|redis|rabbitmq|supervisor)
+            printf '%s' "$1"
+            ;;
+        supervisor-*)
+            printf '%s' "$1"
+            ;;
         php-*)
             printf '%s' "$1"
             ;;
+        *) return 1 ;;
+    esac
+}
+
+is_infra_service() {
+    case "$1" in
+        mysql|redis|rabbitmq) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_supervisor_service() {
+    case "$1" in
+        supervisor|supervisor-*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -40,6 +70,24 @@ list_php_services() {
             php-*.*) printf '%s\n' "$base" ;;
         esac
     done
+}
+
+list_infra_services() {
+    printf '%s\n' mysql redis rabbitmq
+}
+
+list_supervisor_services() {
+    for f in /project/compose/php-*.yml; do
+        [ -f "$f" ] || continue
+        sed -n 's/^  \(supervisor[^:]*\):[[:space:]]*$/\1/p' "$f"
+    done
+}
+
+list_managed_services() {
+    list_php_services
+    printf '%s\n' nginx
+    list_infra_services
+    list_supervisor_services
 }
 
 prepare_compose_tmp() {
@@ -112,6 +160,47 @@ run_compose_create() {
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" create "$service"
     "$@"
+}
+
+# Hub images (MySQL/Redis/RabbitMQ): pull then create — do not build.
+run_compose_pull_create() {
+    project_name="$1"
+    compose_file="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" pull "$service"
+    "$@" || return 1
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" create "$service"
+    "$@"
+}
+
+# Hub / pre-built images: create without build. Pull if the image is missing.
+run_compose_create_or_pull() {
+    project_name="$1"
+    compose_file="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" create "$service"
+    if "$@"; then
+        return 0
+    fi
+
+    run_compose_pull_create "$project_name" "$compose_file" "$profile" "$service"
 }
 
 run_compose_recreate_start() {
@@ -253,6 +342,11 @@ parse_request_fields() {
     printf '%s' "$request_id" | grep -Eq '^[0-9a-f]{32}$' || return 1
     case "$service" in
         nginx) ;;
+        mysql|redis|rabbitmq) ;;
+        supervisor) ;;
+        supervisor-*)
+            printf '%s' "$service" | grep -Eq '^supervisor-[0-9]+(\.[0-9]+)+(-alpine|-trixie)?$' || return 1
+            ;;
         php-*)
             printf '%s' "$service" | grep -Eq '^php-[0-9]+(\.[0-9]+)+(-alpine|-trixie)?$' || return 1
             ;;
@@ -261,13 +355,20 @@ parse_request_fields() {
     case "$action" in
         start|stop|restart|create|install-version)
             [ -z "$extension" ] || return 1
+            if [ "$action" = "install-version" ] && { is_infra_service "$service" || is_supervisor_service "$service"; }; then
+                return 1
+            fi
             ;;
         modules|available-ext)
             [ "$service" != "nginx" ] || return 1
+            is_infra_service "$service" && return 1
+            is_supervisor_service "$service" && return 1
             [ -z "$extension" ] || return 1
             ;;
         install-ext|uninstall-ext)
             [ "$service" != "nginx" ] || return 1
+            is_infra_service "$service" && return 1
+            is_supervisor_service "$service" && return 1
             extension_allowed "$extension" || return 1
             ;;
         *) return 1 ;;
@@ -275,7 +376,7 @@ parse_request_fields() {
     return 0
 }
 
-for service in $(list_php_services) nginx; do
+for service in $(list_managed_services); do
     refresh_service "$service"
 done
 
@@ -295,6 +396,14 @@ while true; do
         action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
         extension=$(printf '%s' "$request" | sed -n 's/^.*"extension":"\([a-z0-9_]*\)".*$/\1/p')
         if [ "$service" = "nginx" ] && { [ "$action" = "create" ] || [ "$action" = "install-version" ]; }; then
+            reject_request "$request_file"
+            continue
+        fi
+        if is_infra_service "$service" && [ "$action" = "install-version" ]; then
+            reject_request "$request_file"
+            continue
+        fi
+        if is_supervisor_service "$service" && [ "$action" = "install-version" ]; then
             reject_request "$request_file"
             continue
         fi
@@ -389,6 +498,20 @@ while true; do
                     "$profile" "$service" >"$STATUS_DIR/$service.last-install-version.log" 2>&1; then
                     ok=1
                 fi
+            elif is_infra_service "$service"; then
+                if run_compose_pull_create "$project_name" "$tmp_dir/docker-compose.yml" \
+                    "$profile" "$service" >"/tmp/${service}-create.log" 2>&1; then
+                    ok=1
+                else
+                    cp "/tmp/${service}-create.log" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+                fi
+            elif is_supervisor_service "$service"; then
+                if run_compose_create_or_pull "$project_name" "$tmp_dir/docker-compose.yml" \
+                    "$profile" "$service" >"/tmp/${service}-create.log" 2>&1; then
+                    ok=1
+                else
+                    cp "/tmp/${service}-create.log" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+                fi
             elif run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
                 "$profile" "$service" >/tmp/php-create.log 2>&1; then
                 ok=1
@@ -430,13 +553,13 @@ while true; do
         fi
         rm -f "$request_file"
 
-        for refresh_target in $(list_php_services) nginx; do
+        for refresh_target in $(list_managed_services); do
             [ "$refresh_target" = "$service" ] || refresh_service "$refresh_target"
         done
     done
     refresh_tick=$((refresh_tick + 1))
     if [ "$refresh_tick" -ge 5 ]; then
-        for refresh_target in $(list_php_services) nginx; do
+        for refresh_target in $(list_managed_services); do
             refresh_service "$refresh_target"
         done
         refresh_tick=0

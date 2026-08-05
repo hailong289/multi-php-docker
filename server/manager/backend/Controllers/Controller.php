@@ -8,9 +8,11 @@ use Manager\Http\Request;
 use Manager\Http\Response;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
+use Manager\Models\InfraRuntime;
 use Manager\Models\NginxReload;
 use Manager\Models\PhpRuntime;
 use Manager\Models\PhpVersionCatalog;
+use Manager\Models\SupervisorRuntime;
 use Manager\Support\Csrf;
 
 abstract class Controller
@@ -21,6 +23,8 @@ abstract class Controller
         $servers = $env->all();
         $nginx = new NginxReload();
         $php = new PhpRuntime();
+        $infra = new InfraRuntime();
+        $supervisor = new SupervisorRuntime();
         $hosts = new HostsSync();
 
         return [
@@ -35,6 +39,14 @@ abstract class Controller
             'php_controllers' => [
                 'targets' => PhpRuntime::targets(),
                 'statuses' => $php->statuses(),
+            ],
+            'infra_services' => [
+                'targets' => InfraRuntime::targets(),
+                'statuses' => $infra->statuses(),
+            ],
+            'supervisor_services' => [
+                'targets' => SupervisorRuntime::targets(),
+                'statuses' => $supervisor->statuses(),
             ],
             'csrf_token' => Csrf::token(),
         ];

@@ -1,5 +1,6 @@
 services:
   mysql:
+    profiles: ["mysql"]
     image: long301001/multi-php-docker:mysql
     container_name: mysql_container
     environment:

@@ -103,8 +103,53 @@ final class PhpVersionId
 
     public static function supervisorContainer(string $service): string
     {
+        if (self::isDefault($service)) {
+            return 'supervisor_container';
+        }
+
         return 'supervisor' . str_replace('.', '', self::minorFromService($service))
             . self::containerSuffix($service) . '_container';
+    }
+
+    /** Compose service name for Supervisor paired with a PHP-FPM service. */
+    public static function supervisorService(string $phpService): string
+    {
+        if (self::isDefault($phpService)) {
+            return 'supervisor';
+        }
+
+        return 'supervisor-' . self::minorFromService($phpService) . self::pathSuffix($phpService);
+    }
+
+    public static function supervisorLogRelative(string $phpService): string
+    {
+        if (self::isDefault($phpService)) {
+            return 'logs/supervisor';
+        }
+
+        return 'logs/' . self::supervisorService($phpService);
+    }
+
+    public static function isValidSupervisorService(string $service): bool
+    {
+        if ($service === 'supervisor') {
+            return true;
+        }
+
+        return (bool) preg_match('/^supervisor-' . self::VERSION_RE . self::VARIANT_SERVICE_RE . '$/', $service);
+    }
+
+    /** Map supervisor service id back to its PHP-FPM service id. */
+    public static function phpServiceFromSupervisor(string $supervisorService): string
+    {
+        if ($supervisorService === 'supervisor') {
+            return self::defaultService();
+        }
+        if (!preg_match('/^supervisor-(' . self::VERSION_RE . self::VARIANT_SERVICE_RE . ')$/', $supervisorService, $m)) {
+            throw new HttpException('supervisor.invalid_service', 400);
+        }
+
+        return 'php-' . $m[1];
     }
 
     public static function sourceDirName(string $service): string

@@ -21,7 +21,7 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
 | Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
-PHP 8.2 is the default version. `docker compose up -d` starts only PHP 8.2; PHP 7.4, 8.0, and 8.1 are assigned to separate profiles and remain disabled by default.
+PHP 8.2 is the default version. `docker compose up -d` starts only PHP 8.2; PHP 7.4, 8.0, and 8.1 are assigned to separate profiles and remain disabled by default. MySQL, Redis, RabbitMQ, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
 
 The following images are provided:
 
@@ -208,7 +208,7 @@ docker compose pull
 docker compose up -d
 ```
 
-The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager, and PHP Controller. Older PHP versions are not started.
+The command above starts PHP 8.2 together with Nginx, Server Manager, and PHP Controller. Older PHP versions, MySQL, Redis, RabbitMQ, and Supervisor are not started.
 
 `php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required. The host helper is an optional OS integration with a manual hosts fallback.
 
@@ -244,6 +244,61 @@ docker compose rm -f php-8.1
 ```
 
 When a project in `env.json` uses `php8.0_container`, `php8.1_container`, or `php7.4_container`, enable the matching profile before starting or recreating Nginx. Otherwise, Nginx cannot connect to that PHP upstream.
+
+### Enable MySQL, Redis, or RabbitMQ
+
+Each service has a Compose profile with the same name. Enabling the profile pulls the image if needed and starts the container — without building:
+
+```bash
+# MySQL
+docker compose --profile mysql up -d mysql
+
+# Redis
+docker compose --profile redis up -d redis
+
+# RabbitMQ
+docker compose --profile rabbitmq up -d rabbitmq
+```
+
+Enable several services together:
+
+```bash
+docker compose \
+  --profile mysql \
+  --profile redis \
+  --profile rabbitmq \
+  up -d
+```
+
+Or pull first, then start:
+
+```bash
+docker compose --profile mysql pull mysql
+docker compose --profile mysql up -d mysql
+```
+
+Stop a service with:
+
+```bash
+docker compose stop mysql
+docker compose rm -f mysql
+```
+
+### Enable Supervisor
+
+Each Supervisor container has its own profile (it does not start with PHP). Enable it from Server Manager: **PHP versions** → **Supervisor** for that version, or the CLI:
+
+```bash
+# Default PHP 8.2 Supervisor
+docker compose --profile supervisor up -d supervisor
+
+# Per-version Supervisors
+docker compose --profile supervisor-8.1 up -d supervisor-8.1
+docker compose --profile supervisor-8.0 up -d supervisor-8.0
+docker compose --profile supervisor-7.4 up -d supervisor-7.4
+```
+
+The UI supports Create / Start / Stop / Restart and live log viewing under `logs/supervisor*` (manual refresh or Follow).
 
 ## Manage servers in the web interface
 
@@ -381,7 +436,7 @@ Build the custom image before starting the containers:
 
 ```bash
 docker compose build php-8.2
-docker compose up -d php-8.2 supervisor
+docker compose --profile supervisor up -d supervisor
 
 # Build and run another service
 docker compose build <service-name>
@@ -421,7 +476,7 @@ Create multiple `.conf` files in `configs/supervisor.d/` to run workers for mult
 
 ```bash
 # Start PHP-FPM and Supervisor from the provided image
-docker compose up -d php-8.2 supervisor
+docker compose --profile supervisor up -d supervisor
 
 # View worker status
 docker compose exec supervisor supervisorctl status
@@ -438,7 +493,7 @@ docker compose logs -f supervisor
 ls logs/supervisor
 ```
 
-Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` only controls container startup order; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
+Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` with `required: false` only orders startup when the MySQL/Redis/RabbitMQ profiles are enabled; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
 
 ### Using Supervisor with other PHP versions
 
@@ -462,11 +517,11 @@ cp configs/supervisor.d/worker.conf.example \
    configs/supervisor.d/php8.1/worker.conf
 # Edit directory/command in worker.conf
 
-docker compose --profile php-8.1 up -d php-8.1 supervisor-8.1
+docker compose --profile php-8.1 --profile supervisor-8.1 up -d php-8.1 supervisor-8.1
 docker compose exec supervisor-8.1 supervisorctl status
 ```
 
-Same pattern for profile `php-8.0` / service `supervisor-8.0`.
+Same pattern for profiles `php-8.0` / `supervisor-8.0` and matching services.
 
 #### PHP 7.4 Supervisor example
 
@@ -731,7 +786,7 @@ Stop the application using the port or change the host side of the mapping in `c
 
 ### PHP cannot connect to MySQL, Redis, or RabbitMQ
 
-Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of `localhost`. Check container status with `docker compose ps`.
+Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of `localhost`. Check container status with `docker compose ps`. If a container is not running, enable its profile and start it, for example `docker compose --profile mysql up -d mysql`.
 
 ### An image fails to build
 

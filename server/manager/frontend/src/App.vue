@@ -101,12 +101,16 @@ watch(() => route.fullPath, updateTitle)
       <RouterLink to="/nginx" :aria-current="route.name === 'nginx' ? 'page' : undefined">
         {{ t('nav.nginx') }}
       </RouterLink>
+      <RouterLink to="/services" :aria-current="route.name === 'services' ? 'page' : undefined">
+        {{ t('nav.services') }}
+      </RouterLink>
       <RouterLink
         to="/php-versions"
         :aria-current="
           route.name === 'php-versions' ||
           route.name === 'php-version-detail' ||
-          route.name === 'php-version-catalog'
+          route.name === 'php-version-catalog' ||
+          route.name === 'php-version-supervisor'
             ? 'page'
             : undefined
         "

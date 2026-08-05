@@ -13,7 +13,7 @@ services:
       - app-network
 
   supervisor-8.1:
-    profiles: ["php-8.1"]
+    profiles: ["supervisor-8.1"]
     image: long301001/multi-php-docker:php-8.1
     container_name: supervisor81_container
     volumes:
@@ -26,9 +26,15 @@ services:
     working_dir: /var/www/source_php8.1
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
-      - mysql
-      - redis
-      - rabbitmq
+      mysql:
+        condition: service_started
+        required: false
+      redis:
+        condition: service_started
+        required: false
+      rabbitmq:
+        condition: service_started
+        required: false
     networks:
       - app-network
 

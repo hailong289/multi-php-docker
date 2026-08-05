@@ -30,6 +30,8 @@ const data = reactive({
   hosts_extras: [],
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
+  infra_services: { targets: {}, statuses: {} },
+  supervisor_services: { targets: {}, statuses: {} },
 })
 
 const form = reactive({
@@ -153,6 +155,8 @@ export function useManager() {
     data.hosts_extras = payload.hosts_extras || []
     data.pending_sync = !!payload.pending_sync
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
+    data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
+    data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
     if (payload.csrf_token) setCsrfToken(payload.csrf_token)
   }
 
@@ -296,6 +300,22 @@ export function useManager() {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
+      setTimeout(loadBootstrap, 1500)
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function infraAction(service, action) {
+    busy.value = true
+    pendingAction.value = { kind: 'infra', service, action }
+    try {
+      const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
+      toastFromResult(result)
+      if (result.infra_services) data.infra_services = result.infra_services
       setTimeout(loadBootstrap, 1500)
     } catch (error) {
       showToast('failure', translateApiError(error))
@@ -627,6 +647,27 @@ export function useManager() {
     return phpServiceState(service) === 'not_created' && target.profile !== null
   }
 
+  function infraServiceState(service) {
+    return data.infra_services.statuses[service]?.state || 'not_created'
+  }
+
+  function infraActionEnabled(service, action) {
+    if (busy.value) return false
+    const state = infraServiceState(service)
+    const target = data.infra_services.targets[service]
+    if (action === 'create') {
+      return state === 'not_created' && target?.profile != null
+    }
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
+    return false
+  }
+
+  function showInfraCreateHint(service, target) {
+    return infraServiceState(service) === 'not_created' && target.profile !== null
+  }
+
   watch(
     () => form.php_version,
     (version) => {
@@ -671,6 +712,7 @@ export function useManager() {
     deleteDomain,
     reloadNginx,
     phpAction,
+    infraAction,
     openDomainEdit,
     closeDomainModal,
     saveDomain,
@@ -688,6 +730,9 @@ export function useManager() {
     phpServiceState,
     phpActionEnabled,
     showCreateHint,
+    infraServiceState,
+    infraActionEnabled,
+    showInfraCreateHint,
     isPending,
     showToast,
     dismissToast,
