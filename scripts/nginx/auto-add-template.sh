@@ -39,6 +39,23 @@ find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.template' -delete
 
 # Lặp qua từng server
 for key in $keys; do
+    # ENABLED mặc định true nếu thiếu; false/0/"false" thì bỏ qua (không sinh vhost).
+    # Dùng has("ENABLED") — KHÔNG dùng // vì jq coi false là falsy nên false // true = true.
+    ENABLED_RAW=$(jq -r --arg key "$key" '
+        .[$key] as $s
+        | (if ($s | has("ENABLED")) then $s.ENABLED else true end) as $e
+        | if ($e | type) == "boolean" then (if $e then "true" else "false" end)
+          elif ($e | type) == "number" then (if $e == 0 then "false" else "true" end)
+          else ($e | tostring | ascii_downcase)
+          end
+    ' "$JSON_FILE")
+    case "$ENABLED_RAW" in
+        false|0|no|off)
+            echo "Bỏ qua $key (ENABLED=false)"
+            continue
+            ;;
+    esac
+
     # Trích xuất NAME và PATH từ JSON bằng jq
     DOCKER_APP_NAME=$(jq -r --arg key "$key" '.[$key].APP_NAME' "$JSON_FILE")
     DOCKER_HOSTNAME=$(jq -r --arg key "$key" '.[$key].DOMAIN_NAME' "$JSON_FILE")

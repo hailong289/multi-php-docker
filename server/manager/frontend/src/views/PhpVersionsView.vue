@@ -25,7 +25,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="php-panel">
     <div class="panel-heading">
       <div class="controller-heading panel-heading-row">
         <div>
@@ -36,6 +36,7 @@ onMounted(() => {
           <button
             type="button"
             class="primary"
+            data-tour="php-add"
             :disabled="busy || loading"
             @click="router.push({ name: 'php-version-catalog' })"
           >
@@ -57,7 +58,7 @@ onMounted(() => {
         $t('php_controller.actions'),
       ]"
     />
-    <div v-else class="table-wrap">
+    <div v-else class="table-wrap" data-tour="php-table">
       <table>
         <thead>
           <tr>
@@ -161,6 +162,7 @@ onMounted(() => {
                 </button>
                 <button
                   type="button"
+                  data-tour="php-supervisor"
                   @click="$router.push({ name: 'php-version-supervisor', params: { service } })"
                 >
                   {{ $t('php_controller.supervisor') }}

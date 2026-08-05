@@ -214,7 +214,7 @@ onUnmounted(stopFollow)
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="supervisor-panel">
     <div class="panel-heading nginx-heading">
       <div>
         <button type="button" @click="router.push({ name: 'php-versions' })">
@@ -248,7 +248,7 @@ onUnmounted(stopFollow)
             {{ t('supervisor.create_hint') }}
           </div>
         </div>
-        <div class="controller-actions">
+        <div class="controller-actions" data-tour="supervisor-actions">
           <button
             v-if="showCreate()"
             type="button"
@@ -270,7 +270,7 @@ onUnmounted(stopFollow)
         </div>
       </div>
 
-      <div class="panel-body supervisor-logs">
+      <div class="panel-body supervisor-logs" data-tour="supervisor-logs">
         <div class="nginx-heading">
           <div>
             <h3>{{ t('supervisor.logs_title') }}</h3>

@@ -17,6 +17,8 @@ const {
   startEdit,
   saveServer,
   deleteServer,
+  toggleServerEnabled,
+  isServerEnabled,
   reloadNginx,
   nginxStatusText,
   nginxStatusOk,
@@ -25,16 +27,23 @@ const {
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="home-panel">
     <div class="panel-heading">
       <div class="panel-heading-row">
         <h2>{{ $t('servers.title') }}</h2>
         <div class="panel-heading-actions">
-          <button type="button" class="primary" :disabled="busy || loading" @click="openAddModal">
+          <button
+            type="button"
+            class="primary"
+            data-tour="home-add"
+            :disabled="busy || loading"
+            @click="openAddModal"
+          >
             {{ $t('form.add') }}
           </button>
           <button
             type="button"
+            data-tour="home-reload"
             :class="{ 'is-loading': isPending('reload') }"
             :disabled="busy || loading"
             @click="reloadNginx"
@@ -57,6 +66,7 @@ const {
 
     <TableSkeleton
       v-if="loading"
+      data-tour="home-table"
       :columns="4"
       :rows="4"
       :headers="[
@@ -66,8 +76,8 @@ const {
         $t('table.actions'),
       ]"
     />
-    <div v-else-if="serverEntries.length === 0" class="empty">{{ $t('servers.empty') }}</div>
-    <div v-else class="table-wrap">
+    <div v-else-if="serverEntries.length === 0" class="empty" data-tour="home-table">{{ $t('servers.empty') }}</div>
+    <div v-else class="table-wrap" data-tour="home-table">
       <table>
         <thead>
           <tr>
@@ -78,9 +88,18 @@ const {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in serverEntries" :key="item.key">
+          <tr
+            v-for="item in serverEntries"
+            :key="item.key"
+            :class="{ 'is-disabled': !isServerEnabled(item.server) }"
+          >
             <td>
-              <strong>{{ item.server.APP_NAME }}</strong><br />
+              <strong>{{ item.server.APP_NAME }}</strong>
+              <span
+                v-if="!isServerEnabled(item.server)"
+                class="status-pill status-off"
+              >{{ $t('servers.disabled_badge') }}</span>
+              <br />
               <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
                 {{ item.server.DOMAIN_NAME }}
               </a>
@@ -89,6 +108,30 @@ const {
             <td><code>{{ item.server.SERVER_PATH }}</code></td>
             <td>
               <div class="actions">
+                <button
+                  type="button"
+                  :class="{ 'is-loading': isPending('toggle', { key: item.key }) }"
+                  :disabled="busy"
+                  :title="
+                    isServerEnabled(item.server)
+                      ? $t('action.disable_hint')
+                      : $t('action.enable_hint')
+                  "
+                  @click="toggleServerEnabled(item.key)"
+                >
+                  <span
+                    v-if="isPending('toggle', { key: item.key })"
+                    class="btn-spinner"
+                    aria-hidden="true"
+                  ></span>
+                  {{
+                    isPending('toggle', { key: item.key })
+                      ? $t('action.working')
+                      : isServerEnabled(item.server)
+                        ? $t('action.disable')
+                        : $t('action.enable')
+                  }}
+                </button>
                 <button type="button" :disabled="busy" @click="startEdit(item.key)">
                   {{ $t('action.edit') }}
                 </button>

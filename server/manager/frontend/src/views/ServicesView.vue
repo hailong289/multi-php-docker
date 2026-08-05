@@ -22,7 +22,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="services-panel">
     <div class="panel-heading">
       <div class="controller-heading panel-heading-row">
         <div>
@@ -44,7 +44,7 @@ onMounted(() => {
         $t('services.actions'),
       ]"
     />
-    <div v-else class="table-wrap">
+    <div v-else class="table-wrap" data-tour="services-table">
       <table>
         <thead>
           <tr>

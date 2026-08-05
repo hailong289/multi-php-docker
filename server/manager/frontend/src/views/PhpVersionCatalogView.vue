@@ -118,7 +118,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="php-catalog-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
         <button
@@ -155,7 +155,7 @@ onMounted(async () => {
       </button>
     </div>
 
-    <div class="panel-body php-catalog-filters">
+    <div class="panel-body php-catalog-filters" data-tour="php-catalog-filters">
       <input
         v-model="q"
         type="search"

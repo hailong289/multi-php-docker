@@ -224,6 +224,27 @@ code {
   flex-wrap: wrap;
 }
 
+tr.is-disabled td {
+  opacity: 0.62;
+}
+
+.status-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
+}
+
+.status-pill.status-off {
+  color: var(--muted, #6b7280);
+  background: color-mix(in srgb, var(--muted, #6b7280) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--muted, #6b7280) 28%, transparent);
+}
+
 .locale-form {
   display: inline-flex;
   align-items: stretch;
@@ -1374,4 +1395,67 @@ select:focus {
     align-items: start;
     flex-direction: column;
   }
+}
+
+.tour-replay-btn {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-weight: 700;
+}
+
+.manager-tour-popover {
+  background: var(--panel, #111827);
+  color: var(--text, #e5e7eb);
+  border: 1px solid var(--line, #334155);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.manager-tour-popover .driver-popover-title {
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--text, #e5e7eb);
+}
+
+.manager-tour-popover .driver-popover-description {
+  color: var(--muted, #9ca3af);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.manager-tour-popover .driver-popover-progress-text {
+  color: var(--muted, #9ca3af);
+  font-size: 12px;
+}
+
+.manager-tour-popover button {
+  border-radius: 8px;
+  font-weight: 650;
+}
+
+.manager-tour-popover .driver-popover-next-btn,
+.manager-tour-popover .driver-popover-done-btn {
+  background: var(--primary, #2563eb);
+  color: #fff;
+  border: 0;
+  text-shadow: none;
+}
+
+.manager-tour-popover .driver-popover-prev-btn {
+  background: var(--button-bg, #1f2937);
+  color: var(--text, #e5e7eb);
+  border: 1px solid var(--button-line, #374151);
+  text-shadow: none;
+}
+
+.manager-tour-popover .driver-popover-close-btn {
+  color: var(--muted, #9ca3af);
+}
+
+.manager-tour-popover .driver-popover-arrow-side-left.driver-popover-arrow,
+.manager-tour-popover .driver-popover-arrow-side-right.driver-popover-arrow,
+.manager-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow,
+.manager-tour-popover .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-color: var(--panel, #111827);
 }

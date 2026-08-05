@@ -47,7 +47,7 @@ async function copyManualLines() {
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="domains-panel">
     <div class="panel-heading">
       <div class="panel-heading-row">
         <div>
@@ -58,6 +58,7 @@ async function copyManualLines() {
           <button
             type="button"
             class="primary"
+            data-tour="domains-add"
             :disabled="busy || loading"
             @click="openHostsDomainAdd"
           >
@@ -65,6 +66,7 @@ async function copyManualLines() {
           </button>
           <button
             type="button"
+            data-tour="domains-sync"
             :class="{ 'is-loading': isPending('hosts-sync') }"
             :disabled="busy || loading"
             @click="syncHosts"
@@ -120,7 +122,7 @@ async function copyManualLines() {
         {{ $t('domains.add') }}
       </button>
     </div>
-    <div v-else class="table-wrap">
+    <div v-else class="table-wrap" data-tour="domains-table">
       <table>
         <thead>
           <tr>

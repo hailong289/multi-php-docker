@@ -39,6 +39,7 @@ const form = reactive({
   domain_name: '',
   server_path: '/var/www/source_php8.2/',
   php_version: 'php-8.2',
+  enabled: true,
 })
 
 const domainForm = reactive({
@@ -167,6 +168,10 @@ export function useManager() {
     return 'php-8.2'
   }
 
+  function isServerEnabled(server) {
+    return server?.ENABLED !== false && server?.ENABLED !== 0 && server?.ENABLED !== 'false' && server?.ENABLED !== '0'
+  }
+
   function resetForm() {
     editingKey.value = null
     fieldErrors.value = {}
@@ -176,6 +181,7 @@ export function useManager() {
       ? `${data.php_versions['php-8.2'].source_prefix}/`
       : '/var/www/source_php8.2/'
     form.php_version = 'php-8.2'
+    form.enabled = true
   }
 
   function openAddModal() {
@@ -197,6 +203,7 @@ export function useManager() {
     form.domain_name = server.DOMAIN_NAME || ''
     form.server_path = server.SERVER_PATH || ''
     form.php_version = versionFromContainer(server.CONTAINER_PHP_VERSION || '')
+    form.enabled = isServerEnabled(server)
     modalOpen.value = true
   }
 
@@ -248,6 +255,40 @@ export function useManager() {
       toastFromResult(result)
       if (editingKey.value === key) closeModal()
       if (domainEditingKey.value === key) closeDomainModal()
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function toggleServerEnabled(key) {
+    const server = data.servers[key]
+    if (!server) return
+    const currentlyEnabled = isServerEnabled(server)
+    busy.value = true
+    pendingAction.value = { kind: 'toggle', key }
+    try {
+      const body = {
+        app_name: server.APP_NAME || '',
+        domain_name: server.DOMAIN_NAME || '',
+        server_path: server.SERVER_PATH || '',
+        php_version: versionFromContainer(server.CONTAINER_PHP_VERSION || ''),
+        enabled: !currentlyEnabled,
+      }
+      const result = await apiSend('PUT', `/api/servers/${key}`, body)
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      showToast(
+        'success',
+        t(currentlyEnabled ? 'flash.server_disabled' : 'flash.server_enabled'),
+      )
+      try {
+        await apiSend('POST', '/api/nginx/reload', {})
+        setTimeout(loadBootstrap, 1500)
+      } catch (reloadError) {
+        showToast('failure', translateApiError(reloadError))
+      }
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -709,6 +750,8 @@ export function useManager() {
     startEdit,
     saveServer,
     deleteServer,
+    toggleServerEnabled,
+    isServerEnabled,
     deleteDomain,
     reloadNginx,
     phpAction,

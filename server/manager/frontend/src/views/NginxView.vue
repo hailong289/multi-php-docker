@@ -59,7 +59,7 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="nginx-panel">
     <div class="panel-heading nginx-heading">
       <div>
         <h2>{{ t('nginx.title') }}</h2>
@@ -77,7 +77,7 @@ onMounted(load)
           <span class="state-badge" :class="stateClass(nginx.state)">{{ stateLabel }}</span>
           <code>{{ nginx.container }}</code>
         </div>
-        <div class="controller-actions">
+        <div class="controller-actions" data-tour="nginx-actions">
           <button :disabled="!enabled('start')" @click="run('start', '/api/nginx/actions/start')">
             {{ pending === 'start' ? t('action.working') : t('nginx.start') }}
           </button>
@@ -101,7 +101,7 @@ onMounted(load)
         <p><strong>{{ t('nginx.reload_result') }}:</strong> {{ statusText(nginx.reload_status) }}</p>
       </div>
 
-      <div class="panel-body nginx-log-grid">
+      <div class="panel-body nginx-log-grid" data-tour="nginx-logs">
         <article v-for="name in ['operation', 'error', 'access']" :key="name" class="nginx-log-card">
           <h3>{{ t(`nginx.log_${name}`) }}</h3>
           <pre>{{ nginx.logs?.[name]?.available ? nginx.logs[name].content : t('nginx.log_empty') }}</pre>

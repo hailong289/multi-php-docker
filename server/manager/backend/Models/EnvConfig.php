@@ -92,6 +92,7 @@ final class EnvConfig
         $domainName = strtolower(trim((string) ($input['domain_name'] ?? '')));
         $serverPath = rtrim(trim((string) ($input['server_path'] ?? '')), '/');
         $phpVersion = (string) ($input['php_version'] ?? '');
+        $enabled = self::normalizeEnabled($input['enabled'] ?? $input['ENABLED'] ?? true);
         $errors = [];
 
         if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/', $appName)) {
@@ -138,15 +139,24 @@ final class EnvConfig
                 'DOMAIN_NAME' => $domainName,
                 'SERVER_PATH' => $serverPath,
                 'CONTAINER_PHP_VERSION' => $versions[$phpVersion]['container'] ?? '',
+                'ENABLED' => $enabled,
             ],
             'php_version' => $phpVersion,
         ];
+    }
+
+    public static function isEnabled(array $server): bool
+    {
+        return self::normalizeEnabled($server['ENABLED'] ?? true);
     }
 
     public function requiredProfiles(array $servers): array
     {
         $profiles = [];
         foreach ($servers as $server) {
+            if (!self::isEnabled($server)) {
+                continue;
+            }
             $version = PhpVersionCatalog::versionFromContainer((string) ($server['CONTAINER_PHP_VERSION'] ?? ''));
             $profile = PhpVersionCatalog::versions()[$version]['profile'] ?? null;
             if ($profile !== null) {
@@ -168,6 +178,27 @@ final class EnvConfig
 
         return 'docker compose' . ($profileFlags !== '' ? ' ' . $profileFlags : '') . ' up -d' . "\n"
             . 'docker compose restart nginx';
+    }
+
+    private static function normalizeEnabled(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_int($value) || is_float($value)) {
+            return (int) $value !== 0;
+        }
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            if (in_array($normalized, ['0', 'false', 'no', 'off', ''], true)) {
+                return false;
+            }
+            if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+                return true;
+            }
+        }
+
+        return (bool) filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 
     private static function keyNumber(string $key): int

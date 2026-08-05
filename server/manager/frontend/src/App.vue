@@ -4,10 +4,12 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ToastHost from './components/ToastHost.vue'
 import { useManager } from './composables/useManager'
+import { useTour } from './composables/useTour'
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const { fatalError, loadBootstrap, bootstrapped } = useManager()
+const { startCurrentTour } = useTour()
 
 const themeMode = ref(document.documentElement.dataset.themeMode || 'system')
 
@@ -66,13 +68,21 @@ watch(() => route.fullPath, updateTitle)
 
 <template>
   <main class="shell">
-    <header>
+    <header data-tour="app-header">
       <div>
         <h1>{{ t('header.title') }}</h1>
         <p>{{ t('header.subtitle') }}</p>
       </div>
       <div class="header-actions">
         <span class="badge">{{ t('header.local_only') }}</span>
+        <button
+          type="button"
+          data-tour="tour-replay"
+          class="tour-replay-btn"
+          @click="startCurrentTour({ force: true })"
+        >
+          {{ t('tour.button') }}
+        </button>
         <div class="switcher">
           <span class="switcher-label">{{ t('language.label') }}</span>
           <div class="locale-form" role="group" :aria-label="t('language.label')">
@@ -91,21 +101,38 @@ watch(() => route.fullPath, updateTitle)
       </div>
     </header>
 
-    <nav class="nav-menu" aria-label="Main">
-      <RouterLink to="/" :aria-current="route.name === 'home' ? 'page' : undefined">
+    <nav class="nav-menu" aria-label="Main" data-tour="app-nav">
+      <RouterLink
+        to="/"
+        data-tour="nav-home"
+        :aria-current="route.name === 'home' ? 'page' : undefined"
+      >
         {{ t('nav.home') }}
       </RouterLink>
-      <RouterLink to="/domains" :aria-current="route.name === 'domains' ? 'page' : undefined">
+      <RouterLink
+        to="/domains"
+        data-tour="nav-domains"
+        :aria-current="route.name === 'domains' ? 'page' : undefined"
+      >
         {{ t('nav.domains') }}
       </RouterLink>
-      <RouterLink to="/nginx" :aria-current="route.name === 'nginx' ? 'page' : undefined">
+      <RouterLink
+        to="/nginx"
+        data-tour="nav-nginx"
+        :aria-current="route.name === 'nginx' ? 'page' : undefined"
+      >
         {{ t('nav.nginx') }}
       </RouterLink>
-      <RouterLink to="/services" :aria-current="route.name === 'services' ? 'page' : undefined">
+      <RouterLink
+        to="/services"
+        data-tour="nav-services"
+        :aria-current="route.name === 'services' ? 'page' : undefined"
+      >
         {{ t('nav.services') }}
       </RouterLink>
       <RouterLink
         to="/php-versions"
+        data-tour="nav-php"
         :aria-current="
           route.name === 'php-versions' ||
           route.name === 'php-version-detail' ||

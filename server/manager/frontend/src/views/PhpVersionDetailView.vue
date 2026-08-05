@@ -212,7 +212,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="php-detail-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
         <button
@@ -252,7 +252,7 @@ onMounted(async () => {
           </span>
           <code>{{ target.container }}</code>
         </div>
-        <div class="controller-actions">
+        <div class="controller-actions" data-tour="php-detail-actions">
           <button
             v-if="showCreateHint(service, target)"
             type="button"
@@ -293,7 +293,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="panel-body php-detail-tabs-wrap">
+      <div class="panel-body php-detail-tabs-wrap" data-tour="php-detail-tabs">
         <div class="php-detail-tabs" role="tablist">
           <button
             type="button"

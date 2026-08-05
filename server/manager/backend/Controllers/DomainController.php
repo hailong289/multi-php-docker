@@ -89,6 +89,7 @@ final class DomainController extends Controller
             'php_version' => PhpVersionCatalog::versionFromContainer(
                 (string) ($server['CONTAINER_PHP_VERSION'] ?? '')
             ),
+            'enabled' => EnvConfig::isEnabled($server),
         ], $servers, $key);
 
         if ($validation['errors'] !== []) {
