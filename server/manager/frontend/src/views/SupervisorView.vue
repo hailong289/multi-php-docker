@@ -216,12 +216,29 @@ onUnmounted(stopFollow)
 <template>
   <section class="panel" data-tour="supervisor-panel">
     <div class="panel-heading nginx-heading">
-      <div>
-        <button type="button" @click="router.push({ name: 'php-versions' })">
-          ← {{ t('supervisor.back_to_php') }}
+      <div class="php-detail-heading">
+        <button
+          type="button"
+          class="icon-back"
+          :aria-label="t('supervisor.back_to_php')"
+          :title="t('supervisor.back_to_php')"
+          @click="router.push({ name: 'php-versions' })"
+        >
+          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+            <path
+              d="M12.5 4.5 7 10l5.5 5.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </button>
-        <h2>{{ t('supervisor.title_for', { version: phpLabel }) }}</h2>
-        <p>{{ t('supervisor.subtitle_single') }}</p>
+        <div>
+          <h2>{{ t('supervisor.title_for', { version: phpLabel }) }}</h2>
+          <p>{{ t('supervisor.subtitle_single') }}</p>
+        </div>
       </div>
       <button
         type="button"
