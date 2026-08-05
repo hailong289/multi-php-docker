@@ -380,7 +380,6 @@ for service in $(list_managed_services); do
     refresh_service "$service"
 done
 
-refresh_tick=0
 while true; do
     for request_file in "$REQUEST_DIR"/*.json; do
         [ -e "$request_file" ] || break
@@ -557,12 +556,10 @@ while true; do
             [ "$refresh_target" = "$service" ] || refresh_service "$refresh_target"
         done
     done
-    refresh_tick=$((refresh_tick + 1))
-    if [ "$refresh_tick" -ge 5 ]; then
-        for refresh_target in $(list_managed_services); do
-            refresh_service "$refresh_target"
-        done
-        refresh_tick=0
-    fi
+    # Keep status files in sync with Docker even when no requests arrive
+    # (e.g. containers stopped from OrbStack / docker CLI).
+    for refresh_target in $(list_managed_services); do
+        refresh_service "$refresh_target"
+    done
     sleep 1
 done

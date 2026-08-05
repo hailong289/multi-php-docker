@@ -207,17 +207,23 @@ export function useManager() {
     modalOpen.value = true
   }
 
-  async function loadBootstrap() {
-    loading.value = true
-    fatalError.value = ''
+  async function loadBootstrap({ silent = false } = {}) {
+    if (!silent) {
+      loading.value = true
+      fatalError.value = ''
+    }
     try {
       const payload = await apiGet('/api/bootstrap')
       applyBootstrap(payload)
       bootstrapped.value = true
     } catch (error) {
-      fatalError.value = translateApiError(error)
+      if (!silent) {
+        fatalError.value = translateApiError(error)
+      }
     } finally {
-      loading.value = false
+      if (!silent) {
+        loading.value = false
+      }
     }
   }
 

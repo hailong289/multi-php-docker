@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\DockerLiveState;
 
 final class PhpRuntime
 {
@@ -63,6 +64,12 @@ final class PhpRuntime
             if ($this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
                 $status['message_key'] = 'php_controller.processing';
+            } else {
+                $status = DockerLiveState::apply(
+                    $status,
+                    (string) ($target['container'] ?? ''),
+                    'php_controller.status_refreshed'
+                );
             }
             $statuses[$service] = $status;
         }

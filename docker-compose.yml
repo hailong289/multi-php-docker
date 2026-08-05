@@ -87,12 +87,14 @@ services:
       - ./php-controller-runtime:/runtime/php-controller
       - ./nginx/logs:/nginx-logs:ro
       - .:/var/host-project
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     working_dir: /app
     environment:
       MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
       MANAGER_NGINX_LOGS_PATH: /nginx-logs
+      MANAGER_DOCKER_SOCK: /var/run/docker.sock
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:
@@ -103,6 +105,7 @@ services:
   php-controller:
     image: docker:cli
     container_name: php_controller_container
+    restart: unless-stopped
     entrypoint: ["/bin/sh", "/scripts/php/php-controller.sh"]
     environment:
       # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
@@ -123,7 +126,6 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    restart: unless-stopped
     network_mode: none
 
 networks:

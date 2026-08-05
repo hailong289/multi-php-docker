@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\DockerLiveState;
 
 final class NginxManagement
 {
@@ -37,6 +38,12 @@ final class NginxManagement
         if (glob($base . '/requests/*__nginx__*.json')) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
+        } else {
+            $status = DockerLiveState::apply(
+                $status,
+                'nginx_container',
+                'php_controller.status_refreshed'
+            );
         }
         return $status;
     }

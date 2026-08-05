@@ -12,6 +12,7 @@ const { fatalError, loadBootstrap, bootstrapped } = useManager()
 const { startCurrentTour } = useTour()
 
 const themeMode = ref(document.documentElement.dataset.themeMode || 'system')
+let statusPollTimer = null
 
 function applyTheme(mode) {
   themeMode.value = mode
@@ -52,11 +53,28 @@ onMounted(async () => {
   if (!bootstrapped.value) {
     await loadBootstrap()
   }
+  document.addEventListener('visibilitychange', onVisibilityRefresh)
+  statusPollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && bootstrapped.value) {
+      loadBootstrap({ silent: true })
+    }
+  }, 5000)
 })
 
 onUnmounted(() => {
   matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', onSystemThemeChange)
+  document.removeEventListener('visibilitychange', onVisibilityRefresh)
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
 })
+
+function onVisibilityRefresh() {
+  if (document.visibilityState === 'visible' && bootstrapped.value) {
+    loadBootstrap({ silent: true })
+  }
+}
 
 watch(locale, () => {
   updateTitle()

@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\DockerLiveState;
 
 final class InfraRuntime
 {
@@ -80,6 +81,12 @@ final class InfraRuntime
             if ($this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
                 $status['message_key'] = 'services.processing';
+            } else {
+                $status = DockerLiveState::apply(
+                    $status,
+                    (string) ($target['container'] ?? ''),
+                    'php_controller.status_refreshed'
+                );
             }
             $statuses[$service] = $status;
         }

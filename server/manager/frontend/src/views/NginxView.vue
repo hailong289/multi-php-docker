@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
@@ -15,6 +15,7 @@ const nginx = ref({
   reload_status: null,
   logs: {},
 })
+let pollTimer = null
 
 const stateLabel = computed(() => t(`nginx.state_${nginx.value.state || 'not_created'}`))
 
@@ -24,15 +25,15 @@ function enabled(action) {
   return nginx.value.state === 'running'
 }
 
-async function load() {
-  loading.value = true
+async function load({ silent = false } = {}) {
+  if (!silent) loading.value = true
   try {
     const result = await apiGet('/api/nginx/management')
     nginx.value = result.nginx_management
   } catch (error) {
-    showToast('failure', translateApiError(error))
+    if (!silent) showToast('failure', translateApiError(error))
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -50,12 +51,23 @@ async function run(action, path) {
   }
 }
 
+onMounted(() => {
+  load()
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && !pending.value) {
+      load({ silent: true })
+    }
+  }, 5000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
+
 function statusText(status) {
   if (!status) return t('nginx.no_result')
   return status.message_key ? t(status.message_key) : status.message || t('nginx.no_result')
 }
-
-onMounted(load)
 </script>
 
 <template>
