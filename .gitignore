@@ -13,6 +13,8 @@
 *.app/
 /configs/supervisor.d/*
 !/configs/supervisor.d/*.example
+!/configs/supervisor.d/php*/
+!/configs/supervisor.d/php*/.gitkeep
 /.nx
 /.idea
 .DS_Store
@@ -30,5 +32,17 @@
 # Giữ lại file index.php
 !/server/source_php8.2/index.php
 
+/server/source_php8.3/*/
+!/server/source_php8.3/.gitkeep
+
+/server/source_php8.4/*/
+!/server/source_php8.4/.gitkeep
+
+/server/source_php8.5/*/
+!/server/source_php8.5/.gitkeep
+
 /server/source_php7.4/*/
 !/server/source_php7.4/index.php
+
+/logs/supervisor-8.*/
+!/logs/supervisor-8.*/.gitkeep
