@@ -1,7 +1,16 @@
 <script setup>
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import TableSkeleton from '../components/TableSkeleton.vue'
 import { useManager } from '../composables/useManager'
+import {
+  FRAMEWORK_PRESETS,
+  buildServerPath,
+  detectFramework,
+  hostRelativeHint,
+} from '../lib/frameworkPaths'
 
+const { t } = useI18n()
 const {
   loading,
   busy,
@@ -24,6 +33,76 @@ const {
   nginxStatusOk,
   isPending,
 } = useManager()
+
+const frameworkId = ref('laravel')
+const pathTouched = ref(false)
+
+const sourcePrefix = computed(
+  () => data.php_versions?.[form.php_version]?.source_prefix || '/var/www/source_php8.2',
+)
+
+const frameworkHint = computed(() => {
+  const key = `form.framework_hint.${frameworkId.value}`
+  const translated = t(key)
+  return translated === key ? t('form.framework_hint.custom') : translated
+})
+
+const pathExample = computed(() => {
+  if (frameworkId.value === 'custom') return form.server_path || '—'
+  return buildServerPath(sourcePrefix.value, form.app_name, frameworkId.value) || '—'
+})
+
+const hostExample = computed(() => {
+  if (frameworkId.value === 'custom') {
+    return String(form.server_path || '').replace(/^\/var\/www\//, '') || '—'
+  }
+  return hostRelativeHint(sourcePrefix.value, form.app_name, frameworkId.value) || '—'
+})
+
+function applyFrameworkPath({ force = false } = {}) {
+  if (frameworkId.value === 'custom') return
+  if (pathTouched.value && !force) return
+  const next = buildServerPath(sourcePrefix.value, form.app_name, frameworkId.value)
+  if (next) form.server_path = next
+}
+
+function onFrameworkChange() {
+  pathTouched.value = false
+  applyFrameworkPath({ force: true })
+}
+
+function onPathInput() {
+  pathTouched.value = true
+  frameworkId.value = 'custom'
+}
+
+function openAdd() {
+  frameworkId.value = 'laravel'
+  pathTouched.value = false
+  openAddModal()
+  applyFrameworkPath({ force: true })
+}
+
+function openEdit(key) {
+  startEdit(key)
+  frameworkId.value = detectFramework(form.server_path, sourcePrefix.value)
+  pathTouched.value = frameworkId.value === 'custom'
+}
+
+watch(modalOpen, (open) => {
+  if (!open) {
+    frameworkId.value = 'laravel'
+    pathTouched.value = false
+  }
+})
+
+watch(
+  [() => form.app_name, () => form.php_version, frameworkId],
+  () => {
+    if (!modalOpen.value) return
+    applyFrameworkPath()
+  },
+)
 </script>
 
 <template>
@@ -37,7 +116,7 @@ const {
             class="primary"
             data-tour="home-add"
             :disabled="busy || loading"
-            @click="openAddModal"
+            @click="openAdd"
           >
             {{ $t('form.add') }}
           </button>
@@ -132,7 +211,7 @@ const {
                         : $t('action.enable')
                   }}
                 </button>
-                <button type="button" :disabled="busy" @click="startEdit(item.key)">
+                <button type="button" :disabled="busy" @click="openEdit(item.key)">
                   {{ $t('action.edit') }}
                 </button>
                 <button
@@ -201,9 +280,37 @@ const {
           </select>
           <div v-if="fieldErrors.php_version" class="error">{{ fieldErrors.php_version }}</div>
 
+          <label>{{ t('form.framework') }}</label>
+          <select
+            v-model="frameworkId"
+            data-tour="home-framework"
+            @change="onFrameworkChange"
+          >
+            <option v-for="item in FRAMEWORK_PRESETS" :key="item.id" :value="item.id">
+              {{ t(`form.framework_${item.id}`) }}
+            </option>
+          </select>
+          <p class="form-path-hint">{{ frameworkHint }}</p>
+
           <label>{{ $t('form.server_path') }}</label>
-          <input v-model="form.server_path" :placeholder="$t('form.path_placeholder')" required />
+          <input
+            v-model="form.server_path"
+            :placeholder="$t('form.path_placeholder')"
+            required
+            @input="onPathInput"
+          />
           <div v-if="fieldErrors.server_path" class="error">{{ fieldErrors.server_path }}</div>
+          <div class="form-path-guide" data-tour="home-path-guide">
+            <div>
+              <span class="form-path-guide-label">{{ t('form.path_in_container') }}</span>
+              <code>{{ pathExample }}</code>
+            </div>
+            <div>
+              <span class="form-path-guide-label">{{ t('form.path_on_host') }}</span>
+              <code>{{ hostExample }}</code>
+            </div>
+            <p class="create-hint">{{ t('form.path_guide_note') }}</p>
+          </div>
         </fieldset>
 
         <div class="form-actions">

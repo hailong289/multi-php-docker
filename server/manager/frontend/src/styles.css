@@ -788,6 +788,40 @@ button.is-loading:disabled {
   opacity: 0.72;
 }
 
+.form-path-hint {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.form-path-guide {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  display: grid;
+  gap: 8px;
+}
+
+.form-path-guide-label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.form-path-guide code {
+  display: block;
+  word-break: break-all;
+  font-size: 12.5px;
+}
+
+.form-path-guide .create-hint {
+  margin: 2px 0 0;
+}
+
 .manual-path,
 .manual-lines {
   display: block;
