@@ -63,15 +63,38 @@ function destroyActive() {
   }
 }
 
-function resolveSteps(rawSteps) {
+/**
+ * Keep steps that are visible now, or that can become visible via prepareClick.
+ * prepareClick runs on highlight so tabbed UI can switch before the spotlight refreshes.
+ */
+function buildDriverSteps(rawSteps) {
   return rawSteps
-    .map((step) => {
-      if (!step.element) return step
-      const el = document.querySelector(step.element)
-      if (!el) return null
-      return step
+    .filter((step) => {
+      if (!step.element) return true
+      if (document.querySelector(step.element)) return true
+      if (step.prepareClick && document.querySelector(step.prepareClick)) return true
+      return false
     })
-    .filter(Boolean)
+    .map((step) => {
+      const prepareClick = step.prepareClick
+      return {
+        element: step.element,
+        popover: step.popover,
+        onHighlightStarted: (_element, _step, { driver: active }) => {
+          if (!prepareClick) return
+          const trigger = document.querySelector(prepareClick)
+          if (!trigger) return
+          try {
+            trigger.click()
+          } catch (_) {}
+          window.setTimeout(() => {
+            try {
+              active?.refresh?.()
+            } catch (_) {}
+          }, 80)
+        },
+      }
+    })
 }
 
 function pageReady(tourId) {
@@ -96,7 +119,7 @@ export function useTour() {
     if (!raw?.length) return false
 
     destroyActive()
-    const steps = resolveSteps(raw)
+    const steps = buildDriverSteps(raw)
     if (!steps.length) return false
 
     activeDriver = driver({

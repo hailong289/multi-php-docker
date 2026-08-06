@@ -14,6 +14,7 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
@@ -87,6 +88,8 @@ assert_true(($byCustom['redis'] ?? '') === 'available_to_install', 'curated stil
 
 assert_true(PhpVersionId::supervisorService('php-8.2') === 'supervisor', 'default supervisor service');
 assert_true(PhpVersionId::supervisorContainer('php-8.2') === 'supervisor_container', 'default supervisor container');
+assert_true(PhpVersionId::supervisorConfDir('php-8.2') === 'configs/supervisor.d', 'default supervisor conf dir');
+assert_true(PhpVersionId::supervisorConfDir('php-8.1') === 'configs/supervisor.d/php8.1', '8.1 supervisor conf dir');
 assert_true(PhpVersionId::supervisorService('php-8.1') === 'supervisor-8.1', '8.1 supervisor service');
 assert_true(PhpVersionId::supervisorContainer('php-8.1') === 'supervisor81_container', '8.1 supervisor container');
 assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor') === 'php-8.2', 'supervisor → php-8.2');
@@ -98,6 +101,7 @@ $infraTargets = InfraRuntime::targets();
 assert_true(isset($infraTargets['mysql'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
 assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
 assert_true($infraTargets['redis']['container'] === 'redis_container', 'redis container');
+assert_true($infraTargets['mysql']['compose_file'] === 'compose/mysql.yml', 'mysql compose file');
 assert_true(str_contains($infraTargets['rabbitmq']['create_command'], '--profile rabbitmq'), 'rabbitmq create cmd');
 
 $infraTmp = sys_get_temp_dir() . '/infra-runtime-' . bin2hex(random_bytes(4));
@@ -111,5 +115,33 @@ assert_true(strlen($requestId) === 32, 'infra request id');
 assert_true($infra->hasBlockingRequests('mysql'), 'mysql has blocking create');
 $busyStatuses = $infra->statuses();
 assert_true(($busyStatuses['mysql']['state'] ?? '') === 'busy', 'mysql busy while queued');
+
+$composeProj = sys_get_temp_dir() . '/infra-compose-' . bin2hex(random_bytes(4));
+mkdir($composeProj . '/compose', 0775, true);
+file_put_contents($composeProj . '/compose/mysql.yml', "services:\n  mysql:\n    image: mysql:8\n");
+$compose = new InfraCompose($composeProj);
+$read = $compose->read('mysql');
+assert_true(($read['relative_path'] ?? '') === 'compose/mysql.yml', 'compose relative path');
+assert_true(str_contains($read['content'] ?? '', 'mysql:8'), 'compose read content');
+$written = $compose->write('mysql', "services:\n  mysql:\n    image: mysql:8.4\n");
+assert_true(($written['size'] ?? 0) > 10, 'compose write size');
+assert_true(str_contains((string) file_get_contents($composeProj . '/compose/mysql.yml'), 'mysql:8.4'), 'compose file updated');
+$created = $compose->writeFile('custom.yml', "services:\n  custom:\n    image: alpine\n", true);
+assert_true(($created['name'] ?? '') === 'custom.yml', 'compose create custom');
+$list = $compose->list();
+assert_true(count($list) >= 2, 'compose list has files');
+assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
+assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
+try {
+    $compose->deleteFile('mysql.yml');
+    assert_true(false, 'core compose protected');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'services.compose_core_protected', 'core compose protected');
+}
+$compose->deleteFile('custom.yml');
+assert_true(!is_file($composeProj . '/compose/custom.yml'), 'custom compose deleted');
+$pullId = (new InfraRuntime($infraTmp))->request('redis', 'pull-recreate');
+assert_true(strlen($pullId) === 32, 'pull-recreate request id');
+assert_true((new InfraRuntime($infraTmp))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
 
 echo "All checks passed\n";

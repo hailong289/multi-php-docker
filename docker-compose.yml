@@ -85,7 +85,7 @@ services:
       - ./server/manager:/app:ro
       - ./runtime:/runtime
       - ./php-controller-runtime:/runtime/php-controller
-      - ./nginx/logs:/nginx-logs:ro
+      - ./nginx/logs:/nginx-logs
       - .:/var/host-project
       - /var/run/docker.sock:/var/run/docker.sock:ro
     working_dir: /app

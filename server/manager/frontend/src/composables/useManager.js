@@ -706,6 +706,9 @@ export function useManager() {
     if (action === 'create') {
       return state === 'not_created' && target?.profile != null
     }
+    if (action === 'pull-recreate') {
+      return state === 'running' || state === 'stopped'
+    }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
     if (action === 'stop' || action === 'restart') return state === 'running'

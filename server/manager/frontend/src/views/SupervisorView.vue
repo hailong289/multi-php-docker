@@ -1,9 +1,11 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+
+const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +28,7 @@ const supervisorService = computed(() => {
   return ''
 })
 
+const tab = ref('control')
 const loading = ref(true)
 const detailsLoading = ref(false)
 const pending = ref('')
@@ -35,6 +38,18 @@ const clearing = ref(false)
 const details = ref(null)
 const logPre = ref(null)
 let followTimer = null
+
+const configs = ref([])
+const confDir = ref('')
+const defaultContent = ref('')
+const configsLoading = ref(false)
+const selectedConf = ref('')
+const confDraft = ref('')
+const confOriginal = ref('')
+const confMeta = ref(null)
+const confLoading = ref(false)
+const creating = ref(false)
+const newConfName = ref('')
 
 const phpLabel = computed(
   () => data.php_controllers?.targets?.[phpService.value]?.label || phpService.value,
@@ -48,6 +63,7 @@ const currentState = computed(
     data.supervisor_services?.statuses?.[supervisorService.value]?.state ||
     'not_created',
 )
+const confDirty = computed(() => confDraft.value !== confOriginal.value)
 
 function showCreate() {
   return currentState.value === 'not_created'
@@ -61,6 +77,18 @@ function enabled(action) {
   if (action === 'start') return state === 'stopped'
   if (action === 'stop' || action === 'restart') return state === 'running'
   return false
+}
+
+function formatSize(bytes) {
+  if (!bytes && bytes !== 0) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  return `${(bytes / 1024).toFixed(1)} KB`
+}
+
+function formatTime(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
 }
 
 async function scrollLogToBottom() {
@@ -107,6 +135,132 @@ async function loadDetails({ quiet = false } = {}) {
     if (!quiet) showToast('failure', translateApiError(error))
   } finally {
     detailsLoading.value = false
+  }
+}
+
+async function loadConfigs({ silent = false } = {}) {
+  if (!supervisorService.value) return
+  if (!silent) configsLoading.value = true
+  try {
+    const result = await apiGet(`/api/supervisor/${supervisorService.value}/configs`)
+    configs.value = result.configs || []
+    confDir.value = result.conf_dir || ''
+    defaultContent.value = result.default_content || ''
+    if (selectedConf.value && !configs.value.some((item) => item.name === selectedConf.value)) {
+      selectedConf.value = ''
+      confDraft.value = ''
+      confOriginal.value = ''
+      confMeta.value = null
+      creating.value = false
+    }
+  } catch (error) {
+    if (!silent) showToast('failure', translateApiError(error))
+  } finally {
+    if (!silent) configsLoading.value = false
+  }
+}
+
+async function openConf(name) {
+  if (confDirty.value && !confirm(t('supervisor.conf_discard_confirm'))) return
+  creating.value = false
+  selectedConf.value = name
+  confLoading.value = true
+  try {
+    const result = await apiGet(
+      `/api/supervisor/${supervisorService.value}/configs/${encodeURIComponent(name)}`,
+    )
+    confDraft.value = result.config?.content || ''
+    confOriginal.value = confDraft.value
+    confMeta.value = result.config
+  } catch (error) {
+    showToast('failure', translateApiError(error))
+    selectedConf.value = ''
+  } finally {
+    confLoading.value = false
+  }
+}
+
+function startCreateConf() {
+  if (confDirty.value && !confirm(t('supervisor.conf_discard_confirm'))) return
+  creating.value = true
+  selectedConf.value = ''
+  newConfName.value = 'worker.conf'
+  confDraft.value = defaultContent.value
+  confOriginal.value = confDraft.value
+  confMeta.value = null
+}
+
+async function saveConf() {
+  if (!supervisorService.value) return
+  const name = creating.value ? newConfName.value.trim() : selectedConf.value
+  if (!name) {
+    showToast('failure', t('supervisor.conf_invalid_name'))
+    return
+  }
+  if (!creating.value && !confDirty.value) return
+  pending.value = 'conf-save'
+  try {
+    let result
+    if (creating.value) {
+      result = await apiSend('POST', `/api/supervisor/${supervisorService.value}/configs`, {
+        name,
+        content: confDraft.value,
+      })
+    } else {
+      result = await apiSend(
+        'PUT',
+        `/api/supervisor/${supervisorService.value}/configs/${encodeURIComponent(name)}`,
+        { content: confDraft.value },
+      )
+    }
+    if (result.supervisor_services) data.supervisor_services = result.supervisor_services
+    showToast('success', t(result.message_key || 'supervisor.conf_saved'))
+    creating.value = false
+    selectedConf.value = result.config?.name || name
+    confOriginal.value = confDraft.value
+    confMeta.value = { ...(confMeta.value || {}), ...result.config }
+    await loadConfigs({ silent: true })
+    if (result.request_id) {
+      setTimeout(() => {
+        loadBootstrap().then(() => loadDetails({ quiet: true }))
+      }, 1500)
+    }
+  } catch (error) {
+    showToast('failure', translateApiError(error))
+  } finally {
+    pending.value = ''
+  }
+}
+
+async function deleteConf(name) {
+  const targetName = name || selectedConf.value
+  if (!targetName || !supervisorService.value) return
+  if (!confirm(t('supervisor.conf_delete_confirm', { name: targetName }))) return
+  pending.value = 'conf-delete'
+  try {
+    const result = await apiSend(
+      'DELETE',
+      `/api/supervisor/${supervisorService.value}/configs/${encodeURIComponent(targetName)}`,
+    )
+    if (result.supervisor_services) data.supervisor_services = result.supervisor_services
+    showToast('success', t(result.message_key || 'supervisor.conf_deleted'))
+    if (selectedConf.value === targetName) {
+      selectedConf.value = ''
+      confDraft.value = ''
+      confOriginal.value = ''
+      confMeta.value = null
+      creating.value = false
+    }
+    await loadConfigs({ silent: true })
+    if (result.request_id) {
+      setTimeout(() => {
+        loadBootstrap().then(() => loadDetails({ quiet: true }))
+      }, 1500)
+    }
+  } catch (error) {
+    showToast('failure', translateApiError(error))
+  } finally {
+    pending.value = ''
   }
 }
 
@@ -165,15 +319,34 @@ function stopFollow() {
 
 function startFollow() {
   stopFollow()
-  if (!followLogs.value || !supervisorService.value) return
+  if (!followLogs.value || !supervisorService.value || tab.value !== 'control') return
   followTimer = setInterval(() => {
     loadDetails({ quiet: true })
   }, 3000)
 }
 
+function refreshCurrent() {
+  if (tab.value === 'configs') return loadConfigs()
+  return loadBootstrap().then(() => loadDetails())
+}
+
+watch(tab, (next) => {
+  if (next === 'configs') {
+    stopFollow()
+    loadConfigs()
+  } else {
+    startFollow()
+  }
+})
+
 watch(phpService, async () => {
   selectedLog.value = ''
   details.value = null
+  selectedConf.value = ''
+  confDraft.value = ''
+  confOriginal.value = ''
+  creating.value = false
+  tab.value = 'control'
   loading.value = true
   try {
     await ensureBootstrap()
@@ -189,9 +362,9 @@ watch(phpService, async () => {
   }
 })
 
-watch(followLogs, (enabled) => {
+watch(followLogs, () => {
   startFollow()
-  if (enabled) scrollLogToBottom()
+  if (followLogs.value) scrollLogToBottom()
 })
 
 onMounted(async () => {
@@ -240,17 +413,38 @@ onUnmounted(stopFollow)
           <p>{{ t('supervisor.subtitle_single') }}</p>
         </div>
       </div>
-      <button
-        type="button"
-        :disabled="loading || !!pending || detailsLoading"
-        @click="loadBootstrap().then(() => loadDetails())"
-      >
+      <button type="button" :disabled="loading || !!pending || detailsLoading || configsLoading" @click="refreshCurrent">
         {{ t('supervisor.refresh') }}
       </button>
     </div>
 
+    <div class="panel-body php-detail-tabs-wrap" data-tour="supervisor-tabs">
+      <div class="php-detail-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="tab === 'control'"
+          :class="{ active: tab === 'control' }"
+          data-tour="supervisor-control-tab"
+          @click="tab = 'control'"
+        >
+          {{ t('supervisor.tab_control') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="tab === 'configs'"
+          :class="{ active: tab === 'configs' }"
+          data-tour="supervisor-configs-tab"
+          @click="tab = 'configs'"
+        >
+          {{ t('supervisor.tab_configs') }}
+        </button>
+      </div>
+    </div>
+
     <div v-if="loading" class="panel-body">{{ t('loading') }}</div>
-    <template v-else>
+    <template v-else-if="tab === 'control'">
       <div class="panel-body nginx-overview">
         <div>
           <span class="state-badge" :class="stateClass(currentState)">
@@ -342,5 +536,110 @@ onUnmounted(stopFollow)
         </template>
       </div>
     </template>
+
+    <div v-else class="supervisor-configs" data-tour="supervisor-configs">
+      <div class="panel-body nginx-domain-logs-toolbar">
+        <p class="status-line">
+          {{ t('supervisor.conf_hint') }}
+          <code v-if="confDir">{{ confDir }}</code>
+        </p>
+        <button type="button" class="primary" data-tour="supervisor-conf-add" :disabled="!!pending || configsLoading" @click="startCreateConf">
+          {{ t('supervisor.conf_add') }}
+        </button>
+      </div>
+
+      <div v-if="configsLoading && configs.length === 0 && !creating" class="panel-body">{{ t('loading') }}</div>
+      <div v-else-if="configs.length === 0 && !creating" class="panel-body empty">
+        {{ t('supervisor.conf_empty') }}
+      </div>
+      <div v-else class="nginx-templates-layout">
+        <div class="table-wrap nginx-templates-list">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ t('supervisor.conf_name') }}</th>
+                <th>{{ t('supervisor.conf_size') }}</th>
+                <th>{{ t('table.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in configs"
+                :key="item.name"
+                :class="{ 'is-selected': !creating && item.name === selectedConf }"
+                @click="openConf(item.name)"
+              >
+                <td><code>{{ item.name }}</code></td>
+                <td>{{ formatSize(item.size) }}</td>
+                <td>
+                  <button
+                    type="button"
+                    class="danger"
+                    :disabled="!!pending"
+                    @click.stop="deleteConf(item.name)"
+                  >
+                    {{ t('action.delete') }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel-body nginx-template-editor">
+          <div v-if="!creating && !selectedConf" class="empty">{{ t('supervisor.conf_pick') }}</div>
+          <template v-else>
+            <div class="nginx-template-editor-head">
+              <div>
+                <template v-if="creating">
+                  <label class="supervisor-log-file">
+                    {{ t('supervisor.conf_name') }}
+                    <input v-model="newConfName" type="text" placeholder="worker.conf" />
+                  </label>
+                </template>
+                <template v-else>
+                  <strong><code>{{ selectedConf }}</code></strong>
+                  <span v-if="confDirty" class="status-pill status-off">{{ t('nginx.template_dirty') }}</span>
+                </template>
+              </div>
+              <div class="actions">
+                <button
+                  type="button"
+                  class="primary"
+                  :disabled="!!pending || confLoading || (!creating && !confDirty)"
+                  @click="saveConf"
+                >
+                  {{
+                    pending === 'conf-save'
+                      ? t('action.working')
+                      : creating
+                        ? t('supervisor.conf_create')
+                        : t('supervisor.conf_save')
+                  }}
+                </button>
+                <button
+                  v-if="!creating && selectedConf"
+                  type="button"
+                  class="danger"
+                  :disabled="!!pending"
+                  @click="deleteConf()"
+                >
+                  {{ pending === 'conf-delete' ? t('action.working') : t('action.delete') }}
+                </button>
+              </div>
+            </div>
+            <p v-if="confMeta" class="nginx-template-meta">
+              {{ formatSize(confMeta.size) }} · {{ formatTime(confMeta.updated_at) }}
+            </p>
+            <MonacoEditor
+              v-model="confDraft"
+              language="ini"
+              min-height="420px"
+              :read-only="confLoading || pending === 'conf-save'"
+            />
+          </template>
+        </div>
+      </div>
+    </div>
   </section>
 </template>

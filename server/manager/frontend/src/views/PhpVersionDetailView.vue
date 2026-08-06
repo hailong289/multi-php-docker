@@ -1,9 +1,11 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+
+const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -309,6 +311,7 @@ onMounted(async () => {
             role="tab"
             :aria-selected="tab === 'ini'"
             :class="{ active: tab === 'ini' }"
+            data-tour="php-detail-ini-tab"
             @click="tab = 'ini'"
           >
             {{ t('php_controller.tab_ini') }}
@@ -447,12 +450,12 @@ onMounted(async () => {
         <p v-if="details.ini.relative_path" class="php-ini-path">
           <code>{{ details.ini.relative_path }}</code>
         </p>
-        <textarea
+        <MonacoEditor
           v-model="iniDraft"
-          class="php-ini-editor"
-          rows="18"
-          :disabled="!!pending || !details.ini.readable"
-        ></textarea>
+          language="ini"
+          min-height="360px"
+          :read-only="!!pending || !details.ini.readable"
+        />
         <div class="controller-actions php-ini-actions">
           <button
             type="button"

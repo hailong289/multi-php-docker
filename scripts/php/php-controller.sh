@@ -221,6 +221,23 @@ run_compose_recreate_start() {
     "$@"
 }
 
+# Pull latest image then force-recreate + start the service (apply compose.yml changes).
+run_compose_pull_recreate() {
+    project_name="$1"
+    compose_file="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" pull "$service"
+    "$@" || return 1
+
+    run_compose_recreate_start "$project_name" "$compose_file" "$profile" "$service"
+}
+
 container_state() {
     container="$1"
     state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null) || {
@@ -353,9 +370,12 @@ parse_request_fields() {
         *) return 1 ;;
     esac
     case "$action" in
-        start|stop|restart|create|install-version)
+        start|stop|restart|create|install-version|pull-recreate)
             [ -z "$extension" ] || return 1
             if [ "$action" = "install-version" ] && { is_infra_service "$service" || is_supervisor_service "$service"; }; then
+                return 1
+            fi
+            if [ "$action" = "pull-recreate" ] && ! is_infra_service "$service"; then
                 return 1
             fi
             ;;
@@ -474,7 +494,7 @@ while true; do
 
         write_status "$service" "busy" "php_controller.processing" "$request_id"
         ok=0
-        if [ "$action" = "install-version" ] || [ "$action" = "create" ]; then
+        if [ "$action" = "install-version" ] || [ "$action" = "create" ] || [ "$action" = "pull-recreate" ]; then
             profile=$(profile_for_service "$service") || {
                 write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
                 rm -f "$request_file"
@@ -492,7 +512,14 @@ while true; do
             fi
             tmp_dir="/tmp/compose-create.$$"
             prepare_compose_tmp "$host_project" "$tmp_dir"
-            if [ "$action" = "install-version" ]; then
+            if [ "$action" = "pull-recreate" ]; then
+                if is_infra_service "$service" && run_compose_pull_recreate "$project_name" "$tmp_dir/docker-compose.yml" \
+                    "$profile" "$service" >"$STATUS_DIR/$service.last-pull-recreate.log" 2>&1; then
+                    ok=1
+                else
+                    cp "$STATUS_DIR/$service.last-pull-recreate.log" "$STATUS_DIR/last-pull-recreate-error.log" 2>/dev/null || true
+                fi
+            elif [ "$action" = "install-version" ]; then
                 if run_compose_build_up "$project_name" "$tmp_dir/docker-compose.yml" \
                     "$profile" "$service" >"$STATUS_DIR/$service.last-install-version.log" 2>&1; then
                     ok=1

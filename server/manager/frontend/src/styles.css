@@ -1044,6 +1044,14 @@ select:focus {
   flex-wrap: wrap;
 }
 
+.nginx-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .php-detail-heading {
   display: flex;
   align-items: flex-start;
@@ -1094,6 +1102,18 @@ select:focus {
 .nginx-log-card h3 {
   margin: 0 0 8px;
   font-size: 14px;
+}
+
+.nginx-log-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.nginx-log-card-head h3 {
+  margin: 0;
 }
 
 .nginx-log-card pre {
@@ -1158,6 +1178,57 @@ select:focus {
   min-height: 420px;
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 12px;
+}
+
+.monaco-editor-host {
+  width: 100%;
+  min-height: 420px;
+  height: min(62vh, 560px);
+  border: 1px solid var(--line, rgba(148, 163, 184, 0.28));
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-strong);
+}
+
+.monaco-editor-host .monaco-editor,
+.monaco-editor-host .monaco-editor-background,
+.monaco-editor-host .margin {
+  border-radius: 10px;
+}
+
+.nginx-domain-log-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.nginx-domain-log-viewer .nginx-template-meta {
+  font-weight: 400;
+}
+
+.nginx-domain-logs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nginx-domain-logs-toolbar .status-line {
+  margin: 0;
+  flex: 1 1 240px;
+}
+
+.nginx-refresh-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.nginx-refresh-select select {
+  min-width: 72px;
 }
 
 @media (max-width: 900px) {

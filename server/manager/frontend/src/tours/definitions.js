@@ -15,7 +15,7 @@ export function tourIdForRoute(routeName) {
 
 /**
  * @param {(key: string, params?: object) => string} t
- * @returns {Record<string, Array<{ element?: string, popover: object }>>}
+ * @returns {Record<string, Array<{ element?: string, prepareClick?: string, popover: object }>>}
  */
 export function buildTourSteps(t) {
   return {
@@ -124,7 +124,17 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="nginx-tabs"]',
+        popover: {
+          title: t('tour.nginx.tabs_title'),
+          description: t('tour.nginx.tabs_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="nginx-actions"]',
+        prepareClick: '[data-tour="nginx-control-tab"]',
         popover: {
           title: t('tour.nginx.actions_title'),
           description: t('tour.nginx.actions_body'),
@@ -133,7 +143,18 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="nginx-logs"]',
+        prepareClick: '[data-tour="nginx-control-tab"]',
+        popover: {
+          title: t('tour.nginx.logs_title'),
+          description: t('tour.nginx.logs_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="nginx-templates-tab"]',
+        prepareClick: '[data-tour="nginx-templates-tab"]',
         popover: {
           title: t('tour.nginx.templates_title'),
           description: t('tour.nginx.templates_body'),
@@ -142,11 +163,12 @@ export function buildTourSteps(t) {
         },
       },
       {
-        element: '[data-tour="nginx-logs"]',
+        element: '[data-tour="nginx-domain-logs-tab"]',
+        prepareClick: '[data-tour="nginx-domain-logs-tab"]',
         popover: {
-          title: t('tour.nginx.logs_title'),
-          description: t('tour.nginx.logs_body'),
-          side: 'top',
+          title: t('tour.nginx.domain_logs_title'),
+          description: t('tour.nginx.domain_logs_body'),
+          side: 'bottom',
           align: 'start',
         },
       },
@@ -162,10 +184,50 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="services-tabs"]',
+        popover: {
+          title: t('tour.services.tabs_title'),
+          description: t('tour.services.tabs_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="services-table"]',
+        prepareClick: '[data-tour="services-control-tab"]',
         popover: {
           title: t('tour.services.table_title'),
           description: t('tour.services.table_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="services-compose-tab"]',
+        prepareClick: '[data-tour="services-compose-tab"]',
+        popover: {
+          title: t('tour.services.compose_title'),
+          description: t('tour.services.compose_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="services-compose-add"]',
+        prepareClick: '[data-tour="services-compose-tab"]',
+        popover: {
+          title: t('tour.services.compose_add_title'),
+          description: t('tour.services.compose_add_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="services-compose"]',
+        prepareClick: '[data-tour="services-compose-tab"]',
+        popover: {
+          title: t('tour.services.compose_editor_title'),
+          description: t('tour.services.compose_editor_body'),
           side: 'top',
           align: 'start',
         },
@@ -237,6 +299,15 @@ export function buildTourSteps(t) {
           align: 'start',
         },
       },
+      {
+        element: '[data-tour="php-detail-ini-tab"]',
+        popover: {
+          title: t('tour.php_detail.ini_title'),
+          description: t('tour.php_detail.ini_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
     ],
     'php-version-catalog': [
       {
@@ -269,7 +340,17 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="supervisor-tabs"]',
+        popover: {
+          title: t('tour.supervisor.tabs_title'),
+          description: t('tour.supervisor.tabs_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="supervisor-actions"]',
+        prepareClick: '[data-tour="supervisor-control-tab"]',
         popover: {
           title: t('tour.supervisor.actions_title'),
           description: t('tour.supervisor.actions_body'),
@@ -279,9 +360,40 @@ export function buildTourSteps(t) {
       },
       {
         element: '[data-tour="supervisor-logs"]',
+        prepareClick: '[data-tour="supervisor-control-tab"]',
         popover: {
           title: t('tour.supervisor.logs_title'),
           description: t('tour.supervisor.logs_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="supervisor-configs-tab"]',
+        prepareClick: '[data-tour="supervisor-configs-tab"]',
+        popover: {
+          title: t('tour.supervisor.configs_title'),
+          description: t('tour.supervisor.configs_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="supervisor-conf-add"]',
+        prepareClick: '[data-tour="supervisor-configs-tab"]',
+        popover: {
+          title: t('tour.supervisor.conf_add_title'),
+          description: t('tour.supervisor.conf_add_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="supervisor-configs"]',
+        prepareClick: '[data-tour="supervisor-configs-tab"]',
+        popover: {
+          title: t('tour.supervisor.conf_editor_title'),
+          description: t('tour.supervisor.conf_editor_body'),
           side: 'top',
           align: 'start',
         },

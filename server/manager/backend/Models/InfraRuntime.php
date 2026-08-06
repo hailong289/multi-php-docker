@@ -47,6 +47,7 @@ final class InfraRuntime
                 'container' => $config['container'],
                 'profile' => $config['profile'],
                 'ports' => $config['ports'],
+                'compose_file' => 'compose/' . $service . '.yml',
                 'create_command' => 'docker compose --profile ' . $config['profile'] . ' create ' . $service,
             ];
         }
@@ -97,7 +98,7 @@ final class InfraRuntime
     public function hasBlockingRequests(string $service): bool
     {
         foreach (glob($this->basePath . '/requests/*__' . $service . '__*.json') ?: [] as $file) {
-            if (preg_match('/__(?:start|stop|restart|create)/', basename($file))) {
+            if (preg_match('/__(?:start|stop|restart|create|pull-recreate)/', basename($file))) {
                 return true;
             }
         }
@@ -111,7 +112,7 @@ final class InfraRuntime
         if (!isset($targets[$service])) {
             throw new HttpException('services.invalid_service', 400);
         }
-        if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
+        if (!in_array($action, ['start', 'stop', 'restart', 'create', 'pull-recreate'], true)) {
             throw new HttpException('services.invalid_action', 400);
         }
 

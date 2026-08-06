@@ -60,6 +60,51 @@ final class NginxController extends Controller
         ]);
     }
 
+    public function domainLogIndex(Request $request, array $params = []): Response
+    {
+        return Response::json([
+            'domains' => (new NginxManagement())->domainLogList(),
+        ]);
+    }
+
+    public function domainLogShow(Request $request, array $params = []): Response
+    {
+        $domain = (string) ($params['domain'] ?? '');
+
+        return Response::json([
+            'domain_logs' => (new NginxManagement())->domainLogs($domain),
+        ]);
+    }
+
+    public function domainLogClear(Request $request, array $params = []): Response
+    {
+        $domain = (string) ($params['domain'] ?? '');
+        $body = $request->json();
+        $which = (string) ($body['which'] ?? 'both');
+        $cleared = (new NginxManagement())->clearDomainLogs($domain, $which);
+
+        return Response::json([
+            'cleared' => $cleared,
+            'message_key' => 'nginx.domain_logs_cleared',
+            'domain_logs' => (new NginxManagement())->domainLogs($domain),
+        ]);
+    }
+
+    public function globalLogClear(Request $request, array $params = []): Response
+    {
+        $body = $request->json();
+        $name = (string) ($body['log'] ?? '');
+        $runtime = new NginxManagement();
+        $cleared = $runtime->clearGlobalLog($name);
+
+        return Response::json([
+            'cleared' => $cleared,
+            'log' => $name,
+            'message_key' => 'nginx.global_log_cleared',
+            'nginx_management' => $runtime->details(),
+        ]);
+    }
+
     public function action(Request $request, array $params = []): Response
     {
         $action = (string) ($params['action'] ?? '');

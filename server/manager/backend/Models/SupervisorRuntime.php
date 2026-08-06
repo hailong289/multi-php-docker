@@ -30,6 +30,7 @@ final class SupervisorRuntime
                 'profile' => $service,
                 'php_service' => $phpService,
                 'log_dir' => PhpVersionId::supervisorLogRelative($phpService),
+                'conf_dir' => PhpVersionId::supervisorConfDir($phpService),
                 'create_command' => 'docker compose --profile ' . $service . ' create ' . $service,
             ];
         }

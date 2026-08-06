@@ -179,6 +179,12 @@ final class PhpVersionId
 
     public static function supervisorConfDir(string $service): string
     {
+        // Default php-8.2 compose mounts ./configs/supervisor.d (whole tree).
+        // Other versions mount a version subdirectory.
+        if (self::isDefault($service)) {
+            return 'configs/supervisor.d';
+        }
+
         return 'configs/supervisor.d/php' . self::minorFromService($service) . self::pathSuffix($service);
     }
 
