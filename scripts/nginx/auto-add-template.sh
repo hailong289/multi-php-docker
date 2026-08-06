@@ -127,12 +127,38 @@ for key in $keys; do
     echo "Tạo config nginx thành công: $OUTPUT_FILE"
 done
 
-# Xóa template không còn trong danh sách app enabled
+# Xóa template không còn trong danh sách app enabled (giữ manager.template riêng)
 for existing in "$OUTPUT_DIR"/*.template; do
     [ -e "$existing" ] || break
     base=$(basename "$existing" .template)
+    if [ "$base" = "manager" ]; then
+        continue
+    fi
     if ! grep -Fxq "$base" "$desired_list"; then
         echo "Xóa template orphan/disabled: $existing"
         rm -f "$existing"
     fi
 done
+
+MANAGER_REMOTE_RAW=$(printf '%s' "${MANAGER_REMOTE:-0}" | tr '[:upper:]' '[:lower:]')
+MANAGER_DOMAIN_VAL="${MANAGER_DOMAIN:-}"
+MANAGER_USER_VAL="${MANAGER_USERNAME:-}"
+MANAGER_PASS_VAL="${MANAGER_PASSWORD:-}"
+MANAGER_TEMPLATE="$OUTPUT_DIR/manager.template"
+MANAGER_EXAMPLE="/etc/nginx/examples/manager_proxy_example.txt"
+
+case "$MANAGER_REMOTE_RAW" in
+  1|true|yes|on)
+    if [ -n "$MANAGER_DOMAIN_VAL" ] && [ -n "$MANAGER_USER_VAL" ] && [ -n "$MANAGER_PASS_VAL" ] && [ -f "$MANAGER_EXAMPLE" ]; then
+      sed -e "s|\${MANAGER_DOMAIN}|${MANAGER_DOMAIN_VAL}|g" \
+        "$MANAGER_EXAMPLE" > "$MANAGER_TEMPLATE"
+      echo "Wrote manager proxy template for ${MANAGER_DOMAIN_VAL}"
+    else
+      rm -f "$MANAGER_TEMPLATE"
+      echo "MANAGER_REMOTE enabled but domain/credentials incomplete; skipped manager.template" >&2
+    fi
+    ;;
+  *)
+    rm -f "$MANAGER_TEMPLATE"
+    ;;
+esac

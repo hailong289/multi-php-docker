@@ -1,15 +1,26 @@
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ToastHost from './components/ToastHost.vue'
 import { useManager } from './composables/useManager'
 import { useTour } from './composables/useTour'
+import { authState } from './lib/authState'
 
 const { t, locale } = useI18n()
 const route = useRoute()
-const { fatalError, loadBootstrap, bootstrapped } = useManager()
+const { fatalError, loadBootstrap, bootstrapped, logout } = useManager()
 const { startCurrentTour } = useTour()
+
+const showChrome = computed(
+  () => !authState.remote || (authState.authenticated && !authState.locked),
+)
+
+const accessBadge = computed(() => {
+  if (!authState.remote) return t('header.local_only')
+  if (authState.domain) return t('header.remote', { domain: authState.domain })
+  return t('header.remote_unnamed')
+})
 
 const themeMode = ref(document.documentElement.dataset.themeMode || 'system')
 let statusPollTimer = null
@@ -50,12 +61,12 @@ onMounted(async () => {
   applyTheme(themeMode.value)
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onSystemThemeChange)
   updateTitle()
-  if (!bootstrapped.value) {
+  if (showChrome.value && !bootstrapped.value) {
     await loadBootstrap()
   }
   document.addEventListener('visibilitychange', onVisibilityRefresh)
   statusPollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible' && bootstrapped.value) {
+    if (document.visibilityState === 'visible' && bootstrapped.value && showChrome.value) {
       loadBootstrap({ silent: true })
     }
   }, 5000)
@@ -71,28 +82,43 @@ onUnmounted(() => {
 })
 
 function onVisibilityRefresh() {
-  if (document.visibilityState === 'visible' && bootstrapped.value) {
+  if (document.visibilityState === 'visible' && bootstrapped.value && showChrome.value) {
     loadBootstrap({ silent: true })
   }
 }
 
 watch(locale, () => {
   updateTitle()
-  loadBootstrap()
 })
+
+watch(
+  () => [showChrome.value, route.name],
+  async ([chrome]) => {
+    if (chrome && !bootstrapped.value && route.name !== 'login') {
+      await loadBootstrap()
+    }
+  },
+)
 
 watch(() => route.fullPath, updateTitle)
 </script>
 
 <template>
-  <main class="shell">
-    <header data-tour="app-header">
+  <main class="shell" :class="{ 'shell-login': !showChrome }">
+    <header v-if="showChrome" data-tour="app-header">
       <div>
         <h1>{{ t('header.title') }}</h1>
         <p>{{ t('header.subtitle') }}</p>
       </div>
       <div class="header-actions">
-        <span class="badge">{{ t('header.local_only') }}</span>
+        <span class="badge">{{ accessBadge }}</span>
+        <button
+          v-if="authState.remote"
+          type="button"
+          @click="logout"
+        >
+          {{ t('login.logout') }}
+        </button>
         <button
           type="button"
           data-tour="tour-replay"
@@ -119,7 +145,7 @@ watch(() => route.fullPath, updateTitle)
       </div>
     </header>
 
-    <nav class="nav-menu" aria-label="Main" data-tour="app-nav">
+    <nav v-if="showChrome" class="nav-menu" aria-label="Main" data-tour="app-nav">
       <RouterLink
         to="/"
         data-tour="nav-home"
@@ -164,8 +190,8 @@ watch(() => route.fullPath, updateTitle)
       </RouterLink>
     </nav>
 
-    <div v-if="fatalError" class="notice failure">{{ fatalError }}</div>
-    <RouterView v-else />
+    <div v-if="showChrome && fatalError" class="notice failure">{{ fatalError }}</div>
+    <RouterView v-if="!showChrome || !fatalError" />
     <ToastHost />
   </main>
 </template>

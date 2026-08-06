@@ -350,13 +350,13 @@ Then refresh Server Manager to use the controls. The controller accepts PHP 8.5�
 
 The PHP version **Details** page can enable/disable `extension=` lines in the mounted `configs/php*/php.ini` and install a curated set of extensions into a *running* container via `php-controller`. Runtime installs do **not** survive container recreate; bake permanent extensions into a custom image/Dockerfile instead.
 
-The `php-controller` service publishes no ports and is the only container that mounts `/var/run/docker.sock`. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source and never expose Server Manager publicly.
+The `php-controller` service publishes no ports and mounts `/var/run/docker.sock` to run allowlisted Compose actions. Server Manager may also mount the Docker socket **read-only** for live container status. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source and never expose Manager without authentication and HTTPS.
 
-Server Manager does not mount the Docker socket. PHP and Nginx container actions go through a fixed allowlist in the controller; Nginx logs are mounted read-only into Manager.
+PHP and Nginx container **actions** still go through a fixed allowlist in `php-controller` via a shared runtime directory. When **Apply & Reload Nginx** is clicked, the UI writes a signal file to `runtime/`; a watcher inside the Nginx container regenerates templates, runs `nginx -t`, and reloads only when the configuration is valid. If validation fails, the previous configuration is restored.
+
+By default the UI is published only on `127.0.0.1:8080` (CSRF protection, no login). For optional remote access on a primary server, see **Remote Server Manager** below.
 
 If `env.json` does not exist, the `env-init` service creates it from `env.example.json` before Server Manager and Nginx start. This short-lived service never overwrites existing configuration.
-
-The UI is bound to `127.0.0.1` only and is not directly exposed to the LAN. The Docker socket is not mounted into Server Manager. PHP control requests pass through a separate runtime directory to `php-controller`. When **Apply & Reload Nginx** is clicked, the UI writes a signal file to the shared `runtime/` directory. A watcher inside the Nginx container regenerates the templates, runs `nginx -t`, and reloads only when the configuration is valid. If validation fails, the previous configuration is restored.
 
 For the default PHP 8.2 runtime, click **Apply & Reload Nginx** after adding, editing, or deleting a server. The container does not need to be restarted.
 
@@ -393,6 +393,33 @@ docker compose ps
 ```
 
 When Nginx starts, `scripts/nginx/auto-add-template.sh` reads `env.json`, generates virtual hosts from `nginx/examples/server_example.txt`, and loads the resulting configuration. Open a configured domain such as `http://my-php8-app.test`.
+
+## Remote Server Manager (opt-in)
+
+By default Manager listens on `127.0.0.1:8080` without login (CSRF only).
+
+To use Manager on a primary server behind Nginx:
+
+1. Copy [`.env.example`](.env.example) to `.env` and set:
+   - `MANAGER_REMOTE=1`
+   - `MANAGER_USERNAME` / `MANAGER_PASSWORD` (use a strong password)
+   - `MANAGER_DOMAIN` (DNS A/AAAA record pointing at the server)
+2. Terminate TLS for that domain (certificate on Nginx, a reverse proxy, or a tunnel). The generated vhost listens on port 80 and proxies to `manager:8080` on the Docker network — put HTTPS in front.
+3. Recreate services so env is applied:
+
+```bash
+docker compose up -d nginx manager
+```
+
+4. Open `https://MANAGER_DOMAIN` and sign in.
+
+Fail-closed: if `MANAGER_REMOTE=1` but username/password/domain are incomplete, Nginx does **not** write `manager.template`, and the API returns locked/unauthorized for protected routes.
+
+Security notes:
+
+- Remote Manager can control containers and may have read-only Docker socket status — treat credentials like root access.
+- Prefer firewall / IP allowlists in addition to login.
+- Do **not** publish host port `0.0.0.0:8080`; keep the loopback mapping unless you intentionally add a hardened edge.
 
 ## Common commands
 

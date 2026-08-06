@@ -6,7 +6,9 @@ namespace Manager\Controllers;
 
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Support\Config;
 use Manager\Support\Csrf;
+use Manager\Support\RemoteAuth;
 
 final class SessionController extends Controller
 {
@@ -14,6 +16,10 @@ final class SessionController extends Controller
     {
         return Response::json([
             'csrf_token' => Csrf::token(),
+            'remote' => RemoteAuth::isRemote(),
+            'authenticated' => RemoteAuth::isAuthenticated(),
+            'locked' => RemoteAuth::isLocked(),
+            'domain' => Config::managerDomain(),
         ]);
     }
 }

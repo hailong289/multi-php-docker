@@ -1,6 +1,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiGet, apiSend, setCsrfToken } from '../api'
+import { applySessionPayload, authState } from '../lib/authState'
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
@@ -209,6 +210,11 @@ export function useManager() {
   }
 
   async function loadBootstrap({ silent = false } = {}) {
+    if (authState.remote && (!authState.authenticated || authState.locked)) {
+      bootstrapped.value = false
+      if (!silent) loading.value = false
+      return
+    }
     if (!silent) {
       loading.value = true
       fatalError.value = ''
@@ -218,6 +224,18 @@ export function useManager() {
       applyBootstrap(payload)
       bootstrapped.value = true
     } catch (error) {
+      if (error?.status === 401 && authState.remote) {
+        applySessionPayload({
+          remote: true,
+          authenticated: false,
+          locked: authState.locked,
+          domain: authState.domain,
+        })
+        bootstrapped.value = false
+        const { default: router } = await import('../router')
+        await router.push({ name: 'login' })
+        return
+      }
       if (!silent) {
         fatalError.value = translateApiError(error)
       }
@@ -226,6 +244,24 @@ export function useManager() {
         loading.value = false
       }
     }
+  }
+
+  async function logout() {
+    try {
+      const result = await apiSend('POST', '/api/logout', {})
+      if (result.csrf_token) setCsrfToken(result.csrf_token)
+    } catch (_) {
+      /* still clear local auth */
+    }
+    applySessionPayload({
+      remote: authState.remote,
+      authenticated: false,
+      locked: authState.locked,
+      domain: authState.domain,
+    })
+    bootstrapped.value = false
+    const { default: router } = await import('../router')
+    await router.push({ name: 'login' })
   }
 
   async function saveServer() {
@@ -754,6 +790,7 @@ export function useManager() {
     domainEntries,
     versionLabel,
     loadBootstrap,
+    logout,
     openAddModal,
     openHostsDomainAdd,
     closeModal,

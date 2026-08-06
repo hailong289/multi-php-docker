@@ -144,4 +144,24 @@ $pullId = (new InfraRuntime($infraTmp))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
 
+use Manager\Support\RemoteAuth;
+
+putenv('MANAGER_REMOTE=0');
+assert_true(RemoteAuth::isRemote() === false, 'remote off by default');
+
+putenv('MANAGER_REMOTE=1');
+putenv('MANAGER_USERNAME=');
+putenv('MANAGER_PASSWORD=');
+assert_true(RemoteAuth::isRemote() === true, 'remote on');
+assert_true(RemoteAuth::isLocked() === true, 'locked without credentials');
+
+putenv('MANAGER_USERNAME=admin');
+putenv('MANAGER_PASSWORD=secret');
+assert_true(RemoteAuth::credentialsConfigured() === true, 'credentials ok');
+assert_true(RemoteAuth::isLocked() === false, 'not locked with credentials');
+
+putenv('MANAGER_REMOTE=0');
+putenv('MANAGER_USERNAME=');
+putenv('MANAGER_PASSWORD=');
+
 echo "All checks passed\n";

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Manager\Controllers\AuthController;
 use Manager\Controllers\BootstrapController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HostsController;
@@ -14,6 +15,8 @@ use Manager\Controllers\SupervisorController;
 
 return [
     ['GET', '/session', [SessionController::class, 'show']],
+    ['POST', '/login', [AuthController::class, 'login']],
+    ['POST', '/logout', [AuthController::class, 'logout']],
     ['GET', '/bootstrap', [BootstrapController::class, 'show']],
     ['GET', '/nginx/status', [NginxController::class, 'status']],
     ['GET', '/nginx/management', [NginxController::class, 'management']],
