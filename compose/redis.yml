@@ -1,5 +1,6 @@
 services:
   redis:
+    profiles: ["redis"]
     image: long301001/multi-php-docker:redis-alpine
     build:
       context: .

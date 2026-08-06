@@ -1,7 +1,10 @@
 <script setup>
+import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import TableSkeleton from '../components/TableSkeleton.vue'
 import { useManager } from '../composables/useManager'
 
+const router = useRouter()
 const {
   loading,
   data,
@@ -12,16 +15,33 @@ const {
   phpActionEnabled,
   showCreateHint,
   isPending,
+  loadBootstrap,
+  busy,
 } = useManager()
+
+onMounted(() => {
+  loadBootstrap()
+})
 </script>
 
 <template>
-  <section class="panel">
+  <section class="panel" data-tour="php-panel">
     <div class="panel-heading">
-      <div class="controller-heading">
+      <div class="controller-heading panel-heading-row">
         <div>
           <h2>{{ $t('php_controller.title') }}</h2>
           <p>{{ $t('php_controller.subtitle') }}</p>
+        </div>
+        <div class="panel-heading-actions">
+          <button
+            type="button"
+            class="primary"
+            data-tour="php-add"
+            :disabled="busy || loading"
+            @click="router.push({ name: 'php-version-catalog' })"
+          >
+            {{ $t('php_controller.add_version') }}
+          </button>
         </div>
       </div>
     </div>
@@ -38,7 +58,7 @@ const {
         $t('php_controller.actions'),
       ]"
     />
-    <div v-else class="table-wrap">
+    <div v-else class="table-wrap" data-tour="php-table">
       <table>
         <thead>
           <tr>
@@ -133,6 +153,19 @@ const {
                       ? $t('action.working')
                       : $t('php_controller.restart')
                   }}
+                </button>
+                <button
+                  type="button"
+                  @click="$router.push({ name: 'php-version-detail', params: { service } })"
+                >
+                  {{ $t('php_controller.details') }}
+                </button>
+                <button
+                  type="button"
+                  data-tour="php-supervisor"
+                  @click="$router.push({ name: 'php-version-supervisor', params: { service } })"
+                >
+                  {{ $t('php_controller.supervisor') }}
                 </button>
               </div>
             </td>

@@ -73,7 +73,7 @@ services:
       - .:/var/host-project:ro
     environment:
       ENV_JSON_FILE: /var/host-project/env.json
-    command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
+    command: ["sh", "-c", "/var/scripts/nginx/auto-add-template.sh && /var/scripts/docker/entrypoint.sh"]
     depends_on:
       env-init:
         condition: service_completed_successfully
@@ -91,15 +91,16 @@ services:
       - ./server/manager:/app:ro
       - ./runtime:/runtime
       - ./php-controller-runtime:/runtime/php-controller
+      - ./nginx/logs:/nginx-logs
       - .:/var/host-project
-      # OS hosts (read-only). Path comes from .env HOSTS_FILE (run scripts/ensure_hosts_env.*).
-      - ${HOSTS_FILE}:/host-hosts:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     working_dir: /app
     environment:
       MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
-      MANAGER_HOSTS_PATH: /host-hosts
+      MANAGER_NGINX_LOGS_PATH: /nginx-logs
+      MANAGER_DOCKER_SOCK: /var/run/docker.sock
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:
@@ -110,11 +111,14 @@ services:
   php-controller:
     image: docker:cli
     container_name: php_controller_container
-    entrypoint: ["/bin/sh", "/scripts/php-controller.sh"]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/scripts/php/php-controller.sh"]
     environment:
       # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
       # rewrite compose bind mounts when creating optional PHP containers.
       HOST_PROJECT_PATH: ${HOST_PROJECT_PATH:-/project}
+      # docker:cli image is read-only; compose build needs a writable Docker config dir.
+      DOCKER_CONFIG: /tmp/docker-config
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./scripts:/scripts:ro
@@ -128,7 +132,6 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    restart: unless-stopped
     network_mode: none
 
 networks:

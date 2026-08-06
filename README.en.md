@@ -21,7 +21,7 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
 | Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
-PHP 8.2 is the default version. `docker compose up -d` starts only PHP 8.2; PHP 7.4, 8.0, and 8.1 are assigned to separate profiles and remain disabled by default.
+PHP 8.2 is the default version. `docker compose up -d` starts only PHP 8.2; PHP 7.4, 8.0, and 8.1 are assigned to separate profiles and remain disabled by default. MySQL, Redis, RabbitMQ, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
 
 The following images are provided:
 
@@ -136,43 +136,36 @@ For Laravel or frameworks with a separate public directory, `SERVER_PATH` must p
 
 ### 4. Add domains to the `hosts` file
 
-**Refresh status from hosts (no admin):**
-
-1. Detect the OS hosts path and write `HOSTS_FILE` plus `HOST_PROJECT_PATH` into `.env` (Compose loads it automatically):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
-```
-
-macOS / Linux / WSL:
-
-```bash
-chmod +x scripts/ensure_hosts_env.sh
-./scripts/ensure_hosts_env.sh
-```
-
-2. Open Server Manager → **Domains**.
-3. Click **Sync domains from hosts file**. Manager reads the mounted hosts file and updates synced/missing badges.
-
-If you switch machines/OS, re-run `ensure_hosts_env` and `docker compose up -d manager --force-recreate`.
+The stack starts without mounting the OS hosts file. Manager reads the latest status from `runtime/hosts.status.json`, which is written by the optional helper running on the host. Before the helper runs, domains show **Unknown** and the UI still provides a manual hosts fallback.
 
 **Write hosts (needs host script + admin):**
 
-1. On Windows, run once (writes `HOSTS_FILE` + registers `multi-php-hosts:`):
+1. Run once to register the `multi-php-hosts:` helper/protocol. This setup is only needed for automatic hosts writing; it is not required to start Docker or create PHP containers:
+
+Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1
 ```
 
-Unregister: `powershell -ExecutionPolicy Bypass -File .\scripts\ensure_hosts_env.ps1 -UnregisterProtocol`
+Unregister: `powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1 -UnregisterProtocol`
 
-2. In Manager use **Add domain** / **Write hosts (Admin)**. The browser opens `multi-php-hosts:write` → runs `add_hostname.ps1` (UAC). Allow the app if the browser prompts.
-
-macOS / Linux / WSL (no Windows protocol):
+macOS:
 
 ```bash
-chmod +x scripts/add_hostname.sh
-./scripts/add_hostname.sh --watch
+chmod +x scripts/hosts/ensure_hosts_env.sh scripts/hosts/add_hostname.sh scripts/hosts/hosts_protocol_macos.sh
+./scripts/hosts/ensure_hosts_env.sh
+```
+
+Unregister: `./scripts/hosts/ensure_hosts_env.sh --unregister-protocol`
+
+2. In Manager use **Add domain** / **Write hosts (Admin)**. The browser opens `multi-php-hosts:write` → writes hosts (UAC on Windows / admin prompt on macOS). Allow the app if the browser prompts.
+
+Linux / WSL (no browser protocol):
+
+```bash
+chmod +x scripts/hosts/add_hostname.sh
+./scripts/hosts/add_hostname.sh --watch
 ```
 
 The script only edits the `# multi-php-docker-serve:managed:*` block in the hosts file.
@@ -180,13 +173,13 @@ The script only edits the `# multi-php-docker-serve:managed:*` block in the host
 **One-shot (without Manager):**
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 ```
 
 Windows:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\add_hostname.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1
 ```
 
 The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.json` if present) and maps it to `127.0.0.1`. To configure domains manually, edit:
@@ -201,14 +194,23 @@ The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.js
 
 ### 5. Pull images and start the environment
 
-On the first run, pull the provided images before creating the containers:
+On the first run, pull the images and start directly. Zero-config startup does not require a `.env` file:
+
+```powershell
+docker compose pull
+docker compose up -d
+```
+
+macOS / Linux / WSL:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-The command above starts PHP 8.2 together with Nginx, MySQL, Redis, RabbitMQ, Supervisor, Server Manager, and PHP Controller. Older PHP versions are not started.
+The command above starts PHP 8.2 together with Nginx, Server Manager, and PHP Controller. Older PHP versions, MySQL, Redis, RabbitMQ, and Supervisor are not started.
+
+`php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required. The host helper is an optional OS integration with a manual hosts fallback.
 
 ### Enable an optional PHP version
 
@@ -243,6 +245,61 @@ docker compose rm -f php-8.1
 
 When a project in `env.json` uses `php8.0_container`, `php8.1_container`, or `php7.4_container`, enable the matching profile before starting or recreating Nginx. Otherwise, Nginx cannot connect to that PHP upstream.
 
+### Enable MySQL, Redis, or RabbitMQ
+
+Each service has a Compose profile with the same name. Enabling the profile pulls the image if needed and starts the container — without building:
+
+```bash
+# MySQL
+docker compose --profile mysql up -d mysql
+
+# Redis
+docker compose --profile redis up -d redis
+
+# RabbitMQ
+docker compose --profile rabbitmq up -d rabbitmq
+```
+
+Enable several services together:
+
+```bash
+docker compose \
+  --profile mysql \
+  --profile redis \
+  --profile rabbitmq \
+  up -d
+```
+
+Or pull first, then start:
+
+```bash
+docker compose --profile mysql pull mysql
+docker compose --profile mysql up -d mysql
+```
+
+Stop a service with:
+
+```bash
+docker compose stop mysql
+docker compose rm -f mysql
+```
+
+### Enable Supervisor
+
+Each Supervisor container has its own profile (it does not start with PHP). Enable it from Server Manager: **PHP versions** → **Supervisor** for that version, or the CLI:
+
+```bash
+# Default PHP 8.2 Supervisor
+docker compose --profile supervisor up -d supervisor
+
+# Per-version Supervisors
+docker compose --profile supervisor-8.1 up -d supervisor-8.1
+docker compose --profile supervisor-8.0 up -d supervisor-8.0
+docker compose --profile supervisor-7.4 up -d supervisor-7.4
+```
+
+The UI supports Create / Start / Stop / Restart and live log viewing under `logs/supervisor*` (manual refresh or Follow).
+
 ## Manage servers in the web interface
 
 After running `docker compose up -d`, open:
@@ -261,6 +318,8 @@ Server Manager can:
 - Support Vietnamese and English; the first visit follows the browser language and the selected locale is then remembered in the session.
 - Support **System**, **Light**, and **Dark** appearances; the selection is stored in the browser, and System mode follows the operating-system preference.
 - Manage PHP container state directly with **Create**, **Start**, **Stop**, and **Restart** controls.
+- Open **Details** for each PHP version to list loaded extensions, toggle `extension=` lines in the mounted `php.ini`, install a curated set of extensions into a running container, and edit `php.ini` (after save you can choose to restart PHP-FPM).
+- Manage Nginx from a dedicated menu: **Start**, **Stop**, **Restart**, run `nginx -t`, **Apply & Reload**, and inspect up to 200 recent test/reload, error, and access log lines.
 
 The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. PHP 8.2 is created by default. For an optional PHP container that has never been created, click **Create** in the UI (equivalent to `docker compose --profile … create …`), then use **Start**. You can still create manually:
 
@@ -268,9 +327,15 @@ The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Process
 docker compose --profile php-8.1 create php-8.1
 ```
 
-Then refresh Server Manager to use the controls. The controller accepts PHP 8.2, 8.1, 8.0, and 7.4 plus Create (profiled services only), Start, Stop, and Restart; it does not delete containers. `ensure_hosts_env` also writes `HOST_PROJECT_PATH` into `.env` so `php-controller` can run compose create with host-correct bind mounts — after changing machines, re-run the script and `docker compose up -d php-controller --force-recreate`.
+Then refresh Server Manager to use the controls. The controller accepts PHP 8.2, 8.1, 8.0, and 7.4 plus Create (profiled services only), Start, Stop, and Restart; it does not delete containers. The controller infers the repository path on the Docker host from the `/project` mount; `HOST_PROJECT_PATH` in `.env` is only a backward-compatible override.
+
+### PHP extensions from Manager
+
+The PHP version **Details** page can enable/disable `extension=` lines in the mounted `configs/php*/php.ini` and install a curated set of extensions into a *running* container via `php-controller`. Runtime installs do **not** survive container recreate; bake permanent extensions into a custom image/Dockerfile instead.
 
 The `php-controller` service publishes no ports and is the only container that mounts `/var/run/docker.sock`. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source and never expose Server Manager publicly.
+
+Server Manager does not mount the Docker socket. PHP and Nginx container actions go through a fixed allowlist in the controller; Nginx logs are mounted read-only into Manager.
 
 If `env.json` does not exist, the `env-init` service creates it from `env.example.json` before Server Manager and Nginx start. This short-lived service never overwrites existing configuration.
 
@@ -289,7 +354,7 @@ Then click **Apply & Reload Nginx**. Refresh the page to see the latest result b
 New domains must still be added to the `hosts` file:
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 ```
 
 Stop the UI separately when it is not needed:
@@ -310,7 +375,7 @@ Check the container status:
 docker compose ps
 ```
 
-When Nginx starts, `scripts/auto-add-template.sh` reads `env.json`, generates virtual hosts from `nginx/examples/server_example.txt`, and loads the resulting configuration. Open a configured domain such as `http://my-php8-app.test`.
+When Nginx starts, `scripts/nginx/auto-add-template.sh` reads `env.json`, generates virtual hosts from `nginx/examples/server_example.txt`, and loads the resulting configuration. Open a configured domain such as `http://my-php8-app.test`.
 
 ## Common commands
 
@@ -371,7 +436,7 @@ Build the custom image before starting the containers:
 
 ```bash
 docker compose build php-8.2
-docker compose up -d php-8.2 supervisor
+docker compose --profile supervisor up -d supervisor
 
 # Build and run another service
 docker compose build <service-name>
@@ -411,7 +476,7 @@ Create multiple `.conf` files in `configs/supervisor.d/` to run workers for mult
 
 ```bash
 # Start PHP-FPM and Supervisor from the provided image
-docker compose up -d php-8.2 supervisor
+docker compose --profile supervisor up -d supervisor
 
 # View worker status
 docker compose exec supervisor supervisorctl status
@@ -428,7 +493,7 @@ docker compose logs -f supervisor
 ls logs/supervisor
 ```
 
-Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` only controls container startup order; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
+Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` with `required: false` only orders startup when the MySQL/Redis/RabbitMQ profiles are enabled; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
 
 ### Using Supervisor with other PHP versions
 
@@ -452,11 +517,11 @@ cp configs/supervisor.d/worker.conf.example \
    configs/supervisor.d/php8.1/worker.conf
 # Edit directory/command in worker.conf
 
-docker compose --profile php-8.1 up -d php-8.1 supervisor-8.1
+docker compose --profile php-8.1 --profile supervisor-8.1 up -d php-8.1 supervisor-8.1
 docker compose exec supervisor-8.1 supervisorctl status
 ```
 
-Same pattern for profile `php-8.0` / service `supervisor-8.0`.
+Same pattern for profiles `php-8.0` / `supervisor-8.0` and matching services.
 
 #### PHP 7.4 Supervisor example
 
@@ -499,7 +564,7 @@ Create `compose/php-8.3.yml` (PHP-FPM + Supervisor sharing one image), then add 
       - ./configs/supervisor.d/php8.3:/etc/supervisor/conf.d:ro
       - ./logs/supervisor-8.3:/var/log/supervisor
     working_dir: /var/www/source_php8.3
-    command: ["/var/scripts/supervisord.sh"]
+    command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       - mysql
       - redis
@@ -558,7 +623,7 @@ Applications running directly on the host should use `127.0.0.1` and the host po
 
 1. Place the source code in the appropriate PHP directory.
 2. Add or update the project in `env.json`.
-3. Run `./scripts/add_hostname.sh` again when adding a domain.
+3. Run `./scripts/hosts/add_hostname.sh` again when adding a domain.
 4. Recreate Nginx to regenerate the virtual hosts:
 
 ```bash
@@ -653,7 +718,7 @@ Add the project to `env.json`. `CONTAINER_PHP_VERSION` must match the new `conta
 ### 6. Build and verify
 
 ```bash
-./scripts/add_hostname.sh
+./scripts/hosts/add_hostname.sh
 docker compose up -d --build php-8-3
 docker compose up -d --force-recreate nginx
 
@@ -721,7 +786,7 @@ Stop the application using the port or change the host side of the mapping in `c
 
 ### PHP cannot connect to MySQL, Redis, or RabbitMQ
 
-Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of `localhost`. Check container status with `docker compose ps`.
+Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of `localhost`. Check container status with `docker compose ps`. If a container is not running, enable its profile and start it, for example `docker compose --profile mysql up -d mysql`.
 
 ### An image fails to build
 
@@ -868,6 +933,11 @@ See the official [Docker Compose Build Specification](https://docs.docker.com/re
 │   ├── logs/                # Nginx logs
 │   └── templates/           # Configuration generated from env.json
 ├── scripts/                 # Startup and configuration scripts
+│   ├── php/                 # php-controller + install/uninstall extension
+│   ├── nginx/               # auto-add-template, reload, watch
+│   ├── hosts/               # add_hostname, ensure_hosts_env, protocol handlers
+│   ├── docker/              # entrypoint, supervisord, compose wrappers
+│   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
 │   ├── manager/             # env.json management UI
 │   ├── source_php7.4/       # PHP 7.4 projects

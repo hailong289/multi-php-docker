@@ -1,6 +1,7 @@
 services:
   mysql:
     image: long301001/multi-php-docker:mysql
+    profiles: ["mysql"]
     build:
       context: .
       dockerfile: ./docker_files/mysql.Dockerfile

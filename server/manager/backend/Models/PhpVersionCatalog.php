@@ -4,40 +4,35 @@ declare(strict_types=1);
 
 namespace Manager\Models;
 
+use Manager\Support\Config;
+
+/**
+ * Discovers installed PHP services from compose/php-*.yml.
+ */
 final class PhpVersionCatalog
 {
-    public static function versions(): array
+    public static function versions(?string $projectPath = null): array
     {
-        return [
-            'php-8.2' => [
-                'label' => 'PHP 8.2',
-                'default' => true,
-                'container' => 'php8.2_container',
-                'source_prefix' => '/var/www/source_php8.2',
-                'profile' => null,
-            ],
-            'php-8.1' => [
-                'label' => 'PHP 8.1',
-                'default' => false,
-                'container' => 'php8.1_container',
-                'source_prefix' => '/var/www/source_php8.1',
-                'profile' => 'php-8.1',
-            ],
-            'php-8.0' => [
-                'label' => 'PHP 8.0',
-                'default' => false,
-                'container' => 'php8.0_container',
-                'source_prefix' => '/var/www/source_php8.0',
-                'profile' => 'php-8.0',
-            ],
-            'php-7.4' => [
-                'label' => 'PHP 7.4',
-                'default' => false,
-                'container' => 'php7.4_container',
-                'source_prefix' => '/var/www/source_php7.4',
-                'profile' => 'php-7.4',
-            ],
-        ];
+        $root = rtrim($projectPath ?? Config::projectPath(), '/');
+        $versions = [];
+        foreach (glob($root . '/compose/php-*.yml') ?: [] as $file) {
+            $base = basename($file, '.yml');
+            if (!PhpVersionId::isValidService($base)) {
+                continue;
+            }
+            $versions[$base] = [
+                'label' => PhpVersionId::label($base),
+                'default' => PhpVersionId::isDefault($base),
+                'container' => PhpVersionId::container($base),
+                'source_prefix' => PhpVersionId::sourcePrefix($base),
+                'profile' => PhpVersionId::profile($base),
+            ];
+        }
+        uksort($versions, static function (string $a, string $b): int {
+            return version_compare(PhpVersionId::minorFromService($b), PhpVersionId::minorFromService($a));
+        });
+
+        return $versions;
     }
 
     public static function versionFromContainer(string $container): string
@@ -48,13 +43,13 @@ final class PhpVersionCatalog
             }
         }
 
-        return 'php-8.2';
+        return PhpVersionId::defaultService();
     }
 
-    public static function forApi(): array
+    public static function forApi(?string $projectPath = null): array
     {
         $versions = [];
-        foreach (self::versions() as $id => $config) {
+        foreach (self::versions($projectPath) as $id => $config) {
             $versions[$id] = [
                 'id' => $id,
                 'label' => $config['label'],

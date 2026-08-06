@@ -67,6 +67,11 @@ final class Request
         return $this->headers[$key] ?? $default;
     }
 
+    public function queryParam(string $key, mixed $default = null): mixed
+    {
+        return $this->query[$key] ?? $default;
+    }
+
     public function json(): array
     {
         return $this->json;

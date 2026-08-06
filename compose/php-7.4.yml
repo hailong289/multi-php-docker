@@ -18,7 +18,7 @@ services:
       - app-network
 
   supervisor-7.4:
-    profiles: ["php-7.4"]
+    profiles: ["supervisor-7.4"]
     image: long301001/multi-php-docker:php-7.4
     container_name: supervisor74_container
     volumes:
@@ -29,11 +29,17 @@ services:
       - ./configs/supervisor.d/php7.4:/etc/supervisor/conf.d:ro
       - ./logs/supervisor-7.4:/var/log/supervisor
     working_dir: /var/www/source_php7.4
-    command: ["/var/scripts/supervisord.sh"]
+    command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
-      - mysql
-      - redis
-      - rabbitmq
+      mysql:
+        condition: service_started
+        required: false
+      redis:
+        condition: service_started
+        required: false
+      rabbitmq:
+        condition: service_started
+        required: false
     networks:
       - app-network
 

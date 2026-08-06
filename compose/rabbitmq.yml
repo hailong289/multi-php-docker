@@ -1,5 +1,6 @@
 services:
   rabbitmq:
+    profiles: ["rabbitmq"]
     image: long301001/multi-php-docker:rabbitmq-3-management
     build:
       context: .

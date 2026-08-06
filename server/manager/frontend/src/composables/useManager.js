@@ -4,6 +4,7 @@ import { apiGet, apiSend, setCsrfToken } from '../api'
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
+  'Nginx templates were synced and reloaded successfully.': 'reload.status.synced',
   'Could not generate Nginx templates. See runtime/nginx.reload.log.': 'reload.status.generate_failed',
   'Nginx configuration is invalid. Previous configuration was restored.': 'reload.status.invalid',
   'Nginx could not reload. Previous configuration was restored.': 'reload.status.failed',
@@ -30,6 +31,8 @@ const data = reactive({
   hosts_extras: [],
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
+  infra_services: { targets: {}, statuses: {} },
+  supervisor_services: { targets: {}, statuses: {} },
 })
 
 const form = reactive({
@@ -37,6 +40,7 @@ const form = reactive({
   domain_name: '',
   server_path: '/var/www/source_php8.2/',
   php_version: 'php-8.2',
+  enabled: true,
 })
 
 const domainForm = reactive({
@@ -153,6 +157,8 @@ export function useManager() {
     data.hosts_extras = payload.hosts_extras || []
     data.pending_sync = !!payload.pending_sync
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
+    data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
+    data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
     if (payload.csrf_token) setCsrfToken(payload.csrf_token)
   }
 
@@ -161,6 +167,10 @@ export function useManager() {
       if (config.container === container) return id
     }
     return 'php-8.2'
+  }
+
+  function isServerEnabled(server) {
+    return server?.ENABLED !== false && server?.ENABLED !== 0 && server?.ENABLED !== 'false' && server?.ENABLED !== '0'
   }
 
   function resetForm() {
@@ -172,6 +182,7 @@ export function useManager() {
       ? `${data.php_versions['php-8.2'].source_prefix}/`
       : '/var/www/source_php8.2/'
     form.php_version = 'php-8.2'
+    form.enabled = true
   }
 
   function openAddModal() {
@@ -193,20 +204,27 @@ export function useManager() {
     form.domain_name = server.DOMAIN_NAME || ''
     form.server_path = server.SERVER_PATH || ''
     form.php_version = versionFromContainer(server.CONTAINER_PHP_VERSION || '')
+    form.enabled = isServerEnabled(server)
     modalOpen.value = true
   }
 
-  async function loadBootstrap() {
-    loading.value = true
-    fatalError.value = ''
+  async function loadBootstrap({ silent = false } = {}) {
+    if (!silent) {
+      loading.value = true
+      fatalError.value = ''
+    }
     try {
       const payload = await apiGet('/api/bootstrap')
       applyBootstrap(payload)
       bootstrapped.value = true
     } catch (error) {
-      fatalError.value = translateApiError(error)
+      if (!silent) {
+        fatalError.value = translateApiError(error)
+      }
     } finally {
-      loading.value = false
+      if (!silent) {
+        loading.value = false
+      }
     }
   }
 
@@ -244,6 +262,40 @@ export function useManager() {
       toastFromResult(result)
       if (editingKey.value === key) closeModal()
       if (domainEditingKey.value === key) closeDomainModal()
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function toggleServerEnabled(key) {
+    const server = data.servers[key]
+    if (!server) return
+    const currentlyEnabled = isServerEnabled(server)
+    busy.value = true
+    pendingAction.value = { kind: 'toggle', key }
+    try {
+      const body = {
+        app_name: server.APP_NAME || '',
+        domain_name: server.DOMAIN_NAME || '',
+        server_path: server.SERVER_PATH || '',
+        php_version: versionFromContainer(server.CONTAINER_PHP_VERSION || ''),
+        enabled: !currentlyEnabled,
+      }
+      const result = await apiSend('PUT', `/api/servers/${key}`, body)
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      showToast(
+        'success',
+        t(currentlyEnabled ? 'flash.server_disabled' : 'flash.server_enabled'),
+      )
+      try {
+        await apiSend('POST', '/api/nginx/reload', {})
+        setTimeout(loadBootstrap, 1500)
+      } catch (reloadError) {
+        showToast('failure', translateApiError(reloadError))
+      }
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -296,6 +348,22 @@ export function useManager() {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
+      setTimeout(loadBootstrap, 1500)
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function infraAction(service, action) {
+    busy.value = true
+    pendingAction.value = { kind: 'infra', service, action }
+    try {
+      const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
+      toastFromResult(result)
+      if (result.infra_services) data.infra_services = result.infra_services
       setTimeout(loadBootstrap, 1500)
     } catch (error) {
       showToast('failure', translateApiError(error))
@@ -406,7 +474,10 @@ export function useManager() {
   function launchHostsWriteProtocol() {
     const ua = String(navigator.userAgent || '')
     const platform = String(navigator.platform || '')
-    if (!/Win/i.test(ua) && !/Win/i.test(platform)) return false
+    const isWin = /Win/i.test(ua) || /Win/i.test(platform)
+    const isMac = /Mac/i.test(platform) || /Mac OS/i.test(ua) || /Macintosh/i.test(ua)
+    // Windows + macOS: custom URL scheme registered by ensure_hosts_env.*
+    if (!isWin && !isMac) return false
     try {
       const frame = document.createElement('iframe')
       frame.style.display = 'none'
@@ -489,7 +560,7 @@ export function useManager() {
         })
       }
       closeDomainModal()
-      // Write request + Windows protocol multi-php-hosts:write (see ensure_hosts_env.ps1).
+      // Write request + multi-php-hosts:write protocol (ensure_hosts_env.*).
       showToast('success', trKey(result.message_key || 'hosts.domain_added'))
       await finishHostsWrite(result)
     } catch (error) {
@@ -508,11 +579,15 @@ export function useManager() {
     busy.value = true
     pendingAction.value = { kind: 'hosts-sync' }
     try {
-      // Read-only: refresh badges from mounted OS hosts file (no Watch / no write).
+      // Refresh badges from the latest status written by the optional host helper.
       const result = await apiSend('POST', '/api/hosts/sync', {})
-      if (result.hosts_status) data.hosts_status = result.hosts_status
       data.pending_sync = !!result.pending_sync
-      showToast('success', trKey(result.message_key || 'hosts.status_refreshed'))
+      if (result.hosts_status) {
+        data.hosts_status = result.hosts_status
+        showToast('success', trKey(result.message_key || 'hosts.status_refreshed'))
+      } else {
+        showToast('failure', t('hosts.controller_unavailable'))
+      }
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -620,6 +695,30 @@ export function useManager() {
     return phpServiceState(service) === 'not_created' && target.profile !== null
   }
 
+  function infraServiceState(service) {
+    return data.infra_services.statuses[service]?.state || 'not_created'
+  }
+
+  function infraActionEnabled(service, action) {
+    if (busy.value) return false
+    const state = infraServiceState(service)
+    const target = data.infra_services.targets[service]
+    if (action === 'create') {
+      return state === 'not_created' && target?.profile != null
+    }
+    if (action === 'pull-recreate') {
+      return state === 'running' || state === 'stopped'
+    }
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
+    return false
+  }
+
+  function showInfraCreateHint(service, target) {
+    return infraServiceState(service) === 'not_created' && target.profile !== null
+  }
+
   watch(
     () => form.php_version,
     (version) => {
@@ -661,9 +760,12 @@ export function useManager() {
     startEdit,
     saveServer,
     deleteServer,
+    toggleServerEnabled,
+    isServerEnabled,
     deleteDomain,
     reloadNginx,
     phpAction,
+    infraAction,
     openDomainEdit,
     closeDomainModal,
     saveDomain,
@@ -681,6 +783,9 @@ export function useManager() {
     phpServiceState,
     phpActionEnabled,
     showCreateHint,
+    infraServiceState,
+    infraActionEnabled,
+    showInfraCreateHint,
     isPending,
     showToast,
     dismissToast,

@@ -18,6 +18,7 @@ services:
       - app-network
 
   supervisor:
+    profiles: ["supervisor"]
     image: long301001/multi-php-docker:php-8.2
     container_name: supervisor_container
     volumes:
@@ -28,11 +29,17 @@ services:
       - ./configs/supervisor.d:/etc/supervisor/conf.d:ro
       - ./logs/supervisor:/var/log/supervisor
     working_dir: /var/www/source_php8.2
-    command: ["/var/scripts/supervisord.sh"]
+    command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
-      - mysql
-      - redis
-      - rabbitmq
+      mysql:
+        condition: service_started
+        required: false
+      redis:
+        condition: service_started
+        required: false
+      rabbitmq:
+        condition: service_started
+        required: false
     networks:
       - app-network
 

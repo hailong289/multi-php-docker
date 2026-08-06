@@ -32,47 +32,23 @@ final class HostsSync
     }
 
     /**
-     * Read OS hosts file and refresh runtime/hosts.status.json (no write to hosts).
+     * Return the latest status written by the optional helper on the host.
      *
      * @param array<string, array<string, mixed>> $servers
      * @return array<string, mixed>
      */
-    public function refreshStatusFromHostsFile(array $servers): array
+    public function refreshStatus(array $servers): array
     {
-        $path = Config::hostsPath();
-        if ($path === '' || !is_file($path) || !is_readable($path)) {
-            throw new HttpException('hosts.read_unavailable', 503);
-        }
+        $status = $this->status();
 
-        $content = file_get_contents($path);
-        if ($content === false) {
-            throw new HttpException('hosts.read_unavailable', 503);
-        }
-
-        $present = $this->parseHostsDomains($content);
-        $desired = $this->desiredDomains($servers);
-        $states = [];
-        foreach ($desired as $domain) {
-            $states[$domain] = isset($present[$domain]) ? 'synced' : 'missing';
-        }
-
-        $status = [
-            'status' => 'success',
-            'message_key' => 'hosts.status_refreshed',
-            'updated_at' => date(DATE_ATOM),
-            'domains' => $states,
+        return [
+            'message_key' => $status === null
+                ? 'hosts.controller_unavailable'
+                : 'hosts.status_refreshed',
+            'hosts_status' => $status,
+            'pending_sync' => $this->pendingSync(),
+            'domains' => $this->listedDomains($servers, $status),
         ];
-
-        if (!is_dir($this->runtimePath) && !mkdir($this->runtimePath, 0775, true) && !is_dir($this->runtimePath)) {
-            throw new HttpException('error.runtime_directory', 500);
-        }
-
-        $json = json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
-        if (file_put_contents($this->runtimePath . '/hosts.status.json', $json, LOCK_EX) === false) {
-            throw new HttpException('error.hosts_sync_request', 500);
-        }
-
-        return $status;
     }
 
     /**

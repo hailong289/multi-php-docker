@@ -14,9 +14,16 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:8080',
     },
   },
+  optimizeDeps: {
+    include: ['monaco-editor'],
+  },
+  worker: {
+    format: 'es',
+  },
   build: {
     outDir: '../public',
     emptyOutDir: true,
     assetsDir: 'assets',
+    chunkSizeWarningLimit: 2000,
   },
 })

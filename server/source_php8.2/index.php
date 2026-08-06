@@ -49,7 +49,7 @@ $translations = [
         'quick.one.title' => 'Configure a server',
         'quick.one.text' => 'Open Server Manager, choose a PHP version, and enter the project document root.',
         'quick.two.title' => 'Register the hostname',
-        'quick.two.text' => 'Run ./scripts/add_hostname.sh to map every configured .test domain to 127.0.0.1.',
+        'quick.two.text' => 'Run ./scripts/hosts/add_hostname.sh to map every configured .test domain to 127.0.0.1.',
         'quick.three.title' => 'Open your project',
         'quick.three.text' => 'Apply the Nginx configuration and visit the new local domain in your browser.',
         'runtime.eyebrow' => 'Live runtime',
@@ -83,7 +83,7 @@ $translations = [
         'quick.one.title' => 'Cấu hình server',
         'quick.one.text' => 'Mở Server Manager, chọn phiên bản PHP và nhập document root của project.',
         'quick.two.title' => 'Đăng ký hostname',
-        'quick.two.text' => 'Chạy ./scripts/add_hostname.sh để ánh xạ các domain .test đã cấu hình về 127.0.0.1.',
+        'quick.two.text' => 'Chạy ./scripts/hosts/add_hostname.sh để ánh xạ các domain .test đã cấu hình về 127.0.0.1.',
         'quick.three.title' => 'Mở project',
         'quick.three.text' => 'Áp dụng cấu hình Nginx rồi truy cập domain local mới trong trình duyệt.',
         'runtime.eyebrow' => 'Runtime trực tiếp',
@@ -225,7 +225,7 @@ $services = [
         <h2 class="section-title"><?= $e($t('quick.title')) ?></h2>
         <div class="steps">
             <article class="step"><h3><?= $e($t('quick.one.title')) ?></h3><p><?= $e($t('quick.one.text')) ?></p><code>http://127.0.0.1:8080</code></article>
-            <article class="step"><h3><?= $e($t('quick.two.title')) ?></h3><p><?= $e($t('quick.two.text')) ?></p><code>./scripts/add_hostname.sh</code></article>
+            <article class="step"><h3><?= $e($t('quick.two.title')) ?></h3><p><?= $e($t('quick.two.text')) ?></p><code>./scripts/hosts/add_hostname.sh</code></article>
             <article class="step"><h3><?= $e($t('quick.three.title')) ?></h3><p><?= $e($t('quick.three.text')) ?></p><code>http://my-project.test</code></article>
         </div>
     </section>
