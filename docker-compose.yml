@@ -1,4 +1,10 @@
 include:
+  - path: compose/php-8.5.yml
+    project_directory: .
+  - path: compose/php-8.4.yml
+    project_directory: .
+  - path: compose/php-8.3.yml
+    project_directory: .
   - path: compose/php-8.2.yml
     project_directory: .
   - path: compose/php-8.1.yml

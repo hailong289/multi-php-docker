@@ -2,16 +2,19 @@
 
 # Môi trường phát triển PHP với Docker
 
-Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0, PHP 8.1, PHP 8.2, MySQL, Redis và RabbitMQ. Tất cả service mặc định dùng image multi-architecture được cung cấp sẵn trên Docker Hub; `docker-compose.yml` không tự build image. Các Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
+Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis và RabbitMQ. PHP 7.4–8.2 dùng image multi-architecture sẵn trên Docker Hub; PHP 8.3–8.5 build local từ `library/php` FPM (profile riêng, mặc định tắt). `docker-compose.yml` không build các image mặc định. Các Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
 ## Dịch vụ và cổng mặc định
 
 | Dịch vụ | Container | Cổng host | Thông tin mặc định |
 | --- | --- | --- | --- |
 | Nginx | `nginx_container` | `80`, `443` | Phục vụ domain trong `env.json` |
-| PHP 8.0 | `php8.0_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
-| PHP 8.1 | `php8.1_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
+| PHP 8.5 | `php8.5_container` | Không public | PHP-FPM cổng `9000` (profile, build local) |
+| PHP 8.4 | `php8.4_container` | Không public | PHP-FPM cổng `9000` (profile, build local) |
+| PHP 8.3 | `php8.3_container` | Không public | PHP-FPM cổng `9000` (profile, build local) |
 | PHP 8.2 | `php8.2_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
+| PHP 8.1 | `php8.1_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
+| PHP 8.0 | `php8.0_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
 | PHP 7.4 | `php7.4_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
 | Redis | `redis_container` | `6379` | Không có mật khẩu |
@@ -21,7 +24,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | PHP Controller | `php_controller_container` | Không public | Điều khiển allowlist PHP container qua Docker socket |
 | Env Init | `env_init_container` | Không public | Tạo `env.json` nếu thiếu rồi thoát với mã `0` |
 
-PHP 8.2 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.2; PHP 7.4, 8.0 và 8.1 được đặt trong profile riêng và mặc định không chạy. MySQL, Redis, RabbitMQ và Supervisor cũng nằm trong profile riêng: mặc định không khởi động cho đến khi bạn bật profile tương ứng.
+PHP 8.2 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.2; PHP 7.4, 8.0, 8.1, 8.3, 8.4 và 8.5 được đặt trong profile riêng và mặc định không chạy. MySQL, Redis, RabbitMQ và Supervisor cũng nằm trong profile riêng: mặc định không khởi động cho đến khi bạn bật profile tương ứng.
 
 Các image được cung cấp sẵn:
 
@@ -31,6 +34,9 @@ Các image được cung cấp sẵn:
 | `php-8.0` | `long301001/multi-php-docker:php-8.0` |
 | `php-8.1` | `long301001/multi-php-docker:php-8.1` |
 | `php-8.2`, `supervisor`, `manager` | `long301001/multi-php-docker:php-8.2` |
+| `php-8.3`, `supervisor-8.3` | `multi-php-local:php-8.3` (build từ `php:8.3-fpm`) |
+| `php-8.4`, `supervisor-8.4` | `multi-php-local:php-8.4` (build từ `php:8.4-fpm`) |
+| `php-8.5`, `supervisor-8.5` | `multi-php-local:php-8.5` (build từ `php:8.5-fpm`) |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `php-controller` | `docker:cli` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
@@ -71,21 +77,30 @@ cp env.example.json env.json
 
 ### 2. Đặt source code vào đúng thư mục
 
-- PHP 8.0: `server/source_php8.0/<project-name>`
-- PHP 8.1: `server/source_php8.1/<project-name>`
+- PHP 8.5: `server/source_php8.5/<project-name>`
+- PHP 8.4: `server/source_php8.4/<project-name>`
+- PHP 8.3: `server/source_php8.3/<project-name>`
 - PHP 8.2: `server/source_php8.2/<project-name>`
+- PHP 8.1: `server/source_php8.1/<project-name>`
+- PHP 8.0: `server/source_php8.0/<project-name>`
 - PHP 7.4: `server/source_php7.4/<project-name>`
 
 Các thư mục được mount vào container tại `/var/www/source_php<version>` tương ứng.
 
 ```text
 server/
-├── source_php8.0/
-│   └── my-php80-app/
-├── source_php8.1/
-│   └── my-php81-app/
+├── source_php8.5/
+│   └── my-php85-app/
+├── source_php8.4/
+│   └── my-php84-app/
+├── source_php8.3/
+│   └── my-php83-app/
 ├── source_php8.2/
 │   └── my-php82-app/
+├── source_php8.1/
+│   └── my-php81-app/
+├── source_php8.0/
+│   └── my-php80-app/
 └── source_php7.4/
     └── my-php7-app/
 ```
@@ -443,7 +458,7 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Tên service hợp lệ: `env-init`, `nginx`, `php-8.0`, `php-8.1`, `php-8.2`, `php-7.4`, `supervisor`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `redis`, `rabbitmq`.
+Tên service hợp lệ: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `supervisor`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `redis`, `rabbitmq`.
 
 ## Chạy background worker với Supervisor
 
@@ -501,6 +516,9 @@ Mỗi container Supervisor chỉ có một PHP runtime. PHP (+ Supervisor) nằm
 
 | PHP-FPM service | Supervisor service | File | Image dùng chung |
 | --- | --- | --- | --- |
+| `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `multi-php-local:php-8.5` |
+| `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `multi-php-local:php-8.4` |
+| `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `multi-php-local:php-8.3` |
 | `php-8.2` | `supervisor` | `compose/php-8.2.yml` | `long301001/multi-php-docker:php-8.2` |
 | `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `long301001/multi-php-docker:php-8.1` |
 | `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `long301001/multi-php-docker:php-8.0` |
@@ -508,7 +526,7 @@ Mỗi container Supervisor chỉ có một PHP runtime. PHP (+ Supervisor) nằm
 
 Không khai báo `build` trong service Supervisor. Với image tùy chỉnh, chỉ service PHP-FPM tương ứng khai báo `build`; service Supervisor dùng lại cùng tên image.
 
-Worker theo phiên bản: đặt file `.conf` trong `configs/supervisor.d/` (PHP 8.2 mặc định) hoặc `configs/supervisor.d/php8.1`, `php8.0`, `php7.4`.
+Worker theo phiên bản: đặt file `.conf` trong `configs/supervisor.d/` (PHP 8.2 mặc định) hoặc `configs/supervisor.d/php8.5`, `php8.4`, `php8.3`, `php8.1`, `php8.0`, `php7.4`.
 
 #### Supervisor cho PHP 8.1 / 8.0 (đã có sẵn trong compose)
 
