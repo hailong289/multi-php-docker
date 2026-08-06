@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  base: '/server-manage/',
   plugins: [vue()],
   resolve: {
     alias: {
@@ -11,6 +12,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/server-manage/api': {
+        target: 'http://127.0.0.1:8080',
+        rewrite: (path) => path.replace(/^\/server-manage/, ''),
+      },
       '/api': 'http://127.0.0.1:8080',
     },
   },

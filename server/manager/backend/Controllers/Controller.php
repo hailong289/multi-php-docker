@@ -35,6 +35,7 @@ abstract class Controller
             'nginx_status' => $nginx->status(),
             'hosts_status' => $hosts->status(),
             'hosts_extras' => $hosts->extras(),
+            'hosts_write_enabled' => HostsSync::writeEnabled(),
             'pending_sync' => $hosts->pendingSync(),
             'php_controllers' => [
                 'targets' => PhpRuntime::targets(),

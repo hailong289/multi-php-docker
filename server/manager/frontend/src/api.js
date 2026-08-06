@@ -1,11 +1,19 @@
 let csrfToken = ''
 
+const API_PREFIX = '/server-manage'
+
 export function getCsrfToken() {
   return csrfToken
 }
 
 export function setCsrfToken(token) {
   csrfToken = token || ''
+}
+
+function withApiPrefix(path) {
+  const p = path.startsWith('/') ? path : `/${path}`
+  if (p.startsWith('/server-manage/') || p === '/server-manage') return p
+  return `${API_PREFIX}${p}`
 }
 
 async function parseJson(response) {
@@ -20,7 +28,7 @@ async function parseJson(response) {
 }
 
 export async function apiGet(path) {
-  const response = await fetch(path, {
+  const response = await fetch(withApiPrefix(path), {
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
   })
@@ -28,7 +36,7 @@ export async function apiGet(path) {
 }
 
 export async function apiSend(method, path, body) {
-  const response = await fetch(path, {
+  const response = await fetch(withApiPrefix(path), {
     method,
     headers: {
       Accept: 'application/json',

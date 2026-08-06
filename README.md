@@ -321,7 +321,7 @@ The UI supports Create / Start / Stop / Restart and live log viewing under `logs
 
 After running `docker compose up -d`, open:
 
-[http://127.0.0.1:8080](http://127.0.0.1:8080)
+[http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
 
 Server Manager can:
 
@@ -411,7 +411,9 @@ To use Manager on a primary server behind Nginx:
 docker compose up -d nginx manager
 ```
 
-4. Open `https://MANAGER_DOMAIN` and sign in.
+4. Open `https://MANAGER_DOMAIN/server-manage` and sign in.
+
+If `MANAGER_DOMAIN` is a bare server IP and that IP is also a site in `env.json`, `/` keeps serving the site and Manager is only at `/server-manage`.
 
 Fail-closed: if `MANAGER_REMOTE=1` but username/password/domain are incomplete, Nginx does **not** write `manager.template`, and the API returns locked/unauthorized for protected routes.
 

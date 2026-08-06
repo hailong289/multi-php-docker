@@ -321,7 +321,7 @@ Trong UI có thể Tạo / Khởi động / Dừng / Khởi động lại và th
 
 Sau khi chạy `docker compose up -d`, mở:
 
-[http://127.0.0.1:8080](http://127.0.0.1:8080)
+[http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
 
 Server Manager cho phép:
 
@@ -411,7 +411,9 @@ Mặc định Manager lắng nghe `127.0.0.1:8080` không bắt login (chỉ CSR
 docker compose up -d nginx manager
 ```
 
-4. Mở `https://MANAGER_DOMAIN` và đăng nhập.
+4. Mở `https://MANAGER_DOMAIN/server-manage` và đăng nhập.
+
+Nếu `MANAGER_DOMAIN` là IP và IP đó cũng là site trong `env.json`, `/` vẫn phục vụ website; Manager chỉ ở `/server-manage`.
 
 Fail-closed: nếu `MANAGER_REMOTE=1` nhưng thiếu username/password/domain, Nginx **không** ghi `manager.template`, và API trả locked/unauthorized cho route được bảo vệ.
 

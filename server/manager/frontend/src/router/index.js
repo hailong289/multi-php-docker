@@ -11,8 +11,10 @@ import SupervisorView from '../views/SupervisorView.vue'
 import { apiGet, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 
+const BASE = '/server-manage/'
+
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(BASE),
   routes: [
     {
       path: '/login',
@@ -24,49 +26,49 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { titleKey: 'nav.home' },
+      meta: { titleKey: 'nav.home', manager: true },
     },
     {
       path: '/domains',
       name: 'domains',
       component: DomainsView,
-      meta: { titleKey: 'nav.domains' },
+      meta: { titleKey: 'nav.domains', manager: true },
     },
     {
       path: '/nginx',
       name: 'nginx',
       component: NginxView,
-      meta: { titleKey: 'nav.nginx' },
+      meta: { titleKey: 'nav.nginx', manager: true },
     },
     {
       path: '/services',
       name: 'services',
       component: ServicesView,
-      meta: { titleKey: 'nav.services' },
+      meta: { titleKey: 'nav.services', manager: true },
     },
     {
       path: '/php-versions',
       name: 'php-versions',
       component: PhpVersionsView,
-      meta: { titleKey: 'nav.php_versions' },
+      meta: { titleKey: 'nav.php_versions', manager: true },
     },
     {
       path: '/php-versions/catalog',
       name: 'php-version-catalog',
       component: PhpVersionCatalogView,
-      meta: { titleKey: 'nav.php_catalog' },
+      meta: { titleKey: 'nav.php_catalog', manager: true },
     },
     {
       path: '/php-versions/:service/supervisor',
       name: 'php-version-supervisor',
       component: SupervisorView,
-      meta: { titleKey: 'supervisor.title' },
+      meta: { titleKey: 'supervisor.title', manager: true },
     },
     {
       path: '/php-versions/:service',
       name: 'php-version-detail',
       component: PhpVersionDetailView,
-      meta: { titleKey: 'nav.php_versions' },
+      meta: { titleKey: 'nav.php_versions', manager: true },
     },
     {
       path: '/supervisor',
@@ -104,7 +106,10 @@ router.beforeEach(async (to) => {
   if (authState.remote && authState.authenticated && !authState.locked && to.name === 'login') {
     return { name: 'home' }
   }
+
   return true
 })
 
 export default router
+
+export { BASE as MANAGE_BASE }

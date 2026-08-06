@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import TableSkeleton from '../components/TableSkeleton.vue'
 import { useManager } from '../composables/useManager'
+import { authState } from '../lib/authState'
 
 const {
   loading,
@@ -30,6 +31,9 @@ const {
 } = useManager()
 
 const copied = ref(false)
+const hostsWriteEnabled = computed(
+  () => data.hosts_write_enabled !== false && authState.hosts_write_enabled !== false,
+)
 
 async function copyManualLines() {
   const text = (hostsManual.value?.lines || []).join('\n')
@@ -80,6 +84,9 @@ async function copyManualLines() {
         <strong>{{ $t('domains.hosts_status') }}:</strong>
         {{ loading ? $t('loading') : hostsStatusText() }}
       </p>
+      <p v-if="!hostsWriteEnabled" class="status-line warn">
+        {{ $t('hosts.remote_disabled') }}
+      </p>
       <div v-if="hostsProgress" class="hosts-progress" aria-live="polite">
         <div class="hosts-progress-head">
           <span class="btn-spinner" aria-hidden="true"></span>
@@ -99,6 +106,9 @@ async function copyManualLines() {
           ></span>
         </div>
       </div>
+      <p v-else-if="!loading && !hostsWriteEnabled" class="status-line">
+        {{ $t('hosts.remote_disabled_hint') }}
+      </p>
       <p v-else-if="!loading && data.pending_sync" class="status-line warn">
         {{ $t('hosts.watch_required') }}
       </p>
@@ -154,7 +164,7 @@ async function copyManualLines() {
             <td>
               <div class="actions">
                 <button
-                  v-if="item.hosts_state !== 'synced'"
+                  v-if="hostsWriteEnabled && item.hosts_state !== 'synced'"
                   type="button"
                   class="primary"
                   :class="{

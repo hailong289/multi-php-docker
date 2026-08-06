@@ -36,6 +36,10 @@ final class HostsController extends Controller
             return Response::json($hosts->refreshStatus($servers) + ['force_admin' => false]);
         }
 
+        if (!HostsSync::writeEnabled()) {
+            throw new HttpException('error.hosts_write_disabled_remote', 403);
+        }
+
         $hosts->request(true, $focusDomain);
         $desired = $hosts->desiredDomains($servers);
         $manualDomains = $focusDomain !== ''

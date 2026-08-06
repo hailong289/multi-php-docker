@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\RemoteAuth;
 
 final class HostsSync
 {
@@ -14,6 +15,11 @@ final class HostsSync
     public function __construct(?string $runtimePath = null)
     {
         $this->runtimePath = rtrim($runtimePath ?? Config::runtimePath(), '/');
+    }
+
+    public static function writeEnabled(): bool
+    {
+        return !RemoteAuth::isRemote();
     }
 
     public function status(): ?array
@@ -90,6 +96,11 @@ final class HostsSync
 
     public function request(bool $forceAdmin = false, string $focusDomain = ''): void
     {
+        // Remote Manager runs on a server: OS hosts helpers / protocol writes do not apply.
+        if (!self::writeEnabled()) {
+            return;
+        }
+
         if (!is_dir($this->runtimePath) && !mkdir($this->runtimePath, 0775, true) && !is_dir($this->runtimePath)) {
             throw new HttpException('error.runtime_directory', 500);
         }

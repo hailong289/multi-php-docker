@@ -30,6 +30,7 @@ const data = reactive({
   nginx_status: null,
   hosts_status: null,
   hosts_extras: [],
+  hosts_write_enabled: true,
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
   infra_services: { targets: {}, statuses: {} },
@@ -156,6 +157,7 @@ export function useManager() {
     data.nginx_status = payload.nginx_status || null
     data.hosts_status = payload.hosts_status || null
     data.hosts_extras = payload.hosts_extras || []
+    data.hosts_write_enabled = payload.hosts_write_enabled !== false
     data.pending_sync = !!payload.pending_sync
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
     data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
@@ -258,6 +260,7 @@ export function useManager() {
       authenticated: false,
       locked: authState.locked,
       domain: authState.domain,
+      hosts_write_enabled: authState.hosts_write_enabled,
     })
     bootstrapped.value = false
     const { default: router } = await import('../router')
@@ -352,8 +355,12 @@ export function useManager() {
     try {
       const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`)
       if (domainEditingKey.value === key) closeDomainModal()
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_removed'))
-      await finishHostsWrite(result)
+      if (data.hosts_write_enabled) {
+        await finishHostsWrite(result)
+      }
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -596,9 +603,12 @@ export function useManager() {
         })
       }
       closeDomainModal()
-      // Write request + multi-php-hosts:write protocol (ensure_hosts_env.*).
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_added'))
-      await finishHostsWrite(result)
+      if (data.hosts_write_enabled) {
+        await finishHostsWrite(result)
+      }
     } catch (error) {
       const fields = error.payload?.error?.fields || {}
       domainFieldErrors.value = Object.fromEntries(
@@ -633,6 +643,10 @@ export function useManager() {
   }
 
   async function writeDomainHostsAdmin(domainName) {
+    if (!data.hosts_write_enabled) {
+      showToast('failure', t('error.hosts_write_disabled_remote'))
+      return
+    }
     const domain = String(domainName || '').toLowerCase()
     if (!domain) return
     busy.value = true

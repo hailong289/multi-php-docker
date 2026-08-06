@@ -1646,3 +1646,55 @@ select:focus {
 .login-form input {
   width: 100%;
 }
+
+.shell-welcome {
+  width: min(720px, calc(100% - 32px));
+}
+
+.welcome-panel {
+  padding: 1.25rem 0 2rem;
+}
+
+.welcome-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.welcome-kicker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.welcome-panel h1 {
+  margin-bottom: 0.75rem;
+}
+
+.welcome-lead {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+}
+
+.welcome-points {
+  margin: 0 0 1.25rem;
+  padding-left: 1.15rem;
+  color: var(--text);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.welcome-note {
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.welcome-cta {
+  min-width: 12rem;
+  padding: 0.7rem 1.2rem;
+  font-size: 1rem;
+}

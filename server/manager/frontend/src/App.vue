@@ -12,9 +12,12 @@ const route = useRoute()
 const { fatalError, loadBootstrap, bootstrapped, logout } = useManager()
 const { startCurrentTour } = useTour()
 
-const showChrome = computed(
-  () => !authState.remote || (authState.authenticated && !authState.locked),
-)
+const showChrome = computed(() => {
+  if (route.meta?.public || route.name === 'login') return false
+  if (!route.meta?.manager) return false
+  if (authState.remote && (!authState.authenticated || authState.locked)) return false
+  return true
+})
 
 const accessBadge = computed(() => {
   if (!authState.remote) return t('header.local_only')
@@ -61,7 +64,7 @@ onMounted(async () => {
   applyTheme(themeMode.value)
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onSystemThemeChange)
   updateTitle()
-  if (showChrome.value && !bootstrapped.value) {
+  if (showChrome.value && !bootstrapped.value && route.meta?.manager) {
     await loadBootstrap()
   }
   document.addEventListener('visibilitychange', onVisibilityRefresh)
@@ -94,7 +97,7 @@ watch(locale, () => {
 watch(
   () => [showChrome.value, route.name],
   async ([chrome]) => {
-    if (chrome && !bootstrapped.value && route.name !== 'login') {
+    if (chrome && !bootstrapped.value && route.meta?.manager) {
       await loadBootstrap()
     }
   },

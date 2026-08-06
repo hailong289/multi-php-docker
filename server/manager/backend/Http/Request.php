@@ -20,6 +20,9 @@ final class Request
         $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
         $uriPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
         $path = is_string($uriPath) ? $uriPath : '/';
+        if ($path === '/server-manage' || str_starts_with($path, '/server-manage/')) {
+            $path = substr($path, strlen('/server-manage')) ?: '/';
+        }
         $path = '/' . trim($path, '/');
         if ($path === '/api') {
             $path = '/';

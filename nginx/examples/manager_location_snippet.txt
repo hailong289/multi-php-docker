@@ -1,14 +1,5 @@
-# Fallback when MANAGER_DOMAIN is not also a site in env.json.
-# Only exposes Manager under /server-manage — "/" is not the control panel.
-
-server {
-    listen 80;
-    server_name ${MANAGER_DOMAIN};
-
-    client_max_body_size 32M;
-
-    access_log /var/log/nginx/manager_access.log;
-    error_log /var/log/nginx/manager_error.log;
+# Manager UI only under /server-manage (keep full URI; manager router strips it).
+# Lets "/" keep serving the site for this server_name (IP or domain).
 
     location = /server-manage {
         return 302 /server-manage/;
@@ -22,4 +13,3 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_pass http://manager:8080;
     }
-}
