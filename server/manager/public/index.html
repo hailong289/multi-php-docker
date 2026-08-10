@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multi-PHP Server Manager</title>
+    <script>
+      (() => {
+        const allowed = ['system', 'light', 'dark']
+        let mode = 'system'
+        try {
+          const saved = localStorage.getItem('manager-theme')
+          if (allowed.includes(saved)) mode = saved
+        } catch (_) {}
+        const effective =
+          mode === 'system'
+            ? matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+            : mode
+        document.documentElement.dataset.theme = effective
+        document.documentElement.dataset.themeMode = mode
+      })()
+    </script>
+    <script type="module" crossorigin src="/server-manage/assets/index-UE1IGFtC.js"></script>
+    <link rel="stylesheet" crossorigin href="/server-manage/assets/index-CC1reHsR.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>

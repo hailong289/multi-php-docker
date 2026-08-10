@@ -1,0 +1,43 @@
+services:
+  php-8.0:
+    profiles: ["php-8.0"]
+    image: long301001/multi-php-docker:php-8.0
+    container_name: php8.0_container
+    volumes:
+      - ./server/source_php8.0:/var/www/source_php8.0
+      - ./scripts:/var/scripts
+      - ./configs/php8.0/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf
+    working_dir: /var/www/source_php8.0
+    networks:
+      - app-network
+
+  supervisor-8.0:
+    profiles: ["supervisor-8.0"]
+    image: long301001/multi-php-docker:php-8.0
+    container_name: supervisor80_container
+    volumes:
+      - ./server/source_php8.0:/var/www/source_php8.0
+      - ./scripts:/var/scripts
+      - ./configs/php8.0/php.ini:/usr/local/etc/php/php.ini
+      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
+      - ./configs/supervisor.d/php8.0:/etc/supervisor/conf.d:ro
+      - ./logs/supervisor-8.0:/var/log/supervisor
+    working_dir: /var/www/source_php8.0
+    command: ["/var/scripts/docker/supervisord.sh"]
+    depends_on:
+      mysql:
+        condition: service_started
+        required: false
+      redis:
+        condition: service_started
+        required: false
+      rabbitmq:
+        condition: service_started
+        required: false
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

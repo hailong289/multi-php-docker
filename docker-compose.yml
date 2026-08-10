@@ -1,3 +1,25 @@
+include:
+  - path: compose/php-8.5.yml
+    project_directory: .
+  - path: compose/php-8.4.yml
+    project_directory: .
+  - path: compose/php-8.3.yml
+    project_directory: .
+  - path: compose/php-8.2.yml
+    project_directory: .
+  - path: compose/php-8.1.yml
+    project_directory: .
+  - path: compose/php-8.0.yml
+    project_directory: .
+  - path: compose/php-7.4.yml
+    project_directory: .
+  - path: compose/redis.yml
+    project_directory: .
+  - path: compose/rabbitmq.yml
+    project_directory: .
+  - path: compose/mysql.yml
+    project_directory: .
+
 services:
   env-init:
     image: alpine:latest
@@ -51,148 +73,74 @@ services:
       - .:/var/host-project:ro
     environment:
       ENV_JSON_FILE: /var/host-project/env.json
-    command: ["sh", "-c", "/var/scripts/auto-add-template.sh && /var/scripts/entrypoint.sh"]
+      MANAGER_REMOTE: ${MANAGER_REMOTE:-0}
+      MANAGER_USERNAME: ${MANAGER_USERNAME:-}
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:-}
+      MANAGER_DOMAIN: ${MANAGER_DOMAIN:-}
+    command: ["sh", "-c", "/var/scripts/nginx/auto-add-template.sh && /var/scripts/docker/entrypoint.sh"]
     depends_on:
       env-init:
         condition: service_completed_successfully
-      php-8.2:
+      php-8.5:
         condition: service_started
     networks:
       - app-network
 
-  php-8.0:
-    profiles: ["php-8.0"]
-    image: long301001/multi-php-docker:php-8.0
-    container_name: php8.0_container
-    volumes:
-      - ./server/source_php8.0:/var/www/source_php8.0
-      - ./scripts:/var/scripts
-      - ./configs/php8.0/php.ini:/usr/local/etc/php/php.ini
-      - ./configs/supervisord.conf:/etc/supervisord.conf
-    working_dir: /var/www/source_php8.0
-    networks:
-      - app-network
-
-  php-8.1:
-    profiles: ["php-8.1"]
-    image: long301001/multi-php-docker:php-8.1
-    container_name: php8.1_container
-    volumes:
-      - ./server/source_php8.1:/var/www/source_php8.1
-      - ./scripts:/var/scripts
-      - ./configs/php8.1/php.ini:/usr/local/etc/php/php.ini
-      - ./configs/supervisord.conf:/etc/supervisord.conf
-    working_dir: /var/www/source_php8.1
-    networks:
-      - app-network
-
-  php-8.2:
-    image: long301001/multi-php-docker:php-8.2
-    container_name: php8.2_container
-    volumes:
-      - ./server/source_php8.2:/var/www/source_php8.2
-      - ./scripts:/var/scripts
-      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
-      - ./configs/supervisord.conf:/etc/supervisord.conf
-    working_dir: /var/www/source_php8.2
-    networks:
-      - app-network
-
-  php-7.4:
-     profiles: ["php-7.4"]
-     image: long301001/multi-php-docker:php-7.4
-     container_name: php7.4_container
-     volumes:
-       - ./server/source_php7.4:/var/www/source_php7.4
-       - ./scripts:/var/scripts
-       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
-     working_dir: /var/www/source_php7.4
-     networks:
-       - app-network
-
-  supervisor:
-    image: long301001/multi-php-docker:php-8.2
-    container_name: supervisor_container
-    volumes:
-      - ./server/source_php8.2:/var/www/source_php8.2
-      - ./scripts:/var/scripts
-      - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
-      - ./configs/supervisord.conf:/etc/supervisord.conf:ro
-      - ./configs/supervisor.d:/etc/supervisor/conf.d:ro
-      - ./logs/supervisor:/var/log/supervisor
-    working_dir: /var/www/source_php8.2
-    command: ["/var/scripts/supervisord.sh"]
-    depends_on:
-      - mysql
-      - redis
-      - rabbitmq
-    networks:
-      - app-network
-
   manager:
-    image: long301001/multi-php-docker:php-8.2
+    image: long301001/multi-php-docker:php-8.5
     container_name: manager_container
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./server/manager:/app:ro
       - ./runtime:/runtime
+      - ./php-controller-runtime:/runtime/php-controller
+      - ./nginx/logs:/nginx-logs
       - .:/var/host-project
+      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
     environment:
       MANAGER_ENV_PATH: /var/host-project/env.json
       MANAGER_RUNTIME_PATH: /runtime
-    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app"]
+      MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
+      MANAGER_NGINX_LOGS_PATH: /nginx-logs
+      MANAGER_DOCKER_SOCK: /var/run/docker.sock
+      MANAGER_REMOTE: ${MANAGER_REMOTE:-0}
+      MANAGER_USERNAME: ${MANAGER_USERNAME:-}
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:-}
+      MANAGER_DOMAIN: ${MANAGER_DOMAIN:-}
+    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:
         condition: service_completed_successfully
     networks:
       - app-network
 
-  redis:
-    image: long301001/multi-php-docker:redis-alpine
-    container_name: redis_container
-    volumes:
-      - redis-data:/data
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
-
-  mysql:
-    image: long301001/multi-php-docker:mysql
-    container_name: mysql_container
+  php-controller:
+    image: docker:cli
+    container_name: php_controller_container
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/scripts/php/php-controller.sh"]
     environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # Cho phép mật khẩu trống cho root
-      MYSQL_ROOT_PASSWORD: "1"
-    ports:
-      - "3306:3306"  # Ánh xạ cổng 3306
+      # Absolute host path of this repo (written by ensure_hosts_env.*). Used to
+      # rewrite compose bind mounts when creating optional PHP containers.
+      HOST_PROJECT_PATH: ${HOST_PROJECT_PATH:-/project}
+      # docker:cli image is read-only; compose build needs a writable Docker config dir.
+      DOCKER_CONFIG: /tmp/docker-config
     volumes:
-      - mysql-data:/var/lib/mysql
-      - ./mysql/my.cnf:/etc/mysql/my.cnf
-    networks:
-      - app-network
-
-
-  rabbitmq:
-    image: long301001/multi-php-docker:rabbitmq-3-management
-    container_name: rabbitmq_container
-    ports:
-      - "5672:5672"   # Cổng AMQP (cho ứng dụng kết nối)
-      - "15672:15672" # Cổng UI Web
-    environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=admin
-    networks:
-      - app-network
-
-volumes:
-  mysql-data:  # Khai báo volume mysql-data
-    driver: local  # Dùng driver local (mặc định)
-    name: mysql-data  # Tên volume
-  redis-data:
-    driver: local
-    name: redis-data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts:/scripts:ro
+      - ./php-controller-runtime:/runtime
+      # Long syntax avoids "too many colons" with Windows D:/ paths in short form.
+      - type: bind
+        source: ${HOST_PROJECT_PATH:-.}
+        target: /project
+        read_only: true
+    working_dir: /project
+    read_only: true
+    tmpfs:
+      - /tmp
+    network_mode: none
 
 networks:
   app-network:

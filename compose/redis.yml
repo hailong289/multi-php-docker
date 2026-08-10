@@ -1,0 +1,20 @@
+services:
+  redis:
+    profiles: ["redis"]
+    image: long301001/multi-php-docker:redis-alpine
+    container_name: redis_container
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+volumes:
+  redis-data:
+    driver: local
+    name: redis-data
+
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,17 @@
+services:
+  rabbitmq:
+    profiles: ["rabbitmq"]
+    image: long301001/multi-php-docker:rabbitmq-3-management
+    container_name: rabbitmq_container
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
