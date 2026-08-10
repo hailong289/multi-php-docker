@@ -31,7 +31,12 @@ final class PhpVersionInstaller
         if (PhpVersionId::isDefault($service)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
-        if (isset(PhpVersionCatalog::versions($this->root())[$service])) {
+        // Allow resume when a previous attempt wrote compose files but failed
+        // before updating docker-compose.yml (common on Windows CRLF checkouts).
+        if (
+            isset(PhpVersionCatalog::versions($this->root())[$service])
+            && $this->hasComposeInclude($service)
+        ) {
             throw new HttpException('php_controller.version_already_installed', 409);
         }
 
@@ -240,13 +245,30 @@ YAML;
         $this->mkdir($this->root() . '/logs/supervisor-' . PhpVersionId::minorFromService($service) . PhpVersionId::pathSuffix($service));
     }
 
+    private function normalizeNewlines(string $content): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $content);
+    }
+
+    private function hasComposeInclude(string $service): bool
+    {
+        $path = $this->root() . '/docker-compose.yml';
+        if (!is_file($path) || !is_readable($path)) {
+            return false;
+        }
+        $content = $this->normalizeNewlines((string) file_get_contents($path));
+
+        return str_contains($content, 'path: compose/' . $service . '.yml');
+    }
+
     private function ensureComposeInclude(string $service): void
     {
         $path = $this->root() . '/docker-compose.yml';
         if (!is_file($path) || !is_readable($path)) {
             throw new HttpException('php_controller.compose_unreadable', 500);
         }
-        $content = (string) file_get_contents($path);
+        // Windows Git often checks out with CRLF; ^...$ line anchors fail on \r.
+        $content = $this->normalizeNewlines((string) file_get_contents($path));
         $needle = 'path: compose/' . $service . '.yml';
         if (str_contains($content, $needle)) {
             return;

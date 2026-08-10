@@ -347,6 +347,7 @@ Card **Các phiên bản PHP** hiển thị trạng thái `Đang chạy`, `Đã 
 docker compose --profile php-8.1 create php-8.1
 ```
 
+**Thêm phiên bản** mở catalog Hub. Cài một tag từ catalog (ví dụ alpine) sẽ sinh file Compose/Dockerfile và **build** image local; trên Windows, DNS của Docker Desktop có thể làm gián đoạn build — xem **Xử lý lỗi → Windows: Cài / Tạo phiên bản PHP**.
 Sau đó làm mới Server Manager để dùng các nút điều khiển. Controller chấp nhận PHP 8.5–7.4 (service `php-8.x` trong compose) và các thao tác Create (chỉ bản có profile), Start, Stop, Restart; nó không xóa container. Controller tự suy ra đường dẫn repository trên Docker host từ mount `/project`; `HOST_PROJECT_PATH` trong `.env` chỉ là override tương thích ngược.
 
 ### Extension PHP từ Manager
@@ -783,6 +784,47 @@ Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `loca
 - Xem lỗi đầy đủ bằng `docker compose build --no-cache <service-name>`.
 - Kiểm tra kết nối mạng và Docker daemon.
 - Kiểm tra đúng tên Dockerfile, đặc biệt RabbitMQ dùng `docker_files/rabbitMQ.Dockerfile`.
+
+### Windows: Cài / Tạo phiên bản PHP từ Server Manager thất bại
+
+Các bản PHP kèm sẵn (`php-7.4` … `php-8.5`) dùng image Hub sẵn, thường chỉ cần **Tạo** → **Khởi động**. Các bản bạn **Cài đặt** từ catalog Manager (tag cụ thể như alpine/trixie) sẽ sinh Dockerfile và phải **build** image local (`multi-php-local:…`) trước khi tạo container. Build đó kéo base image từ Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
+
+Trên **Windows Docker Desktop**, bước này đôi khi fail dù máy vẫn lên mạng bình thường. Dòng lỗi thường gặp (trong `php-controller-runtime/status/`):
+
+- `lookup auth.docker.io … network is unreachable`
+- `failed to authorize: failed to fetch anonymous token`
+- `failed to resolve source metadata for docker.io/library/php:…`
+
+macOS ít gặp lỗi DNS kiểu này hơn.
+
+**Cách xử lý:**
+
+1. Kiểm tra Docker host kéo được Hub:
+
+```powershell
+docker pull hello-world
+# Hoặc đúng tag base trong lỗi / Dockerfile, ví dụ:
+docker pull php:8.5.7-fpm-alpine
+```
+
+2. Pull thành công thì mở lại Manager và bấm **Tạo** (hoặc **Cài đặt** lại). Lần build đầu có thể mất vài phút.
+
+3. Xem log lần fail gần nhất:
+
+```powershell
+Get-Content .\php-controller-runtime\status\last-create-error.log -Tail 40
+Get-Content .\php-controller-runtime\status\<service>.last-install-version.log -Tail 40
+```
+
+4. Nếu DNS Desktop vẫn lỗi: khởi động lại Docker Desktop, hoặc đổi DNS tạm (ví dụ `8.8.8.8` / `1.1.1.1`) tại Docker Desktop → Settings → Resources → Network rồi thử lại.
+
+5. Nếu không cần đúng patch/alpine/trixie: dùng bản Hub kèm sẵn trong repo — không phải build Dockerfile local.
+
+Tùy chọn: chạy một lần `scripts\hosts\ensure_hosts_env.ps1` để `.env` có `HOST_PROJECT_PATH` dạng slash xuôi (`D:/…`). `php-controller` dùng path này khi rewrite bind mount lúc Tạo/Cài.
+
+### Windows: `env.json` thành thư mục
+
+Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mục** cùng tên, hãy xóa thư mục đó rồi để `env-init` tạo lại file (`docker compose up -d` hoặc copy từ `env.example.json`). Compose mount cả thư mục project (không mount riêng file) để tránh lỗi này.
 
 ## Cấu trúc repository
 

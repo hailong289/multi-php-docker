@@ -207,4 +207,26 @@ assert_true(!DockerHubPhpTags::tagMatchesStem('8.5.6-fpm', '5.6'), '8.5.6 must n
 assert_true(DockerHubPhpTags::isFpmTag('5.6-fpm-jessie'), 'jessie fpm tagged');
 assert_true(!DockerHubPhpTags::isFpmTag('5.6-cli'), 'cli is not fpm');
 
+use Manager\Models\PhpVersionInstaller;
+
+$installProj = sys_get_temp_dir() . '/php-install-' . bin2hex(random_bytes(4));
+mkdir($installProj . '/compose', 0775, true);
+$crlfCompose = "include:\r\n"
+    . "  - path: compose/php-8.5.yml\r\n"
+    . "    project_directory: .\r\n"
+    . "  - path: compose/redis.yml\r\n"
+    . "    project_directory: .\r\n"
+    . "\r\n"
+    . "services: {}\r\n";
+file_put_contents($installProj . '/docker-compose.yml', $crlfCompose);
+$installer = new PhpVersionInstaller($installProj);
+$ensureInclude = new ReflectionMethod(PhpVersionInstaller::class, 'ensureComposeInclude');
+$ensureInclude->invoke($installer, 'php-8.6');
+$updatedCompose = (string) file_get_contents($installProj . '/docker-compose.yml');
+assert_true(str_contains($updatedCompose, 'path: compose/php-8.6.yml'), 'CRLF compose include php-8.6');
+assert_true(!str_contains($updatedCompose, "\r"), 'compose rewritten as LF');
+$hasInclude = new ReflectionMethod(PhpVersionInstaller::class, 'hasComposeInclude');
+assert_true($hasInclude->invoke($installer, 'php-8.6') === true, 'hasComposeInclude finds php-8.6');
+assert_true($hasInclude->invoke($installer, 'php-9.9') === false, 'hasComposeInclude misses unknown');
+
 echo "All checks passed\n";

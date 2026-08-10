@@ -347,6 +347,7 @@ The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Process
 docker compose --profile php-8.1 create php-8.1
 ```
 
+**Add version** opens the Hub catalog. Installing a catalog tag (for example alpine) scaffolds Compose/Dockerfile files and **builds** a local image; on Windows, Docker Desktop DNS can interrupt that build — see **Troubleshooting → Windows: Install / Create PHP version**.
 Then refresh Server Manager to use the controls. The controller accepts PHP 8.5–7.4 (`php-8.x` compose services) plus Create (profiled services only), Start, Stop, and Restart; it does not delete containers. The controller infers the repository path on the Docker host from the `/project` mount; `HOST_PROJECT_PATH` in `.env` is only a backward-compatible override.
 
 ### PHP extensions from Manager
@@ -783,6 +784,47 @@ Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of
 - View the full build output with `docker compose build --no-cache <service-name>`.
 - Check the network connection and Docker daemon.
 - Verify Dockerfile names, especially `docker_files/rabbitMQ.Dockerfile` for RabbitMQ.
+
+### Windows: Install / Create PHP version from Server Manager fails
+
+Bundled PHP versions (`php-7.4` … `php-8.5`) use ready-made Hub images and usually only need **Create** → **Start**. Versions you **Install** from the Manager catalog (exact tags such as alpine/trixie) generate a Dockerfile and must **build** a local image (`multi-php-local:…`) before the container can be created. That build pulls a base image from Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
+
+On **Windows Docker Desktop**, this step sometimes fails even when general internet works. Typical log lines (under `php-controller-runtime/status/`):
+
+- `lookup auth.docker.io … network is unreachable`
+- `failed to authorize: failed to fetch anonymous token`
+- `failed to resolve source metadata for docker.io/library/php:…`
+
+macOS is less affected by this Desktop DNS flakiness.
+
+**What to do:**
+
+1. Confirm Docker can reach Hub from the host:
+
+```powershell
+docker pull hello-world
+# Or pull the base tag shown in the error / Dockerfile, for example:
+docker pull php:8.5.7-fpm-alpine
+```
+
+2. If pull succeeds, open Manager again and click **Create** (or **Install** once more). Building can take several minutes the first time.
+
+3. Inspect the last failure:
+
+```powershell
+Get-Content .\php-controller-runtime\status\last-create-error.log -Tail 40
+Get-Content .\php-controller-runtime\status\<service>.last-install-version.log -Tail 40
+```
+
+4. If Desktop DNS keeps failing: restart Docker Desktop, or temporarily change DNS (for example `8.8.8.8` / `1.1.1.1`) in Docker Desktop → Settings → Resources → Network, then retry.
+
+5. Prefer a bundled Hub version when you do not need a specific patch/alpine/trixie tag — no local Dockerfile build is required.
+
+Optional: run `scripts\hosts\ensure_hosts_env.ps1` once so `.env` gets `HOST_PROJECT_PATH` with forward slashes (`D:/…`). That path is used when `php-controller` rewrites bind mounts for Create/Install.
+
+### Windows: `env.json` became a folder
+
+If Docker once bind-mounted a missing `env.json` as a **directory**, delete that folder, then let `env-init` recreate the file (`docker compose up -d` or copy from `env.example.json`). Compose mounts the project directory (not the file alone) to avoid this.
 
 ## Repository structure
 
