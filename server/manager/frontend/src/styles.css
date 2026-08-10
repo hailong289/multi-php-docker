@@ -188,12 +188,18 @@ table {
   min-width: 760px;
 }
 
+table.servers-table {
+  min-width: 880px;
+  table-layout: fixed;
+}
+
 th,
 td {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
+  word-break: break-word;
 }
 
 th {
@@ -218,10 +224,42 @@ code {
   color: var(--code);
 }
 
+.servers-table th:nth-child(1),
+.servers-table td:nth-child(1) {
+  width: 24%;
+}
+
+.servers-table th:nth-child(2),
+.servers-table td:nth-child(2) {
+  width: 16%;
+}
+
+.servers-table th:nth-child(3),
+.servers-table td:nth-child(3) {
+  width: 30%;
+}
+
+.servers-table th:nth-child(4),
+.servers-table td:nth-child(4) {
+  width: 30%;
+}
+
+.servers-table td code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.actions > button {
+  min-height: 32px;
+  padding: 0.35rem 0.65rem;
+  font-size: 13px;
 }
 
 tr.is-disabled td {
@@ -789,10 +827,16 @@ button.is-loading:disabled {
 }
 
 .form-path-hint {
-  margin: -4px 0 12px;
+  position: static;
+  margin: 6px 0 12px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.form-path-hint-below {
+  margin-top: 8px;
+  margin-bottom: 10px;
 }
 
 .form-path-guide {
@@ -1438,8 +1482,8 @@ select:focus {
 }
 
 .modal-panel {
-  width: min(520px, 100%);
-  max-height: min(90vh, 820px);
+  width: min(640px, 100%);
+  max-height: min(92vh, 860px);
   overflow: auto;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1697,4 +1741,63 @@ select:focus {
   min-width: 12rem;
   padding: 0.7rem 1.2rem;
   font-size: 1rem;
+}
+
+.terminal-panel {
+  margin-top: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0f1419;
+}
+
+.terminal-panel-page {
+  margin-top: 0;
+}
+
+.terminal-page-body {
+  padding-top: 0;
+}
+
+.terminal-page .terminal-host {
+  height: min(70vh, 720px);
+}
+
+.terminal-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--panel) 88%, #0f1419);
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-panel-header h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.terminal-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.terminal-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.terminal-status {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.terminal-host {
+  height: min(420px, 55vh);
+  padding: 8px;
 }

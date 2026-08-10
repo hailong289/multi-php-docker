@@ -1,16 +1,21 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import TableSkeleton from '../components/TableSkeleton.vue'
 import { useManager } from '../composables/useManager'
 import {
   FRAMEWORK_PRESETS,
+  buildDocRoot,
+  buildProjectDir,
   buildServerPath,
   detectFramework,
-  hostRelativeHint,
+  joinServerPath,
+  splitServerPath,
 } from '../lib/frameworkPaths'
 
 const { t } = useI18n()
+const router = useRouter()
 const {
   loading,
   busy,
@@ -36,9 +41,15 @@ const {
 
 const frameworkId = ref('laravel')
 const pathTouched = ref(false)
+const projectDir = ref('')
+const docRoot = ref('public')
+
+function openTerminal(item) {
+  router.push({ name: 'terminal', params: { serverKey: item.key } })
+}
 
 const sourcePrefix = computed(
-  () => data.php_versions?.[form.php_version]?.source_prefix || '/var/www/source_php8.2',
+  () => data.php_versions?.[form.php_version]?.source_prefix || '/var/www/source_php8.5',
 )
 
 const frameworkHint = computed(() => {
@@ -48,22 +59,33 @@ const frameworkHint = computed(() => {
 })
 
 const pathExample = computed(() => {
+  const joined = joinServerPath(projectDir.value, docRoot.value)
+  if (joined) return joined
   if (frameworkId.value === 'custom') return form.server_path || '—'
   return buildServerPath(sourcePrefix.value, form.app_name, frameworkId.value) || '—'
 })
 
 const hostExample = computed(() => {
-  if (frameworkId.value === 'custom') {
-    return String(form.server_path || '').replace(/^\/var\/www\//, '') || '—'
-  }
-  return hostRelativeHint(sourcePrefix.value, form.app_name, frameworkId.value) || '—'
+  const joined = joinServerPath(projectDir.value, docRoot.value)
+  const container =
+    joined ||
+    (frameworkId.value === 'custom'
+      ? form.server_path
+      : buildServerPath(sourcePrefix.value, form.app_name, frameworkId.value)) ||
+    ''
+  return String(container).replace(/^\/var\/www\//, '') || '—'
 })
+
+function syncServerPathFromParts() {
+  form.server_path = joinServerPath(projectDir.value, docRoot.value)
+}
 
 function applyFrameworkPath({ force = false } = {}) {
   if (frameworkId.value === 'custom') return
   if (pathTouched.value && !force) return
-  const next = buildServerPath(sourcePrefix.value, form.app_name, frameworkId.value)
-  if (next) form.server_path = next
+  projectDir.value = buildProjectDir(sourcePrefix.value, form.app_name)
+  docRoot.value = buildDocRoot(frameworkId.value)
+  syncServerPathFromParts()
 }
 
 function onFrameworkChange() {
@@ -71,9 +93,10 @@ function onFrameworkChange() {
   applyFrameworkPath({ force: true })
 }
 
-function onPathInput() {
+function onPathPartsInput() {
   pathTouched.value = true
   frameworkId.value = 'custom'
+  syncServerPathFromParts()
 }
 
 function openAdd() {
@@ -87,12 +110,17 @@ function openEdit(key) {
   startEdit(key)
   frameworkId.value = detectFramework(form.server_path, sourcePrefix.value)
   pathTouched.value = frameworkId.value === 'custom'
+  const parts = splitServerPath(form.server_path)
+  projectDir.value = parts.projectDir
+  docRoot.value = parts.docRoot
 }
 
 watch(modalOpen, (open) => {
   if (!open) {
     frameworkId.value = 'laravel'
     pathTouched.value = false
+    projectDir.value = ''
+    docRoot.value = 'public'
   }
 })
 
@@ -157,7 +185,7 @@ watch(
     />
     <div v-else-if="serverEntries.length === 0" class="empty" data-tour="home-table">{{ $t('servers.empty') }}</div>
     <div v-else class="table-wrap" data-tour="home-table">
-      <table>
+      <table class="servers-table">
         <thead>
           <tr>
             <th>{{ $t('table.app_domain') }}</th>
@@ -211,6 +239,9 @@ watch(
                         : $t('action.enable')
                   }}
                 </button>
+                <button type="button" :disabled="busy" @click="openTerminal(item)">
+                  {{ $t('action.terminal') }}
+                </button>
                 <button type="button" :disabled="busy" @click="openEdit(item.key)">
                   {{ $t('action.edit') }}
                 </button>
@@ -262,7 +293,7 @@ watch(
         <h2>{{ editingKey ? $t('form.edit_title') : $t('form.add_title') }}</h2>
         <button type="button" class="modal-close" :disabled="busy" @click="closeModal">×</button>
       </div>
-      <form class="modal-body" @submit.prevent="saveServer">
+      <form class="modal-body" @submit.prevent="syncServerPathFromParts(); saveServer()">
         <fieldset :disabled="busy" class="modal-fieldset">
           <label>{{ $t('form.app_name') }}</label>
           <input v-model="form.app_name" :placeholder="$t('form.app_placeholder')" required />
@@ -292,13 +323,25 @@ watch(
           </select>
           <p class="form-path-hint">{{ frameworkHint }}</p>
 
-          <label>{{ $t('form.server_path') }}</label>
+          <label for="mgr-project-dir">{{ $t('form.project_dir') }}</label>
           <input
-            v-model="form.server_path"
-            :placeholder="$t('form.path_placeholder')"
+            id="mgr-project-dir"
+            v-model="projectDir"
+            :placeholder="$t('form.project_dir_placeholder')"
             required
-            @input="onPathInput"
+            autocomplete="off"
+            @input="onPathPartsInput"
           />
+
+          <label for="mgr-doc-root">{{ $t('form.doc_root') }}</label>
+          <input
+            id="mgr-doc-root"
+            v-model="docRoot"
+            :placeholder="$t('form.doc_root_placeholder')"
+            autocomplete="off"
+            @input="onPathPartsInput"
+          />
+          <p class="form-path-hint form-path-hint-below">{{ $t('form.doc_root_hint') }}</p>
           <div v-if="fieldErrors.server_path" class="error">{{ fieldErrors.server_path }}</div>
           <div class="form-path-guide" data-tour="home-path-guide">
             <div>

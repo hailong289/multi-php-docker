@@ -40,8 +40,8 @@ const data = reactive({
 const form = reactive({
   app_name: '',
   domain_name: '',
-  server_path: '/var/www/source_php8.2/',
-  php_version: 'php-8.2',
+  server_path: '/var/www/source_php8.5/',
+  php_version: 'php-8.5',
   enabled: true,
 })
 
@@ -169,7 +169,7 @@ export function useManager() {
     for (const [id, config] of Object.entries(data.php_versions)) {
       if (config.container === container) return id
     }
-    return 'php-8.2'
+    return 'php-8.5'
   }
 
   function isServerEnabled(server) {
@@ -181,10 +181,10 @@ export function useManager() {
     fieldErrors.value = {}
     form.app_name = ''
     form.domain_name = ''
-    form.server_path = data.php_versions['php-8.2']?.source_prefix
-      ? `${data.php_versions['php-8.2'].source_prefix}/`
-      : '/var/www/source_php8.2/'
-    form.php_version = 'php-8.2'
+    form.server_path = data.php_versions['php-8.5']?.source_prefix
+      ? `${data.php_versions['php-8.5'].source_prefix}/`
+      : '/var/www/source_php8.5/'
+    form.php_version = 'php-8.5'
     form.enabled = true
   }
 

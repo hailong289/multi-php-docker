@@ -2,29 +2,29 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis, and RabbitMQ. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those images. PHP 8.2 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis, and RabbitMQ. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those images. PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Default services and ports
 
 | Service | Container | Host ports | Default configuration |
 | --- | --- | --- | --- |
 | Nginx | `nginx_container` | `80`, `443` | Serves domains defined in `env.json` |
-| PHP 8.5 | `php8.5_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
+| PHP 8.5 | `php8.5_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | PHP 8.4 | `php8.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | PHP 8.3 | `php8.3_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
-| PHP 8.2 | `php8.2_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
+| PHP 8.2 | `php8.2_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | PHP 8.1 | `php8.1_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | PHP 8.0 | `php8.0_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | PHP 7.4 | `php7.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
 | Redis | `redis_container` | `6379` | No password |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
-| Supervisor | `supervisor_container` | Not published | Runs PHP 8.2 background workers |
+| Supervisor | `supervisor85_container` | Not published | Runs PHP 8.5 background workers (profile) |
 | Server Manager | `manager_container` | `127.0.0.1:8080` | Manages virtual servers in `env.json` |
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
 | Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
-PHP 8.2 is the default version. `docker compose up -d` starts only PHP 8.2; PHP 7.4, 8.0, 8.1, 8.3, 8.4, and 8.5 are assigned to separate profiles and remain disabled by default. MySQL, Redis, RabbitMQ, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
+PHP 8.5 is the default version. `docker compose up -d` starts only PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3, and 8.4 are assigned to separate profiles and remain disabled by default. MySQL, Redis, RabbitMQ, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
 
 The following images are provided:
 
@@ -33,10 +33,10 @@ The following images are provided:
 | `nginx` | `long301001/multi-php-docker:nginx` |
 | `php-8.0` | `long301001/multi-php-docker:php-8.0` |
 | `php-8.1` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.2`, `supervisor`, `manager` | `long301001/multi-php-docker:php-8.2` |
-| `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
+| `php-8.5`, `supervisor-8.5`, `manager` | `long301001/multi-php-docker:php-8.5` |
 | `php-8.4`, `supervisor-8.4` | `long301001/multi-php-docker:php-8.4` |
-| `php-8.5`, `supervisor-8.5` | `long301001/multi-php-docker:php-8.5` |
+| `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
+| `php-8.2`, `supervisor-8.2` | `long301001/multi-php-docker:php-8.2` |
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `php-controller` | `docker:cli` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
@@ -80,7 +80,7 @@ cp env.example.json env.json
 - PHP 8.5: `server/source_php8.5/<project-name>`
 - PHP 8.4: `server/source_php8.4/<project-name>`
 - PHP 8.3: `server/source_php8.3/<project-name>`
-- PHP 8.2: `server/source_php8.2/<project-name>`
+- PHP 8.5: `server/source_php8.5/<project-name>`
 - PHP 8.1: `server/source_php8.1/<project-name>`
 - PHP 8.0: `server/source_php8.0/<project-name>`
 - PHP 7.4: `server/source_php7.4/<project-name>`
@@ -95,7 +95,7 @@ server/
 │   └── my-php84-app/
 ├── source_php8.3/
 │   └── my-php83-app/
-├── source_php8.2/
+├── source_php8.5/
 │   └── my-php82-app/
 ├── source_php8.1/
 │   └── my-php81-app/
@@ -128,8 +128,8 @@ Each project uses one `SERVER_NAME<N>` entry:
   "SERVER_NAME3": {
     "APP_NAME": "my-php82-app",
     "DOMAIN_NAME": "my-php82-app.test",
-    "SERVER_PATH": "/var/www/source_php8.2/my-php82-app/public",
-    "CONTAINER_PHP_VERSION": "php8.2_container"
+    "SERVER_PATH": "/var/www/source_php8.5/my-php85-app/public",
+    "CONTAINER_PHP_VERSION": "php8.5_container"
   },
   "SERVER_NAME4": {
     "APP_NAME": "my-php7-app",
@@ -223,19 +223,19 @@ docker compose pull
 docker compose up -d
 ```
 
-The command above starts PHP 8.2 together with Nginx, Server Manager, and PHP Controller. Optional PHP versions (7.4, 8.0, 8.1, 8.3, 8.4, 8.5), MySQL, Redis, RabbitMQ, and Supervisor are not started.
+The command above starts PHP 8.5 together with Nginx, Server Manager, and PHP Controller. Optional PHP versions (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, Redis, RabbitMQ, and Supervisor are not started.
 
 `php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required. The host helper is an optional OS integration with a manual hosts fallback.
 
 ### Enable an optional PHP version
 
-Each optional version has a Compose profile with the same name (`php-8.5`, `php-8.4`, `php-8.3`, `php-8.1`, `php-8.0`, `php-7.4`):
+Each optional version has a Compose profile with the same name (`php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
 
 ```bash
-# Enable PHP 8.5 / 8.4 / 8.3
-docker compose --profile php-8.5 up -d
+# Enable PHP 8.4 / 8.3 / 8.2
 docker compose --profile php-8.4 up -d
 docker compose --profile php-8.3 up -d
+docker compose --profile php-8.2 up -d
 
 # Enable PHP 8.1 / 8.0 / 7.4
 docker compose --profile php-8.1 up -d
@@ -247,9 +247,9 @@ Multiple versions can be enabled together:
 
 ```bash
 docker compose \
+  --profile php-8.2 \
   --profile php-8.3 \
   --profile php-8.4 \
-  --profile php-8.5 \
   up -d
 ```
 
@@ -306,10 +306,12 @@ docker compose rm -f mysql
 Each Supervisor container has its own profile (it does not start with PHP). Enable it from Server Manager: **PHP versions** → **Supervisor** for that version, or the CLI:
 
 ```bash
-# Default PHP 8.2 Supervisor
-docker compose --profile supervisor up -d supervisor
+# Default PHP 8.5 Supervisor
+docker compose --profile supervisor-8.5 up -d supervisor-8.5
 
-# Per-version Supervisors
+# Other Supervisors
+docker compose --profile supervisor-8.4 up -d supervisor-8.4
+docker compose --profile supervisor-8.2 up -d supervisor-8.2
 docker compose --profile supervisor-8.1 up -d supervisor-8.1
 docker compose --profile supervisor-8.0 up -d supervisor-8.0
 docker compose --profile supervisor-7.4 up -d supervisor-7.4
@@ -327,6 +329,7 @@ Server Manager can:
 
 - List the virtual servers currently stored in `env.json`.
 - Add, edit, and delete servers.
+- Open an inline **Terminal** on Home for a shell inside that server’s PHP container (container must be running; Manager needs read-write Docker socket access).
 - Select PHP 7.4, 8.0, 8.1, 8.2, 8.3, 8.4, or 8.5.
 - Reject duplicate application names and domains.
 - Restrict document roots to the selected PHP version's source directory.
@@ -338,7 +341,7 @@ Server Manager can:
 - Open **Details** for each PHP version to list loaded extensions, toggle `extension=` lines in the mounted `php.ini`, install a curated set of extensions into a running container, and edit `php.ini` (after save you can choose to restart PHP-FPM).
 - Manage Nginx from a dedicated menu: **Start**, **Stop**, **Restart**, run `nginx -t`, **Apply & Reload**, and inspect up to 200 recent test/reload, error, and access log lines.
 
-The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. PHP 8.2 is created by default. For an optional PHP container that has never been created, click **Create** in the UI (equivalent to `docker compose --profile … create …`), then use **Start**. You can still create manually:
+The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. PHP 8.5 is created by default. For an optional PHP container that has never been created, click **Create** in the UI (equivalent to `docker compose --profile … create …`), then use **Start**. You can still create manually:
 
 ```bash
 docker compose --profile php-8.1 create php-8.1
@@ -358,7 +361,7 @@ By default the UI is published only on `127.0.0.1:8080` (CSRF protection, no log
 
 If `env.json` does not exist, the `env-init` service creates it from `env.example.json` before Server Manager and Nginx start. This short-lived service never overwrites existing configuration.
 
-For the default PHP 8.2 runtime, click **Apply & Reload Nginx** after adding, editing, or deleting a server. The container does not need to be restarted.
+For the default PHP 8.5 runtime, click **Apply & Reload Nginx** after adding, editing, or deleting a server. The container does not need to be restarted.
 
 The reload button does not start optional PHP profiles. If the server uses an optional PHP version (8.5, 8.4, 8.3, 8.1, 8.0, 7.4), run the profile command shown by the UI first. For example, with PHP 8.3:
 
@@ -430,7 +433,7 @@ Security notes:
 ```bash
 docker compose logs -f
 docker compose logs -f nginx
-docker compose logs -f php-8.2
+docker compose logs -f php-8.5
 docker compose logs -f mysql
 ```
 
@@ -462,11 +465,11 @@ docker compose up -d
 
 To change extensions, packages, or configuration inside an image, change `image` to your own name and add `build` to the corresponding service. Do not keep a `long301001/multi-php-docker:*` name for a custom image.
 
-Example for a custom PHP 8.2 image:
+Example for a custom PHP 8.5 image:
 
 ```yaml
 services:
-  php-8.2:
+  php-8.5:
     image: my-project/php:8.2-local
     build:
       context: .
@@ -475,39 +478,39 @@ services:
 
   supervisor:
     image: my-project/php:8.2-local
-    # Do not add build; Supervisor reuses the php-8.2 image
+    # Do not add build; Supervisor reuses the php-8.5 image
 ```
 
 Build the custom image before starting the containers:
 
 ```bash
-docker compose build php-8.2
-docker compose --profile supervisor up -d supervisor
+docker compose build php-8.5
+docker compose --profile supervisor-8.5 up -d supervisor-8.5
 
 # Build and run another service
 docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Valid service names: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `supervisor`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `redis`, and `rabbitmq`.
+Valid service names: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `redis`, and `rabbitmq`.
 
 ## Running background workers with Supervisor
 
-The `php-8.2` and `supervisor` services both use the provided `long301001/multi-php-docker:php-8.2` image. They also mount the same source directory at `server/source_php8.2` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
+The `php-8.5` and `supervisor-8.5` services both use the provided `long301001/multi-php-docker:php-8.5` image. They also mount the same source directory at `server/source_php8.5` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
 
 ### Create a worker configuration
 
 Copy the example file:
 
 ```bash
-cp configs/supervisor.d/worker.conf.example configs/supervisor.d/worker.conf
+cp configs/supervisor.d/worker.conf.example configs/supervisor.d/php8.5/worker.conf
 ```
 
 Update `directory` and `command` in `worker.conf` for the project. Laravel example:
 
 ```ini
 [program:app_worker]
-directory=/var/www/source_php8.2/my-project
+directory=/var/www/source_php8.5/my-project
 command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
 numprocs=1
 autostart=true
@@ -516,27 +519,27 @@ redirect_stderr=true
 stdout_logfile=/var/log/supervisor/app-worker.log
 ```
 
-Create multiple `.conf` files in `configs/supervisor.d/` to run workers for multiple projects. Files ending in `.example` are not loaded automatically.
+Create multiple `.conf` files in `configs/supervisor.d/php8.5/` to run workers for multiple projects. Files ending in `.example` are not loaded automatically.
 
 ### Start and manage workers
 
 ```bash
 # Start PHP-FPM and Supervisor from the provided image
-docker compose --profile supervisor up -d supervisor
+docker compose --profile supervisor-8.5 up -d supervisor-8.5
 
 # View worker status
-docker compose exec supervisor supervisorctl status
+docker compose exec supervisor-8.5 supervisorctl status
 
 # Reload configuration after adding or editing .conf files
-docker compose exec supervisor supervisorctl reread
-docker compose exec supervisor supervisorctl update
+docker compose exec supervisor-8.5 supervisorctl reread
+docker compose exec supervisor-8.5 supervisorctl update
 
 # Restart all workers
-docker compose exec supervisor supervisorctl restart all
+docker compose exec supervisor-8.5 supervisorctl restart all
 
 # View container and worker logs
-docker compose logs -f supervisor
-ls logs/supervisor
+docker compose logs -f supervisor-8.5
+ls logs/supervisor-8.5
 ```
 
 Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` with `required: false` only orders startup when the MySQL/Redis/RabbitMQ profiles are enabled; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
@@ -550,19 +553,19 @@ Each Supervisor container contains one PHP runtime. PHP (+ Supervisor) lives in 
 | `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `long301001/multi-php-docker:php-8.5` |
 | `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `long301001/multi-php-docker:php-8.4` |
 | `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `long301001/multi-php-docker:php-8.3` |
-| `php-8.2` | `supervisor` | `compose/php-8.2.yml` | `long301001/multi-php-docker:php-8.2` |
+| `php-8.2` | `supervisor-8.2` | `compose/php-8.2.yml` | `long301001/multi-php-docker:php-8.2` |
 | `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `long301001/multi-php-docker:php-8.1` |
 | `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `long301001/multi-php-docker:php-8.0` |
 | `php-7.4` | `supervisor-7.4` | `compose/php-7.4.yml` | PHP 7.4 image (must include Supervisor) |
 
 Do not add `build` to a Supervisor service. For a custom image, only the matching PHP-FPM service declares `build`; the Supervisor service reuses the same image name to prevent duplicate builds.
 
-Per-version workers: put `.conf` files in `configs/supervisor.d/` (default PHP 8.2) or `configs/supervisor.d/php8.5`, `php8.4`, `php8.3`, `php8.1`, `php8.0`, `php7.4`.
+Per-version workers: put `.conf` files in `configs/supervisor.d/php8.5` (default PHP), or `php8.4`, `php8.3`, `php8.2`, `php8.1`, `php8.0`, `php7.4`.
 
-#### Supervisor for PHP 8.5 / 8.4 / 8.3 / 8.1 / 8.0 (already in compose)
+#### Supervisor for optional PHP versions (8.4 / 8.3 / 8.2 / 8.1 / 8.0)
 
 ```bash
-# Example PHP 8.3 — swap 8.3 for 8.4 / 8.5 / 8.1 / 8.0 as needed
+# Example PHP 8.3 — swap 8.3 for 8.4 / 8.2 / 8.1 / 8.0 as needed
 cp configs/supervisor.d/worker.conf.example \
    configs/supervisor.d/php8.3/worker.conf
 # Edit directory/command in worker.conf
@@ -571,7 +574,7 @@ docker compose --profile php-8.3 --profile supervisor-8.3 up -d php-8.3 supervis
 docker compose exec supervisor-8.3 supervisorctl status
 ```
 
-Same pattern for profiles `php-8.5` / `supervisor-8.5`, `php-8.4` / `supervisor-8.4`, `php-8.1` / `supervisor-8.1`, and `php-8.0` / `supervisor-8.0`.
+Same pattern for profiles `php-8.4` / `supervisor-8.4`, `php-8.2` / `supervisor-8.2`, `php-8.1` / `supervisor-8.1`, and `php-8.0` / `supervisor-8.0`.
 
 #### PHP 7.4 Supervisor example
 
@@ -603,7 +606,7 @@ Update `directory` in each `worker.conf` to match the PHP version's source path.
 ### Run commands inside containers
 
 ```bash
-docker compose exec php-8.2 sh
+docker compose exec php-8.5 sh
 docker compose exec php-8.5 php -v
 docker compose exec php-8.4 php -v
 docker compose exec php-8.3 php -v
@@ -797,7 +800,7 @@ Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of
 │   ├── rabbitmq.yml
 │   └── redis.yml
 ├── configs/                 # PHP and Supervisor configuration
-│   └── supervisor.d/        # Default (8.2) workers; php8.5/…/php7.4/ per version
+│   └── supervisor.d/        # Workers per version (php8.5/, php8.4/, …)
 ├── docker_files/            # Dockerfiles used to build services
 ├── mysql/                   # MySQL configuration
 ├── nginx/
@@ -815,7 +818,7 @@ Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of
 │   ├── source_php7.4/       # PHP 7.4 projects
 │   ├── source_php8.0/       # PHP 8.0 projects
 │   ├── source_php8.1/       # PHP 8.1 projects
-│   └── source_php8.2/       # PHP 8.2 projects
+│   └── source_php8.5/       # PHP 8.5 projects
 ├── docker-compose.yml       # Root: include + nginx/manager/php-controller/env-init
 ├── env.example.json         # Committed project/domain template
 └── env.json                 # Local configuration ignored by Git

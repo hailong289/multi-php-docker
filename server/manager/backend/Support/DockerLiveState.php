@@ -184,6 +184,43 @@ final class DockerLiveState
             return null;
         }
 
-        return $parts[1];
+        $body = $parts[1];
+        if (preg_match('/^Transfer-Encoding:\s*chunked\b/mi', $headers)) {
+            $body = self::decodeChunked($body);
+        }
+
+        return $body;
+    }
+
+    private static function decodeChunked(string $body): string
+    {
+        $out = '';
+        $offset = 0;
+        $len = strlen($body);
+        while ($offset < $len) {
+            $nl = strpos($body, "\r\n", $offset);
+            if ($nl === false) {
+                break;
+            }
+            $sizeLine = substr($body, $offset, $nl - $offset);
+            if (str_contains($sizeLine, ';')) {
+                $sizeLine = explode(';', $sizeLine, 2)[0];
+            }
+            $size = hexdec(trim($sizeLine));
+            $offset = $nl + 2;
+            if ($size === 0) {
+                break;
+            }
+            if ($offset + $size > $len) {
+                break;
+            }
+            $out .= substr($body, $offset, $size);
+            $offset += $size;
+            if (substr($body, $offset, 2) === "\r\n") {
+                $offset += 2;
+            }
+        }
+
+        return $out;
     }
 }

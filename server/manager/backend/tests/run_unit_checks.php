@@ -43,6 +43,7 @@ assert_true($editor->extensionLineStatus($disabled, 'imagick') === 'commented', 
 $withRedis = $editor->toggleExtensionContent($sample, 'redis', true);
 assert_true(str_contains($withRedis, 'extension=redis.so'), 'append redis');
 
+assert_true(PhpIniEditor::relativePath('php-8.5') === 'configs/php8.5/php.ini', 'path 8.5');
 assert_true(PhpIniEditor::relativePath('php-8.2') === 'configs/php8/php.ini', 'path 8.2');
 assert_true(PhpIniEditor::relativePath('php-8.1') === 'configs/php8.1/php.ini', 'path 8.1');
 assert_true(PhpIniEditor::relativePath('php-8.0') === 'configs/php8.0/php.ini', 'path 8.0');
@@ -86,13 +87,17 @@ foreach ($customEntries as $e) {
 assert_true(($byCustom['yaml'] ?? '') === 'loaded', 'custom yaml loaded');
 assert_true(($byCustom['redis'] ?? '') === 'available_to_install', 'curated still listed');
 
-assert_true(PhpVersionId::supervisorService('php-8.2') === 'supervisor', 'default supervisor service');
-assert_true(PhpVersionId::supervisorContainer('php-8.2') === 'supervisor_container', 'default supervisor container');
-assert_true(PhpVersionId::supervisorConfDir('php-8.2') === 'configs/supervisor.d', 'default supervisor conf dir');
+assert_true(PhpVersionId::defaultService() === 'php-8.5', 'default service');
+assert_true(PhpVersionId::supervisorService('php-8.5') === 'supervisor-8.5', 'default supervisor service');
+assert_true(PhpVersionId::supervisorContainer('php-8.5') === 'supervisor85_container', 'default supervisor container');
+assert_true(PhpVersionId::supervisorConfDir('php-8.5') === 'configs/supervisor.d/php8.5', 'default supervisor conf dir');
+assert_true(PhpVersionId::supervisorService('php-8.2') === 'supervisor-8.2', '8.2 supervisor service');
+assert_true(PhpVersionId::supervisorConfDir('php-8.2') === 'configs/supervisor.d/php8.2', '8.2 supervisor conf dir');
 assert_true(PhpVersionId::supervisorConfDir('php-8.1') === 'configs/supervisor.d/php8.1', '8.1 supervisor conf dir');
 assert_true(PhpVersionId::supervisorService('php-8.1') === 'supervisor-8.1', '8.1 supervisor service');
 assert_true(PhpVersionId::supervisorContainer('php-8.1') === 'supervisor81_container', '8.1 supervisor container');
-assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor') === 'php-8.2', 'supervisor → php-8.2');
+assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor') === 'php-8.5', 'legacy supervisor → php-8.5');
+assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor-8.5') === 'php-8.5', 'supervisor-8.5 → php-8.5');
 assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor-8.1') === 'php-8.1', 'supervisor-8.1 → php-8.1');
 assert_true(PhpVersionId::isValidSupervisorService('supervisor'), 'valid supervisor');
 assert_true(PhpVersionId::isValidSupervisorService('supervisor-8.2.33-alpine'), 'valid alpine supervisor');
@@ -163,5 +168,43 @@ assert_true(RemoteAuth::isLocked() === false, 'not locked with credentials');
 putenv('MANAGER_REMOTE=0');
 putenv('MANAGER_USERNAME=');
 putenv('MANAGER_PASSWORD=');
+
+use Manager\Models\TerminalSession;
+use Manager\Support\Config;
+
+$allowed = TerminalSession::allowedPhpContainers(Config::projectPath());
+assert_true(isset($allowed['php8.5_container']), 'default php container allowlisted');
+assert_true(!isset($allowed['nginx_container']), 'nginx not allowlisted');
+
+assert_true(
+    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/spa-fnb-retail/public')
+        === '/var/www/source_php8.5/spa-fnb-retail',
+    'terminal cwd strips /public',
+);
+assert_true(
+    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/posapp-yii-backend/web')
+        === '/var/www/source_php8.5/posapp-yii-backend',
+    'terminal cwd strips /web',
+);
+assert_true(
+    TerminalSession::projectDirFromServerPath('/var/www/source_php7.4/app/webroot')
+        === '/var/www/source_php7.4/app',
+    'terminal cwd strips /webroot',
+);
+assert_true(
+    TerminalSession::projectDirFromServerPath('/tmp/evil') === '',
+    'terminal cwd rejects non-source paths',
+);
+
+use Manager\Models\DockerHubPhpTags;
+
+assert_true(DockerHubPhpTags::isVersionStem('5.6'), '5.6 is version stem');
+assert_true(DockerHubPhpTags::isVersionStem('7.4.33'), '7.4.33 is version stem');
+assert_true(!DockerHubPhpTags::isVersionStem('fpm'), 'fpm is not version stem');
+assert_true(DockerHubPhpTags::tagMatchesStem('5.6-fpm', '5.6'), '5.6-fpm matches 5.6');
+assert_true(DockerHubPhpTags::tagMatchesStem('5.6.40-fpm-alpine', '5.6'), '5.6.40 matches 5.6');
+assert_true(!DockerHubPhpTags::tagMatchesStem('8.5.6-fpm', '5.6'), '8.5.6 must not match 5.6');
+assert_true(DockerHubPhpTags::isFpmTag('5.6-fpm-jessie'), 'jessie fpm tagged');
+assert_true(!DockerHubPhpTags::isFpmTag('5.6-cli'), 'cli is not fpm');
 
 echo "All checks passed\n";

@@ -156,12 +156,12 @@ final class SupervisorConfigs
     public function defaultContent(string $supervisorService): string
     {
         $targets = SupervisorRuntime::targets($this->projectPath);
-        $phpService = (string) ($targets[$supervisorService]['php_service'] ?? 'php-8.2');
+        $phpService = (string) ($targets[$supervisorService]['php_service'] ?? PhpVersionId::defaultService());
         $source = 'source_php' . PhpVersionId::minorFromService($phpService) . PhpVersionId::pathSuffix($phpService);
         $example = $this->projectPath . '/configs/supervisor.d/worker.conf.example';
         if (is_file($example) && is_readable($example)) {
             $raw = (string) file_get_contents($example);
-            return str_replace('source_php8.2', $source, $raw);
+            return str_replace('source_php8.5', $source, $raw);
         }
 
         return <<<CONF

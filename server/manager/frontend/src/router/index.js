@@ -8,6 +8,7 @@ import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
+import TerminalView from '../views/TerminalView.vue'
 import { apiGet, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 
@@ -27,6 +28,12 @@ const router = createRouter({
       name: 'home',
       component: HomeView,
       meta: { titleKey: 'nav.home', manager: true },
+    },
+    {
+      path: '/terminal/:serverKey',
+      name: 'terminal',
+      component: TerminalView,
+      meta: { titleKey: 'terminal.page_title', manager: true },
     },
     {
       path: '/domains',

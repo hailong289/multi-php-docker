@@ -1,6 +1,5 @@
 services:
   php-8.5:
-    profiles: ["php-8.5"]
     image: long301001/multi-php-docker:php-8.5
     container_name: php8.5_container
     volumes:

@@ -38,7 +38,7 @@ $translations = [
         'services.eyebrow' => 'Included services',
         'services.title' => 'Everything your PHP projects need',
         'service.nginx' => 'Virtual hosts generated from env.json and reloaded safely.',
-        'service.php' => 'PHP 8.2 by default, with optional 8.1, 8.0, and 7.4 profiles.',
+        'service.php' => 'PHP 8.5 by default, with optional 8.4–7.4 Compose profiles.',
         'service.mysql' => 'Persistent relational database for local applications.',
         'service.redis' => 'Fast cache, session storage, and queue backend.',
         'service.rabbitmq' => 'Message broker with a dedicated management dashboard.',
@@ -72,7 +72,7 @@ $translations = [
         'services.eyebrow' => 'Dịch vụ tích hợp',
         'services.title' => 'Đầy đủ thành phần cho dự án PHP',
         'service.nginx' => 'Tạo virtual host từ env.json và tải lại cấu hình an toàn.',
-        'service.php' => 'Mặc định PHP 8.2, hỗ trợ thêm profile 8.1, 8.0 và 7.4.',
+        'service.php' => 'Mặc định PHP 8.5, hỗ trợ thêm profile 8.4–7.4.',
         'service.mysql' => 'Cơ sở dữ liệu quan hệ có lưu trữ bền vững cho ứng dụng local.',
         'service.redis' => 'Cache tốc độ cao, lưu session và xử lý queue.',
         'service.rabbitmq' => 'Message broker kèm giao diện quản trị riêng.',
@@ -101,7 +101,7 @@ $host = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '127.0.0.
 $rabbitMqUrl = 'http://' . $host . ':15672';
 $services = [
     ['code' => 'NG', 'name' => 'Nginx', 'meta' => '80 · 443', 'text' => 'service.nginx'],
-    ['code' => 'PHP', 'name' => 'PHP-FPM', 'meta' => '8.2 · 8.1 · 8.0 · 7.4', 'text' => 'service.php'],
+    ['code' => 'PHP', 'name' => 'PHP-FPM', 'meta' => '8.5 · 8.4 · 8.3 · 8.2 · …', 'text' => 'service.php'],
     ['code' => 'DB', 'name' => 'MySQL', 'meta' => '3306', 'text' => 'service.mysql'],
     ['code' => 'RD', 'name' => 'Redis', 'meta' => '6379', 'text' => 'service.redis'],
     ['code' => 'MQ', 'name' => 'RabbitMQ', 'meta' => '5672 · 15672', 'text' => 'service.rabbitmq'],
@@ -202,7 +202,7 @@ $services = [
             <span class="online"><?= $e($t('hero.running')) ?></span>
             <h2>PHP <?= $e(PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION) ?></h2>
             <p><?= $e($t('hero.php')) ?></p>
-            <div class="terminal">$ docker compose up -d<br>&gt; nginx_container ready<br>&gt; php8.2_container ready<br>&gt; supervisor_container ready</div>
+            <div class="terminal">$ docker compose up -d<br>&gt; nginx_container ready<br>&gt; php8.5_container ready<br>&gt; supervisor85_container ready</div>
         </aside>
     </div>
 

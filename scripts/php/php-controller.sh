@@ -34,7 +34,7 @@ container_for_service() {
 
 profile_for_service() {
     case "$1" in
-        php-8.2) return 1 ;;
+        php-8.5) return 1 ;;
         mysql|redis|rabbitmq|supervisor)
             printf '%s' "$1"
             ;;

@@ -103,10 +103,6 @@ final class PhpVersionId
 
     public static function supervisorContainer(string $service): string
     {
-        if (self::isDefault($service)) {
-            return 'supervisor_container';
-        }
-
         return 'supervisor' . str_replace('.', '', self::minorFromService($service))
             . self::containerSuffix($service) . '_container';
     }
@@ -114,24 +110,17 @@ final class PhpVersionId
     /** Compose service name for Supervisor paired with a PHP-FPM service. */
     public static function supervisorService(string $phpService): string
     {
-        if (self::isDefault($phpService)) {
-            return 'supervisor';
-        }
-
         return 'supervisor-' . self::minorFromService($phpService) . self::pathSuffix($phpService);
     }
 
     public static function supervisorLogRelative(string $phpService): string
     {
-        if (self::isDefault($phpService)) {
-            return 'logs/supervisor';
-        }
-
         return 'logs/' . self::supervisorService($phpService);
     }
 
     public static function isValidSupervisorService(string $service): bool
     {
+        // Legacy bare "supervisor" (pre versioned name) still accepted.
         if ($service === 'supervisor') {
             return true;
         }
@@ -142,6 +131,7 @@ final class PhpVersionId
     /** Map supervisor service id back to its PHP-FPM service id. */
     public static function phpServiceFromSupervisor(string $supervisorService): string
     {
+        // Legacy alias from when the default runtime used a bare "supervisor" service.
         if ($supervisorService === 'supervisor') {
             return self::defaultService();
         }
@@ -179,12 +169,6 @@ final class PhpVersionId
 
     public static function supervisorConfDir(string $service): string
     {
-        // Default php-8.2 compose mounts ./configs/supervisor.d (whole tree).
-        // Other versions mount a version subdirectory.
-        if (self::isDefault($service)) {
-            return 'configs/supervisor.d';
-        }
-
         return 'configs/supervisor.d/php' . self::minorFromService($service) . self::pathSuffix($service);
     }
 
@@ -209,7 +193,7 @@ final class PhpVersionId
 
     public static function defaultService(): string
     {
-        return 'php-8.2';
+        return 'php-8.5';
     }
 
     public static function isDefault(string $service): bool

@@ -23,7 +23,7 @@ const phpService = computed(() => String(route.params.service || ''))
 const supervisorService = computed(() => {
   const fromTarget = data.php_controllers?.targets?.[phpService.value]?.supervisor_service
   if (fromTarget) return fromTarget
-  if (phpService.value === 'php-8.2') return 'supervisor'
+  if (phpService.value === 'php-8.5') return 'supervisor-8.5'
   if (phpService.value.startsWith('php-')) return `supervisor-${phpService.value.slice(4)}`
   return ''
 })
