@@ -254,7 +254,7 @@ export const en = {
   'hosts.progress_starting': 'Starting hosts write…',
   'hosts.progress_checking': 'Checking hosts status…',
   'hosts.progress_waiting': 'Waiting for add_hostname on the host…',
-  'hosts.progress_protocol': 'Opening hosts writer (approve admin prompt if shown)…',
+  'hosts.progress_protocol': 'Approve admin prompt if shown…',
   'hosts.progress_retry': 'Status check failed, retrying…',
   'hosts.progress_done': 'Hosts write finished.',
   'hosts.elevation_required': 'Permission denied. Requesting administrator access…',

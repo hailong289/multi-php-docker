@@ -254,7 +254,7 @@ export const vi = {
   'hosts.progress_starting': 'Bắt đầu ghi hosts…',
   'hosts.progress_checking': 'Đang kiểm tra trạng thái hosts…',
   'hosts.progress_waiting': 'Đang chờ add_hostname trên máy host…',
-  'hosts.progress_protocol': 'Đang mở trình ghi hosts (chấp nhận quyền admin nếu hiện)…',
+  'hosts.progress_protocol': 'Chấp nhận quyền admin nếu được hỏi…',
   'hosts.progress_retry': 'Kiểm tra thất bại, thử lại…',
   'hosts.progress_done': 'Hoàn tất ghi hosts.',
   'hosts.elevation_required': 'Không đủ quyền. Đang xin quyền quản trị…',

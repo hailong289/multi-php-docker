@@ -78,6 +78,15 @@ async function copyManualLines() {
             <span v-if="isPending('hosts-sync')" class="btn-spinner" aria-hidden="true"></span>
             {{ isPending('hosts-sync') ? $t('action.working') : $t('domains.sync_button') }}
           </button>
+          <span
+            v-if="hostsProgress"
+            class="hosts-action-chip"
+            role="status"
+            aria-live="polite"
+          >
+            <span class="hosts-action-chip-dot" aria-hidden="true"></span>
+            <span class="hosts-action-chip-text">{{ $t(hostsProgress.message_key) }}</span>
+          </span>
         </div>
       </div>
       <p class="status-line">
@@ -87,32 +96,13 @@ async function copyManualLines() {
       <p v-if="!hostsWriteEnabled" class="status-line warn">
         {{ $t('hosts.remote_disabled') }}
       </p>
-      <div v-if="hostsProgress" class="hosts-progress" aria-live="polite">
-        <div class="hosts-progress-head">
-          <span class="btn-spinner" aria-hidden="true"></span>
-          <strong>{{ $t('hosts.progress_title') }}</strong>
-          <span class="hosts-progress-count">
-            {{ hostsProgress.attempt }}/{{ hostsProgress.maxAttempts }}
-          </span>
-        </div>
-        <p class="status-line">{{ $t(hostsProgress.message_key) }}</p>
-        <div class="hosts-progress-bar" aria-hidden="true">
-          <span
-            class="hosts-progress-fill"
-            :style="{
-              width:
-                Math.max(8, (hostsProgress.attempt / hostsProgress.maxAttempts) * 100) + '%',
-            }"
-          ></span>
-        </div>
-      </div>
-      <p v-else-if="!loading && !hostsWriteEnabled" class="status-line">
+      <p v-if="!loading && !hostsProgress && !hostsWriteEnabled" class="status-line">
         {{ $t('hosts.remote_disabled_hint') }}
       </p>
-      <p v-else-if="!loading && data.pending_sync" class="status-line warn">
+      <p v-else-if="!loading && !hostsProgress && data.pending_sync" class="status-line warn">
         {{ $t('hosts.watch_required') }}
       </p>
-      <p v-else-if="!loading" class="status-line">{{ $t('hosts.sync_hint') }}</p>
+      <p v-else-if="!loading && !hostsProgress" class="status-line">{{ $t('hosts.sync_hint') }}</p>
     </div>
 
     <TableSkeleton
