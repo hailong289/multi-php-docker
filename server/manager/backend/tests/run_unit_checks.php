@@ -14,6 +14,9 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+use Manager\Http\HttpException;
+use Manager\Models\EnvConfig;
+use Manager\Models\HostsSync;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\PhpExtensionCatalog;
@@ -238,5 +241,32 @@ assert_true($hasInclude->invoke($installer, 'php-9.9') === false, 'hasComposeInc
 file_put_contents($installProj . '/compose/php-8.6.yml', "services:\n  php-8.6: {}\n");
 $installer->repairComposeInclude('php-8.6');
 assert_true($hasInclude->invoke($installer, 'php-8.6') === true, 'repairComposeInclude idempotent');
+
+$envMissingDir = sys_get_temp_dir() . '/mgr-env-missing-' . bin2hex(random_bytes(4));
+mkdir($envMissingDir, 0775, true);
+$missingPath = $envMissingDir . '/env.json';
+$envMissing = new EnvConfig($missingPath);
+assert_true($envMissing->allOrEmpty() === [], 'allOrEmpty missing file');
+try {
+    $envMissing->all();
+    assert_true(false, 'all() should throw when missing');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'error.env_missing', 'all() throws env_missing');
+}
+
+$validPath = $envMissingDir . '/valid-env.json';
+file_put_contents($validPath, "{\"SERVER_NAME1\":{\"DOMAIN_NAME\":\"a.test\",\"APP_NAME\":\"a\"}}\n");
+$envValid = new EnvConfig($validPath);
+$loaded = $envValid->allOrEmpty();
+assert_true(isset($loaded['SERVER_NAME1']), 'allOrEmpty loads existing env');
+
+$hostsTmp = sys_get_temp_dir() . '/hosts-sync-' . bin2hex(random_bytes(4));
+mkdir($hostsTmp, 0775, true);
+$hosts = new HostsSync($hostsTmp);
+$hosts->saveExtras(['solo.test']);
+$desired = $hosts->desiredDomains([]);
+assert_true($desired === ['solo.test'], 'desiredDomains extras only');
+$listed = $hosts->listedDomains([], null);
+assert_true(count($listed) === 1 && ($listed[0]['source'] ?? '') === 'hosts', 'listedDomains hosts-only');
 
 echo "All checks passed\n";

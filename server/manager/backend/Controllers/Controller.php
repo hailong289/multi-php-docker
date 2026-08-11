@@ -20,7 +20,7 @@ abstract class Controller
     protected function bootstrapPayload(): array
     {
         $env = new EnvConfig();
-        $servers = $env->all();
+        $servers = $env->allOrEmpty();
         $nginx = new NginxReload();
         $php = new PhpRuntime();
         $infra = new InfraRuntime();

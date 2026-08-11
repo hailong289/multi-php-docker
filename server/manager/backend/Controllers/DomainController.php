@@ -17,7 +17,7 @@ final class DomainController extends Controller
     {
         $env = new EnvConfig();
         $hosts = new HostsSync();
-        $servers = $env->all();
+        $servers = $env->allOrEmpty();
         $hostsStatus = $hosts->status();
 
         return Response::json([
@@ -37,7 +37,8 @@ final class DomainController extends Controller
         }
 
         $env = new EnvConfig();
-        foreach ($env->all() as $server) {
+        $servers = $env->allOrEmpty();
+        foreach ($servers as $server) {
             if (strcasecmp((string) ($server['DOMAIN_NAME'] ?? ''), $domain) === 0) {
                 throw new HttpException('validation.failed', 422, [
                     'domain_name' => ['key' => 'validation.duplicate_domain'],
@@ -56,7 +57,6 @@ final class DomainController extends Controller
         $hosts->saveExtras($extras);
         // Force admin write so watch mode elevates immediately (Manager cannot write hosts itself).
         $hosts->request(true, $domain);
-        $servers = $env->all();
 
         return Response::json([
             'domain_name' => $domain,
@@ -125,7 +125,7 @@ final class DomainController extends Controller
         }
 
         $env = new EnvConfig();
-        $servers = $env->all();
+        $servers = $env->allOrEmpty();
         foreach ($servers as $server) {
             if (strcasecmp((string) ($server['DOMAIN_NAME'] ?? ''), $next) === 0) {
                 throw new HttpException('validation.failed', 422, [
@@ -177,7 +177,7 @@ final class DomainController extends Controller
         $hosts->request(true);
 
         $env = new EnvConfig();
-        $servers = $env->all();
+        $servers = $env->allOrEmpty();
 
         return Response::json([
             'message_key' => 'hosts.domain_removed',

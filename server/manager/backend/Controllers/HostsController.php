@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Manager\Controllers;
 
+use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
 use Manager\Models\EnvConfig;
@@ -29,7 +30,7 @@ final class HostsController extends Controller
 
         $hosts = new HostsSync();
         $env = new EnvConfig();
-        $servers = $env->all();
+        $servers = $env->allOrEmpty();
 
         // Default refresh reads the latest status written by the optional host helper.
         if (!$forceAdmin) {
