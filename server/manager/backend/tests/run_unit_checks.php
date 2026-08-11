@@ -208,6 +208,13 @@ assert_true(DockerHubPhpTags::isFpmTag('5.6-fpm-jessie'), 'jessie fpm tagged');
 assert_true(!DockerHubPhpTags::isFpmTag('5.6-cli'), 'cli is not fpm');
 
 use Manager\Models\PhpVersionInstaller;
+use Manager\Support\AtomicFile;
+
+$atomicDir = sys_get_temp_dir() . '/atomic-' . bin2hex(random_bytes(4));
+mkdir($atomicDir, 0775, true);
+$atomicPath = $atomicDir . '/req.json';
+assert_true(AtomicFile::write($atomicPath, "{\"ok\":true}\n") === true, 'AtomicFile write');
+assert_true(is_file($atomicPath) && str_contains((string) file_get_contents($atomicPath), '"ok":true'), 'AtomicFile content');
 
 $installProj = sys_get_temp_dir() . '/php-install-' . bin2hex(random_bytes(4));
 mkdir($installProj . '/compose', 0775, true);
@@ -228,5 +235,8 @@ assert_true(!str_contains($updatedCompose, "\r"), 'compose rewritten as LF');
 $hasInclude = new ReflectionMethod(PhpVersionInstaller::class, 'hasComposeInclude');
 assert_true($hasInclude->invoke($installer, 'php-8.6') === true, 'hasComposeInclude finds php-8.6');
 assert_true($hasInclude->invoke($installer, 'php-9.9') === false, 'hasComposeInclude misses unknown');
+file_put_contents($installProj . '/compose/php-8.6.yml', "services:\n  php-8.6: {}\n");
+$installer->repairComposeInclude('php-8.6');
+assert_true($hasInclude->invoke($installer, 'php-8.6') === true, 'repairComposeInclude idempotent');
 
 echo "All checks passed\n";

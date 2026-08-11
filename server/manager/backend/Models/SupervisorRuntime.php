@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\DockerLiveState;
 
@@ -112,12 +113,7 @@ final class SupervisorRuntime
             'requested_at' => date(DATE_ATOM),
         ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
         $finalPath = $requestDir . '/' . $requestId . '__' . $service . '__' . $action . '.json';
-        $tempPath = $finalPath . '.tmp';
-
-        if (file_put_contents($tempPath, $payload, LOCK_EX) === false || !rename($tempPath, $finalPath)) {
-            if (is_file($tempPath)) {
-                unlink($tempPath);
-            }
+        if (!AtomicFile::write($finalPath, $payload)) {
             throw new HttpException('supervisor.request_failed', 500);
         }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\DockerLiveState;
 
@@ -134,12 +135,7 @@ final class PhpRuntime
             ? ($action . '-' . $extension)
             : $action;
         $finalPath = $requestDir . '/' . $requestId . '__' . $service . '__' . $suffix . '.json';
-        $tempPath = $finalPath . '.tmp';
-
-        if (file_put_contents($tempPath, $request, LOCK_EX) === false || !rename($tempPath, $finalPath)) {
-            if (is_file($tempPath)) {
-                unlink($tempPath);
-            }
+        if (!AtomicFile::write($finalPath, $request)) {
             throw new HttpException('php_controller.request_failed', 500);
         }
 

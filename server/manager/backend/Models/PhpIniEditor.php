@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 
 final class PhpIniEditor
@@ -76,9 +77,7 @@ final class PhpIniEditor
             throw new HttpException('php_controller.ini_too_large', 400);
         }
         $path = $this->absolutePath($service);
-        $tmp = $path . '.tmp';
-        if (file_put_contents($tmp, $content, LOCK_EX) === false || !rename($tmp, $path)) {
-            @unlink($tmp);
+        if (!AtomicFile::write($path, $content)) {
             throw new HttpException('php_controller.ini_write_failed', 500);
         }
     }
