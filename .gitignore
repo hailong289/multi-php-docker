@@ -46,6 +46,3 @@
 
 /logs/supervisor-8.*/
 !/logs/supervisor-8.*/.gitkeep
-# Superpowers brainstorming sessions
-.superpowers/
-
