@@ -7,6 +7,7 @@ namespace Manager\Models;
 use Manager\Http\HttpException;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
+use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 
 final class InfraRuntime
@@ -98,13 +99,11 @@ final class InfraRuntime
 
     public function hasBlockingRequests(string $service): bool
     {
-        foreach (glob($this->basePath . '/requests/*__' . $service . '__*.json') ?: [] as $file) {
-            if (preg_match('/__(?:start|stop|restart|create|pull-recreate)/', basename($file))) {
-                return true;
-            }
-        }
-
-        return false;
+        return ControllerRequests::hasBlocking(
+            $this->basePath . '/requests',
+            $service,
+            ['start', 'stop', 'restart', 'create', 'pull-recreate'],
+        );
     }
 
     public function request(string $service, string $action): string

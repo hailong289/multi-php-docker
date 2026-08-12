@@ -7,6 +7,7 @@ namespace Manager\Models;
 use Manager\Http\HttpException;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
+use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 
 final class PhpRuntime
@@ -81,13 +82,11 @@ final class PhpRuntime
     /** True when start/stop/restart/create/install-version/install-ext/uninstall-ext is queued — not modules probes. */
     public function hasBlockingRequests(string $service): bool
     {
-        foreach (glob($this->basePath . '/requests/*__' . $service . '__*.json') ?: [] as $file) {
-            if (preg_match('/__(?:start|stop|restart|create|install-version|install-ext|uninstall-ext)/', basename($file))) {
-                return true;
-            }
-        }
-
-        return false;
+        return ControllerRequests::hasBlocking(
+            $this->basePath . '/requests',
+            $service,
+            ['start', 'stop', 'restart', 'create', 'install-version', 'install-ext', 'uninstall-ext'],
+        );
     }
 
     public function request(string $service, string $action, ?string $extension = null): string

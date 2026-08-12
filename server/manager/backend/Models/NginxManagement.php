@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 
 final class NginxManagement
@@ -35,7 +36,7 @@ final class NginxManagement
                 $status = array_merge($status, array_intersect_key($decoded, $status));
             }
         }
-        if (glob($base . '/requests/*__nginx__*.json')) {
+        if (ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
         } else {

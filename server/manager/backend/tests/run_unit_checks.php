@@ -152,6 +152,21 @@ $pullId = (new InfraRuntime($infraTmp))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
 
+use Manager\Support\ControllerRequests;
+
+$staleDir = sys_get_temp_dir() . '/mgr-req-stale-' . bin2hex(random_bytes(4));
+mkdir($staleDir, 0775, true);
+$staleFile = $staleDir . '/abc__nginx__start.json';
+file_put_contents($staleFile, "{}\n");
+touch($staleFile, time() - 7200);
+assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === false, 'stale nginx request purged');
+assert_true(!is_file($staleFile), 'stale request file removed');
+$freshFile = $staleDir . '/def__nginx__start.json';
+file_put_contents($freshFile, "{}\n");
+assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === true, 'fresh nginx request blocks');
+@unlink($freshFile);
+@rmdir($staleDir);
+
 use Manager\Support\RemoteAuth;
 
 putenv('MANAGER_REMOTE=0');
