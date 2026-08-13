@@ -9,6 +9,7 @@ use Manager\Http\Response;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\InfraRuntime;
+use Manager\Models\NginxManagement;
 use Manager\Models\NginxReload;
 use Manager\Models\PhpRuntime;
 use Manager\Models\PhpVersionCatalog;
@@ -33,6 +34,7 @@ abstract class Controller
             'profiles' => $env->requiredProfiles($servers),
             'apply_command' => $env->applyCommand($servers),
             'nginx_status' => $nginx->status(),
+            'nginx_management' => (new NginxManagement())->status(),
             'hosts_status' => $hosts->status(),
             'hosts_extras' => $hosts->extras(),
             'hosts_write_enabled' => HostsSync::writeEnabled(),

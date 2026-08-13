@@ -28,6 +28,7 @@ const data = reactive({
   php_versions: {},
   apply_command: '',
   nginx_status: null,
+  nginx_management: null,
   hosts_status: null,
   hosts_extras: [],
   hosts_write_enabled: true,
@@ -155,6 +156,7 @@ export function useManager() {
     data.php_versions = payload.php_versions || {}
     data.apply_command = payload.apply_command || ''
     data.nginx_status = payload.nginx_status || null
+    data.nginx_management = payload.nginx_management || null
     data.hosts_status = payload.hosts_status || null
     data.hosts_extras = payload.hosts_extras || []
     data.hosts_write_enabled = payload.hosts_write_enabled !== false
@@ -331,7 +333,6 @@ export function useManager() {
       )
       try {
         await apiSend('POST', '/api/nginx/reload', {})
-        setTimeout(loadBootstrap, 1500)
       } catch (reloadError) {
         showToast('failure', translateApiError(reloadError))
       }
@@ -375,7 +376,7 @@ export function useManager() {
     try {
       const result = await apiSend('POST', '/api/nginx/reload', {})
       toastFromResult(result)
-      setTimeout(loadBootstrap, 1500)
+      // Status / reload result comes from silent bootstrap + Nginx page polls.
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -384,34 +385,30 @@ export function useManager() {
     }
   }
 
+  /** Queue a PHP container lifecycle action; status updates via bootstrap poll. */
   async function phpAction(service, action) {
-    busy.value = true
     pendingAction.value = { kind: 'php', service, action }
     try {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
-      setTimeout(loadBootstrap, 1500)
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
-      busy.value = false
       pendingAction.value = null
     }
   }
 
+  /** Queue an infra container lifecycle action; status updates via bootstrap poll. */
   async function infraAction(service, action) {
-    busy.value = true
     pendingAction.value = { kind: 'infra', service, action }
     try {
       const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
-      setTimeout(loadBootstrap, 1500)
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
-      busy.value = false
       pendingAction.value = null
     }
   }
@@ -724,12 +721,26 @@ export function useManager() {
     return t(map[state] || 'php_controller.state_not_created')
   }
 
+  /** True while any Docker-managed service reports busy (drives faster status polling). */
+  const dockerStatusBusy = computed(() => {
+    const groups = [data.php_controllers?.statuses, data.infra_services?.statuses, data.supervisor_services?.statuses]
+    for (const statuses of groups) {
+      if (!statuses) continue
+      for (const row of Object.values(statuses)) {
+        if (row?.state === 'busy') return true
+      }
+    }
+    const nginx = data.nginx_management
+    if (nginx?.state === 'busy') return true
+    return false
+  })
+
   function phpServiceState(service) {
     return data.php_controllers.statuses[service]?.state || 'not_created'
   }
 
   function phpActionEnabled(service, action) {
-    if (busy.value) return false
+    if (isPending('php', { service })) return false
     const state = phpServiceState(service)
     const target = data.php_controllers.targets[service]
     if (action === 'create') {
@@ -750,7 +761,7 @@ export function useManager() {
   }
 
   function infraActionEnabled(service, action) {
-    if (busy.value) return false
+    if (isPending('infra', { service })) return false
     const state = infraServiceState(service)
     const target = data.infra_services.targets[service]
     if (action === 'create') {
@@ -788,6 +799,7 @@ export function useManager() {
     fieldErrors,
     busy,
     pendingAction,
+    dockerStatusBusy,
     modalOpen,
     bootstrapped,
     data,
