@@ -71,6 +71,7 @@ return [
     ['PUT', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'update']],
     ['DELETE', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'destroy']],
     ['POST', '/terminal/sessions', [TerminalController::class, 'create']],
+    ['GET', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/stream', [TerminalController::class, 'stream']],
     ['GET', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/output', [TerminalController::class, 'output']],
     ['POST', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/input', [TerminalController::class, 'input']],
     ['POST', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/resize', [TerminalController::class, 'resize']],

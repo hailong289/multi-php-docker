@@ -24,6 +24,12 @@ final class Kernel
             RemoteAuth::requireAuthenticated();
         }
 
+        // Terminal I/O is chatty; holding the session file lock serializes
+        // input POSTs behind output polls on php -S / file sessions.
+        if (str_starts_with($request->path(), '/terminal/') && session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
         return $next($request);
     }
 }

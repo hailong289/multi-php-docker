@@ -92,36 +92,57 @@ if ($preface !== '') {
 
 $inOffset = is_file($offsetFile) ? (int) trim((string) file_get_contents($offsetFile)) : 0;
 
+/**
+ * @param resource $fp
+ * @return bool|null true if bytes were written, false if idle, null if attach is dead
+ */
+function worker_drain_input(string $inFile, string $offsetFile, $fp, int &$inOffset): ?bool
+{
+    clearstatcache(true, $inFile);
+    $inSize = is_file($inFile) ? (int) filesize($inFile) : 0;
+    if ($inSize <= $inOffset) {
+        return false;
+    }
+    $h = fopen($inFile, 'rb');
+    if ($h === false) {
+        return false;
+    }
+    fseek($h, $inOffset);
+    $chunk = stream_get_contents($h);
+    fclose($h);
+    if (!is_string($chunk) || $chunk === '') {
+        return false;
+    }
+    $written = @fwrite($fp, $chunk);
+    if ($written === false) {
+        return null;
+    }
+    if ($written === 0) {
+        return false;
+    }
+    $inOffset += $written;
+    file_put_contents($offsetFile, (string) $inOffset);
+
+    return true;
+}
+
 while (true) {
     $meta = worker_read_meta($metaPath);
     if (!empty($meta['closed'])) {
         break;
     }
 
-    clearstatcache(true, $inFile);
-    $inSize = is_file($inFile) ? (int) filesize($inFile) : 0;
-    if ($inSize > $inOffset) {
-        $h = fopen($inFile, 'rb');
-        if ($h !== false) {
-            fseek($h, $inOffset);
-            $chunk = stream_get_contents($h);
-            fclose($h);
-            if (is_string($chunk) && $chunk !== '') {
-                $written = @fwrite($fp, $chunk);
-                if ($written === false) {
-                    break;
-                }
-                $inOffset += strlen($chunk);
-                file_put_contents($offsetFile, (string) $inOffset);
-            }
-        }
+    $drained = worker_drain_input($inFile, $offsetFile, $fp, $inOffset);
+    if ($drained === null) {
+        break;
     }
 
     $read = [$fp];
     $write = null;
     $except = null;
-    if (@stream_select($read, $write, $except, 0, 50000) > 0) {
-        $data = fread($fp, 8192);
+    $n = @stream_select($read, $write, $except, 0, 8000);
+    if ($n > 0) {
+        $data = fread($fp, 65536);
         if ($data === false || $data === '') {
             $metaInfo = stream_get_meta_data($fp);
             if (!empty($metaInfo['eof'])) {
@@ -130,9 +151,10 @@ while (true) {
         } else {
             file_put_contents($outFile, $data, FILE_APPEND);
         }
+        if (worker_drain_input($inFile, $offsetFile, $fp, $inOffset) === null) {
+            break;
+        }
     }
-
-    usleep(15000);
 }
 
 $exitCode = null;

@@ -27,10 +27,11 @@ async function parseJson(response) {
   return data
 }
 
-export async function apiGet(path) {
+export async function apiGet(path, options = {}) {
   const response = await fetch(withApiPrefix(path), {
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
+    signal: options.signal,
   })
   return parseJson(response)
 }

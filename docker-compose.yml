@@ -109,6 +109,8 @@ services:
       MANAGER_USERNAME: ${MANAGER_USERNAME:-}
       MANAGER_PASSWORD: ${MANAGER_PASSWORD:-}
       MANAGER_DOMAIN: ${MANAGER_DOMAIN:-}
+      # php -S is otherwise single-threaded; terminal poll+input must overlap.
+      PHP_CLI_SERVER_WORKERS: "8"
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:

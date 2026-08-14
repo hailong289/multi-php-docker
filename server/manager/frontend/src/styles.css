@@ -1774,8 +1774,27 @@ select:focus {
   padding-top: 0;
 }
 
+.terminal-screen {
+  padding: 10px 12px 16px;
+  background: #0f1419;
+}
+
+.terminal-host {
+  height: min(420px, 55vh);
+  padding: 0;
+  overflow: hidden;
+}
+
 .terminal-page .terminal-host {
-  height: min(70vh, 720px);
+  height: min(68vh, 700px);
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.terminal-host .xterm-helper-textarea {
+  ime-mode: disabled;
 }
 
 .terminal-panel-header {
@@ -1810,9 +1829,4 @@ select:focus {
 .terminal-status {
   font-size: 0.85rem;
   color: var(--muted);
-}
-
-.terminal-host {
-  height: min(420px, 55vh);
-  padding: 8px;
 }
