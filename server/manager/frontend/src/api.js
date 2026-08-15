@@ -1,6 +1,9 @@
+import axios from 'axios'
+
 let csrfToken = ''
 
 const API_PREFIX = '/server-manage'
+const API_TIMEOUT_MS = 30000
 
 export function getCsrfToken() {
   return csrfToken
@@ -16,36 +19,54 @@ function withApiPrefix(path) {
   return `${API_PREFIX}${p}`
 }
 
-async function parseJson(response) {
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const error = new Error(data?.error?.key || `HTTP ${response.status}`)
-    error.status = response.status
-    error.payload = data
-    throw error
+const http = axios.create({
+  timeout: API_TIMEOUT_MS,
+  withCredentials: true,
+  headers: {
+    Accept: 'application/json',
+  },
+})
+
+function unwrapPayload(data) {
+  return data && typeof data === 'object' ? data : {}
+}
+
+function normalizeError(error) {
+  if (error.response) {
+    const data = unwrapPayload(error.response.data)
+    const err = new Error(data?.error?.key || `HTTP ${error.response.status}`)
+    err.status = error.response.status
+    err.payload = data
+    throw err
   }
-  return data
+  throw error
 }
 
 export async function apiGet(path, options = {}) {
-  const response = await fetch(withApiPrefix(path), {
-    headers: { Accept: 'application/json' },
-    credentials: 'same-origin',
-    signal: options.signal,
-  })
-  return parseJson(response)
+  try {
+    const response = await http.get(withApiPrefix(path), {
+      signal: options.signal,
+    })
+    return response.data
+  } catch (error) {
+    normalizeError(error)
+  }
 }
 
 export async function apiSend(method, path, body) {
-  const response = await fetch(withApiPrefix(path), {
-    method,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrfToken,
-    },
-    credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  return parseJson(response)
+  try {
+    const response = await http.request({
+      method,
+      url: withApiPrefix(path),
+      data: body,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      },
+    })
+    return response.data
+  } catch (error) {
+    normalizeError(error)
+  }
 }
