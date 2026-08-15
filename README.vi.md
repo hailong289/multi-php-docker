@@ -4,6 +4,13 @@
 
 Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis và RabbitMQ. Tất cả PHP 7.4–8.5 dùng image multi-architecture sẵn trên Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` không tự build image. PHP 8.5 chạy mặc định; các bản còn lại dùng Compose profile riêng và mặc định tắt. Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
+## Video hướng dẫn
+
+| Clone source | Tạo các dịch vụ |
+| --- | --- |
+| [![Clone source](https://img.youtube.com/vi/rUI_mtbsIIU/hqdefault.jpg)](https://youtu.be/rUI_mtbsIIU) | [![Tạo các dịch vụ](https://img.youtube.com/vi/2fw1NnIO-uo/hqdefault.jpg)](https://youtu.be/2fw1NnIO-uo) |
+| [Xem trên YouTube](https://youtu.be/rUI_mtbsIIU) | [Xem trên YouTube](https://youtu.be/2fw1NnIO-uo) |
+
 ## Dịch vụ và cổng mặc định
 
 | Dịch vụ | Container | Cổng host | Thông tin mặc định |
