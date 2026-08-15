@@ -2,7 +2,7 @@
 ; Update directory and command for your project.
 
 [program:app_worker]
-directory=/var/www/source_php8.2/my-project
+directory=/var/www/source_php8.5/my-project
 command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
 process_name=%(program_name)s_%(process_num)02d
 numprocs=1

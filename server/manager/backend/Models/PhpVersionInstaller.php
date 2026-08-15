@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 
 /** Writes compose/Dockerfile/ini/source assets for a new PHP version (+ alpine/trixie). */
@@ -31,7 +32,12 @@ final class PhpVersionInstaller
         if (PhpVersionId::isDefault($service)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
-        if (isset(PhpVersionCatalog::versions($this->root())[$service])) {
+        // Allow resume when a previous attempt wrote compose files but failed
+        // before updating docker-compose.yml (common on Windows CRLF checkouts).
+        if (
+            isset(PhpVersionCatalog::versions($this->root())[$service])
+            && $this->hasComposeInclude($service)
+        ) {
             throw new HttpException('php_controller.version_already_installed', 409);
         }
 
@@ -240,28 +246,60 @@ YAML;
         $this->mkdir($this->root() . '/logs/supervisor-' . PhpVersionId::minorFromService($service) . PhpVersionId::pathSuffix($service));
     }
 
+    private function normalizeNewlines(string $content): string
+    {
+        return str_replace(["\r\n", "\r"], "\n", $content);
+    }
+
+    private function hasComposeInclude(string $service): bool
+    {
+        $path = $this->root() . '/docker-compose.yml';
+        if (!is_file($path) || !is_readable($path)) {
+            return false;
+        }
+        $content = $this->normalizeNewlines((string) file_get_contents($path));
+
+        return (bool) preg_match(
+            '/^  - path: compose\/' . preg_quote($service, '/') . '\.yml\s*$/m',
+            $content,
+        );
+    }
+
+    /** Patch docker-compose.yml include when compose/{service}.yml already exists. */
+    public function repairComposeInclude(string $service): void
+    {
+        if (!PhpVersionId::isValidService($service) || PhpVersionId::isDefault($service)) {
+            return;
+        }
+        if (!is_file($this->root() . '/compose/' . $service . '.yml')) {
+            return;
+        }
+        $this->ensureComposeInclude($service);
+    }
+
     private function ensureComposeInclude(string $service): void
     {
         $path = $this->root() . '/docker-compose.yml';
         if (!is_file($path) || !is_readable($path)) {
             throw new HttpException('php_controller.compose_unreadable', 500);
         }
-        $content = (string) file_get_contents($path);
-        $needle = 'path: compose/' . $service . '.yml';
-        if (str_contains($content, $needle)) {
+        // Windows Git often checks out with CRLF; ^...$ line anchors fail on \r.
+        // Allow trailing spaces; keep LF on write (matches .gitattributes).
+        $content = $this->normalizeNewlines((string) file_get_contents($path));
+        if ($this->hasComposeInclude($service)) {
             return;
         }
         $entry = "  - path: compose/{$service}.yml\n    project_directory: .\n";
-        if (preg_match('/^  - path: compose\/redis\.yml$/m', $content)) {
+        if (preg_match('/^  - path: compose\/redis\.yml\s*$/m', $content)) {
             $content = preg_replace(
-                '/^  - path: compose\/redis\.yml$/m',
+                '/^  - path: compose\/redis\.yml\s*$/m',
                 rtrim($entry) . "\n  - path: compose/redis.yml",
                 $content,
                 1,
             );
-        } elseif (preg_match('/^  - path: compose\/php-[0-9.a-z-]+\.yml$/m', $content)) {
+        } elseif (preg_match('/^  - path: compose\/php-[0-9.a-z-]+\.yml\s*$/m', $content)) {
             $content = preg_replace(
-                '/(^  - path: compose\/php-[0-9.a-z-]+\.yml$\n    project_directory: \.\n)(?!(?:  - path: compose\/php-))/m',
+                '/(^  - path: compose\/php-[0-9.a-z-]+\.yml\s*$\n    project_directory: \.\s*\n)(?!(?:  - path: compose\/php-))/m',
                 '$1' . $entry,
                 $content,
                 1,
@@ -269,7 +307,7 @@ YAML;
         } else {
             throw new HttpException('php_controller.compose_unreadable', 500);
         }
-        if (!is_string($content)) {
+        if (!is_string($content) || $content === '') {
             throw new HttpException('php_controller.compose_write_failed', 500);
         }
         $this->writeFile($path, $content);
@@ -286,7 +324,7 @@ YAML;
     {
         $dir = dirname($path);
         $this->mkdir($dir);
-        if (file_put_contents($path, $content) === false) {
+        if (!AtomicFile::write($path, $content)) {
             throw new HttpException('php_controller.version_install_failed', 500);
         }
     }

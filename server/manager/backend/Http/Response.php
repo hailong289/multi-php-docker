@@ -9,12 +9,18 @@ final class Response
     public function __construct(
         private readonly int $status,
         private readonly array $data,
+        private readonly mixed $streamer = null,
     ) {
     }
 
     public static function json(array $data, int $status = 200): self
     {
         return new self($status, $data);
+    }
+
+    public static function stream(callable $callback): self
+    {
+        return new self(200, [], $callback);
     }
 
     public static function error(
@@ -36,6 +42,12 @@ final class Response
 
     public function send(): void
     {
+        if (is_callable($this->streamer)) {
+            ($this->streamer)();
+
+            return;
+        }
+
         http_response_code($this->status);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');

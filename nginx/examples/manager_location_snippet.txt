@@ -1,0 +1,17 @@
+# Manager UI only under /server-manage (keep full URI; manager router strips it).
+# Lets "/" keep serving the site for this server_name (IP or domain).
+
+    location = /server-manage {
+        return 302 /server-manage/;
+    }
+
+    location ^~ /server-manage/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_pass http://manager:8080;
+    }

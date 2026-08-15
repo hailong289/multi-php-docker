@@ -7,7 +7,7 @@ import { useManager } from '../composables/useManager'
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
 const { t } = useI18n()
-const { showToast, translateApiError, stateClass } = useManager()
+const { showToast, translateApiError, stateClass, data, dockerStatusBusy } = useManager()
 const tab = ref('control')
 const loading = ref(true)
 const pending = ref('')
@@ -33,8 +33,11 @@ const selectedDomain = ref('')
 const domainLogs = ref(null)
 const domainLogsDetailLoading = ref(false)
 const domainRefreshSec = ref(5)
-let pollTimer = null
+let statusPollTimer = null
+let domainPollTimer = null
 
+const STATUS_POLL_IDLE_MS = 5000
+const STATUS_POLL_BUSY_MS = 2000
 const REFRESH_OPTIONS = [0, 5, 10, 15]
 
 try {
@@ -76,30 +79,54 @@ function setDomainRefresh(sec) {
   try {
     localStorage.setItem('manager-nginx-domain-log-refresh', String(domainRefreshSec.value))
   } catch (_) {}
-  restartPoll()
+  restartDomainPoll()
 }
 
-function stopPoll() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
+function stopStatusPoll() {
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
   }
 }
 
-function restartPoll() {
-  stopPoll()
-  if (domainRefreshSec.value <= 0) return
-  const ms = domainRefreshSec.value * 1000
-  pollTimer = setInterval(() => {
+function stopDomainPoll() {
+  if (domainPollTimer) {
+    clearInterval(domainPollTimer)
+    domainPollTimer = null
+  }
+}
+
+function startStatusPoll() {
+  stopStatusPoll()
+  const ms = dockerStatusBusy.value || nginx.value.state === 'busy' ? STATUS_POLL_BUSY_MS : STATUS_POLL_IDLE_MS
+  statusPollTimer = setInterval(() => {
     if (document.visibilityState !== 'visible' || pending.value) return
-    if (tab.value === 'domain-logs') {
-      loadDomainLogList({ silent: true })
-      if (selectedDomain.value) openDomainLogs(selectedDomain.value, { silent: true })
-      return
-    }
+    if (tab.value === 'domain-logs') return
     load({ silent: true })
     if (tab.value === 'templates') loadTemplates({ silent: true })
   }, ms)
+}
+
+function restartDomainPoll() {
+  stopDomainPoll()
+  if (domainRefreshSec.value <= 0) return
+  const ms = domainRefreshSec.value * 1000
+  domainPollTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible' || pending.value) return
+    if (tab.value !== 'domain-logs') return
+    loadDomainLogList({ silent: true })
+    if (selectedDomain.value) openDomainLogs(selectedDomain.value, { silent: true })
+  }, ms)
+}
+
+function restartPoll() {
+  startStatusPoll()
+  restartDomainPoll()
+}
+
+function stopPoll() {
+  stopStatusPoll()
+  stopDomainPoll()
 }
 
 async function load({ silent = false } = {}) {
@@ -230,7 +257,6 @@ async function saveTemplate() {
     templateMeta.value = { ...(templateMeta.value || {}), ...result.template }
     showToast('success', t(result.message_key || 'nginx.template_saved_reloading'))
     await loadTemplates({ silent: true })
-    setTimeout(() => load({ silent: true }), 1800)
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -243,8 +269,17 @@ async function run(action, path) {
   try {
     const result = await apiSend('POST', path, {})
     showToast('success', t(result.message_key || 'nginx.requested'))
-    await new Promise((resolve) => setTimeout(resolve, 1400))
-    await load()
+    if (result.nginx_management) {
+      nginx.value = result.nginx_management
+      data.nginx_management = {
+        state: result.nginx_management.state,
+        container: result.nginx_management.container,
+        message_key: result.nginx_management.message_key,
+        request_id: result.nginx_management.request_id,
+        updated_at: result.nginx_management.updated_at,
+        service: result.nginx_management.service,
+      }
+    }
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -270,7 +305,27 @@ function refreshCurrentTab() {
 watch(tab, (next) => {
   if (next === 'templates') loadTemplates()
   if (next === 'domain-logs') loadDomainLogList()
+  restartPoll()
 })
+
+watch(
+  () => data.nginx_management,
+  (next) => {
+    if (!next || typeof next !== 'object') return
+    nginx.value = {
+      ...nginx.value,
+      ...next,
+      logs: nginx.value.logs || {},
+      test_status: nginx.value.test_status,
+      reload_status: nginx.value.reload_status,
+    }
+  },
+)
+
+watch(
+  () => [dockerStatusBusy.value, nginx.value.state],
+  () => startStatusPoll(),
+)
 
 onMounted(() => {
   load()

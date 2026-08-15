@@ -7,8 +7,6 @@
 /.ai/
 /env.json
 /.env
-/server/manager/frontend/node_modules/
-/server/manager/frontend/dist/
 /scripts/macos/
 *.app/
 /configs/supervisor.d/*
@@ -44,5 +42,11 @@
 /server/source_php7.4/*/
 !/server/source_php7.4/index.php
 
+# Manager frontend (Vite)
+/server/manager/frontend/node_modules/
 /logs/supervisor-8.*/
 !/logs/supervisor-8.*/.gitkeep
+
+# Local agent brainstorming / plans (do not commit)
+.superpowers/
+docs/superpowers/

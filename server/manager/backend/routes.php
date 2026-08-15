@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Manager\Controllers\AuthController;
 use Manager\Controllers\BootstrapController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HostsController;
@@ -11,9 +12,12 @@ use Manager\Controllers\PhpControllerController;
 use Manager\Controllers\ServerController;
 use Manager\Controllers\SessionController;
 use Manager\Controllers\SupervisorController;
+use Manager\Controllers\TerminalController;
 
 return [
     ['GET', '/session', [SessionController::class, 'show']],
+    ['POST', '/login', [AuthController::class, 'login']],
+    ['POST', '/logout', [AuthController::class, 'logout']],
     ['GET', '/bootstrap', [BootstrapController::class, 'show']],
     ['GET', '/nginx/status', [NginxController::class, 'status']],
     ['GET', '/nginx/management', [NginxController::class, 'management']],
@@ -66,4 +70,10 @@ return [
     ['POST', '/servers', [ServerController::class, 'store']],
     ['PUT', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'update']],
     ['DELETE', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'destroy']],
+    ['POST', '/terminal/sessions', [TerminalController::class, 'create']],
+    ['GET', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/stream', [TerminalController::class, 'stream']],
+    ['GET', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/output', [TerminalController::class, 'output']],
+    ['POST', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/input', [TerminalController::class, 'input']],
+    ['POST', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})/resize', [TerminalController::class, 'resize']],
+    ['DELETE', '/terminal/sessions/(?P<id>[a-f0-9]{16,64})', [TerminalController::class, 'destroy']],
 ];

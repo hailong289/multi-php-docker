@@ -11,6 +11,16 @@ mkdir -p "$REQUEST_DIR" "$STATUS_DIR"
 # php-controller runs with a read-only rootfs; point Docker CLI config at tmpfs.
 mkdir -p "${DOCKER_CONFIG:-/tmp/docker-config}"
 
+# PID 1 is this shell loop. Without a TERM trap, docker stop waits the default
+# ~10s then SIGKILL (same class of bug as nginx wrapping sh without exec).
+shutdown_controller() {
+    trap - TERM INT
+    # Stop in-flight docker/compose children in this process group, then exit.
+    kill -TERM -$$ 2>/dev/null || true
+    exit 0
+}
+trap shutdown_controller TERM INT
+
 container_for_service() {
     case "$1" in
         nginx) printf '%s' 'nginx_container' ;;
@@ -34,7 +44,7 @@ container_for_service() {
 
 profile_for_service() {
     case "$1" in
-        php-8.2) return 1 ;;
+        php-8.5) return 1 ;;
         mysql|redis|rabbitmq|supervisor)
             printf '%s' "$1"
             ;;
@@ -588,5 +598,7 @@ while true; do
     for refresh_target in $(list_managed_services); do
         refresh_service "$refresh_target"
     done
-    sleep 1
+    # Background sleep so SIGTERM is delivered to the shell promptly (wait is interruptible).
+    sleep 1 &
+    wait $! || true
 done

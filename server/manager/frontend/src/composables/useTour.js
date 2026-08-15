@@ -21,6 +21,7 @@ const PAGE_READY = {
   'php-version-detail': '[data-tour="php-detail-panel"]',
   'php-version-catalog': '[data-tour="php-catalog-panel"]',
   'php-version-supervisor': '[data-tour="supervisor-panel"]',
+  terminal: '[data-tour="terminal-panel"]',
 }
 
 function readSeen() {

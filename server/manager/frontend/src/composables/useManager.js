@@ -1,6 +1,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiGet, apiSend, setCsrfToken } from '../api'
+import { applySessionPayload, authState } from '../lib/authState'
+import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
+import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
@@ -27,8 +30,10 @@ const data = reactive({
   php_versions: {},
   apply_command: '',
   nginx_status: null,
+  nginx_management: null,
   hosts_status: null,
   hosts_extras: [],
+  hosts_write_enabled: true,
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
   infra_services: { targets: {}, statuses: {} },
@@ -38,13 +43,15 @@ const data = reactive({
 const form = reactive({
   app_name: '',
   domain_name: '',
-  server_path: '/var/www/source_php8.2/',
-  php_version: 'php-8.2',
+  server_path: '/var/www/source_php8.5/',
+  php_version: 'php-8.5',
   enabled: true,
 })
 
 const domainForm = reactive({
-  domain_name: '',
+  domain_label: '',
+  domain_tld: '.test',
+  domain_custom: '',
 })
 const domainModalOpen = ref(false)
 const domainModalMode = ref('add')
@@ -153,8 +160,10 @@ export function useManager() {
     data.php_versions = payload.php_versions || {}
     data.apply_command = payload.apply_command || ''
     data.nginx_status = payload.nginx_status || null
+    data.nginx_management = payload.nginx_management || null
     data.hosts_status = payload.hosts_status || null
     data.hosts_extras = payload.hosts_extras || []
+    data.hosts_write_enabled = payload.hosts_write_enabled !== false
     data.pending_sync = !!payload.pending_sync
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
     data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
@@ -166,7 +175,7 @@ export function useManager() {
     for (const [id, config] of Object.entries(data.php_versions)) {
       if (config.container === container) return id
     }
-    return 'php-8.2'
+    return 'php-8.5'
   }
 
   function isServerEnabled(server) {
@@ -178,10 +187,10 @@ export function useManager() {
     fieldErrors.value = {}
     form.app_name = ''
     form.domain_name = ''
-    form.server_path = data.php_versions['php-8.2']?.source_prefix
-      ? `${data.php_versions['php-8.2'].source_prefix}/`
-      : '/var/www/source_php8.2/'
-    form.php_version = 'php-8.2'
+    form.server_path = data.php_versions['php-8.5']?.source_prefix
+      ? `${data.php_versions['php-8.5'].source_prefix}/`
+      : '/var/www/source_php8.5/'
+    form.php_version = 'php-8.5'
     form.enabled = true
   }
 
@@ -209,6 +218,11 @@ export function useManager() {
   }
 
   async function loadBootstrap({ silent = false } = {}) {
+    if (authState.remote && (!authState.authenticated || authState.locked)) {
+      bootstrapped.value = false
+      if (!silent) loading.value = false
+      return
+    }
     if (!silent) {
       loading.value = true
       fatalError.value = ''
@@ -218,6 +232,18 @@ export function useManager() {
       applyBootstrap(payload)
       bootstrapped.value = true
     } catch (error) {
+      if (error?.status === 401 && authState.remote) {
+        applySessionPayload({
+          remote: true,
+          authenticated: false,
+          locked: authState.locked,
+          domain: authState.domain,
+        })
+        bootstrapped.value = false
+        const { default: router } = await import('../router')
+        await router.push({ name: 'login' })
+        return
+      }
       if (!silent) {
         fatalError.value = translateApiError(error)
       }
@@ -226,6 +252,25 @@ export function useManager() {
         loading.value = false
       }
     }
+  }
+
+  async function logout() {
+    try {
+      const result = await apiSend('POST', '/api/logout', {})
+      if (result.csrf_token) setCsrfToken(result.csrf_token)
+    } catch (_) {
+      /* still clear local auth */
+    }
+    applySessionPayload({
+      remote: authState.remote,
+      authenticated: false,
+      locked: authState.locked,
+      domain: authState.domain,
+      hosts_write_enabled: authState.hosts_write_enabled,
+    })
+    bootstrapped.value = false
+    const { default: router } = await import('../router')
+    await router.push({ name: 'login' })
   }
 
   async function saveServer() {
@@ -292,7 +337,6 @@ export function useManager() {
       )
       try {
         await apiSend('POST', '/api/nginx/reload', {})
-        setTimeout(loadBootstrap, 1500)
       } catch (reloadError) {
         showToast('failure', translateApiError(reloadError))
       }
@@ -314,10 +358,17 @@ export function useManager() {
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
     try {
-      const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`)
+      const write = beginHostsWrite()
+      const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`, {
+        hosts_write_token: write.token,
+      })
       if (domainEditingKey.value === key) closeDomainModal()
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_removed'))
-      await finishHostsWrite(result)
+      if (data.hosts_write_enabled) {
+        await finishHostsWrite(result, write)
+      }
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -332,7 +383,7 @@ export function useManager() {
     try {
       const result = await apiSend('POST', '/api/nginx/reload', {})
       toastFromResult(result)
-      setTimeout(loadBootstrap, 1500)
+      // Status / reload result comes from silent bootstrap + Nginx page polls.
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -341,34 +392,30 @@ export function useManager() {
     }
   }
 
+  /** Queue a PHP container lifecycle action; status updates via bootstrap poll. */
   async function phpAction(service, action) {
-    busy.value = true
     pendingAction.value = { kind: 'php', service, action }
     try {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
-      setTimeout(loadBootstrap, 1500)
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
-      busy.value = false
       pendingAction.value = null
     }
   }
 
+  /** Queue an infra container lifecycle action; status updates via bootstrap poll. */
   async function infraAction(service, action) {
-    busy.value = true
     pendingAction.value = { kind: 'infra', service, action }
     try {
       const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
-      setTimeout(loadBootstrap, 1500)
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
-      busy.value = false
       pendingAction.value = null
     }
   }
@@ -377,7 +424,9 @@ export function useManager() {
     domainModalMode.value = 'add'
     domainEditingKey.value = null
     domainFieldErrors.value = {}
-    domainForm.domain_name = ''
+    domainForm.domain_label = ''
+    domainForm.domain_tld = '.test'
+    domainForm.domain_custom = ''
     domainModalOpen.value = true
   }
 
@@ -387,7 +436,10 @@ export function useManager() {
     domainModalMode.value = 'edit'
     domainEditingKey.value = key
     domainFieldErrors.value = {}
-    domainForm.domain_name = row.domain_name || ''
+    const parsed = parseLocalDomain(row.domain_name || '')
+    domainForm.domain_label = parsed.name
+    domainForm.domain_tld = parsed.tld
+    domainForm.domain_custom = parsed.custom
     domainModalOpen.value = true
   }
 
@@ -396,7 +448,9 @@ export function useManager() {
     domainModalMode.value = 'add'
     domainEditingKey.value = null
     domainFieldErrors.value = {}
-    domainForm.domain_name = ''
+    domainForm.domain_label = ''
+    domainForm.domain_tld = '.test'
+    domainForm.domain_custom = ''
   }
 
   function closeHostsManual() {
@@ -445,8 +499,8 @@ export function useManager() {
           continue
         }
         data.hosts_status = status
-        if (status.status === 'busy') {
-          latestBusy = status
+        if (status.status === 'busy' || (pendingSync && status.status === 'success')) {
+          latestBusy = status.status === 'busy' ? status : latestBusy
           hostsProgress.value = {
             attempt,
             maxAttempts,
@@ -471,41 +525,29 @@ export function useManager() {
     return { status: latestBusy, pendingSync }
   }
 
-  function launchHostsWriteProtocol() {
-    const ua = String(navigator.userAgent || '')
-    const platform = String(navigator.platform || '')
-    const isWin = /Win/i.test(ua) || /Win/i.test(platform)
-    const isMac = /Mac/i.test(platform) || /Mac OS/i.test(ua) || /Macintosh/i.test(ua)
-    // Windows + macOS: custom URL scheme registered by ensure_hosts_env.*
-    if (!isWin && !isMac) return false
-    try {
-      const frame = document.createElement('iframe')
-      frame.style.display = 'none'
-      frame.src = 'multi-php-hosts:write'
-      document.body.appendChild(frame)
-      setTimeout(() => frame.remove(), 2500)
-      return true
-    } catch (_) {
-      return false
-    }
+  function beginHostsWrite() {
+    const previousUpdatedAt = data.hosts_status?.updated_at || null
+    const token = newHostsWriteToken()
+    const launched = data.hosts_write_enabled ? launchHostsWriteProtocol(window, token) : false
+    return { token, launched, previousUpdatedAt }
   }
 
-  async function finishHostsWrite(result) {
-    const previousUpdatedAt = data.hosts_status?.updated_at || null
+  async function finishHostsWrite(result, write = {}) {
+    const previousUpdatedAt = write.previousUpdatedAt || data.hosts_status?.updated_at || null
+    const launched = !!write.launched
     if (result?.bootstrap) applyBootstrap(result.bootstrap)
     else if (result?.hosts_status) data.hosts_status = result.hosts_status
 
-    const launched = launchHostsWriteProtocol()
     hostsProgress.value = {
       attempt: 0,
-      maxAttempts: 15,
+      maxAttempts: 45,
       message_key: launched ? 'hosts.progress_protocol' : 'hosts.progress_starting',
     }
 
     try {
-      const outcome = await waitForHostsResult(previousUpdatedAt, 15)
+      const outcome = await waitForHostsResult(previousUpdatedAt, 45)
       const status = outcome?.status || null
-      await loadBootstrap()
+      await loadBootstrap({ silent: true })
       data.pending_sync = !!outcome?.pendingSync || !!data.pending_sync
 
       if (status?.status === 'success') {
@@ -543,26 +585,32 @@ export function useManager() {
     domainFieldErrors.value = {}
     const mode = domainModalMode.value
     const editingKeySnapshot = domainEditingKey.value
+    const write = beginHostsWrite()
     try {
       let result
+      const body = {
+        domain_name: composeLocalDomain(
+          domainForm.domain_label,
+          domainForm.domain_tld,
+          domainForm.domain_custom,
+        ),
+        hosts_write_token: write.token,
+      }
       if (mode === 'add') {
-        result = await apiSend('POST', '/api/domains', {
-          domain_name: domainForm.domain_name,
-        })
+        result = await apiSend('POST', '/api/domains', body)
       } else if (String(editingKeySnapshot).startsWith('hosts:')) {
         const current = String(editingKeySnapshot).slice('hosts:'.length)
-        result = await apiSend('PUT', `/api/domains/extra/${encodeURIComponent(current)}`, {
-          domain_name: domainForm.domain_name,
-        })
+        result = await apiSend('PUT', `/api/domains/extra/${encodeURIComponent(current)}`, body)
       } else {
-        result = await apiSend('PUT', `/api/domains/${editingKeySnapshot}`, {
-          domain_name: domainForm.domain_name,
-        })
+        result = await apiSend('PUT', `/api/domains/${editingKeySnapshot}`, body)
       }
       closeDomainModal()
-      // Write request + multi-php-hosts:write protocol (ensure_hosts_env.*).
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_added'))
-      await finishHostsWrite(result)
+      if (data.hosts_write_enabled) {
+        await finishHostsWrite(result, write)
+      }
     } catch (error) {
       const fields = error.payload?.error?.fields || {}
       domainFieldErrors.value = Object.fromEntries(
@@ -575,42 +623,30 @@ export function useManager() {
     }
   }
 
-  async function syncHosts() {
-    busy.value = true
-    pendingAction.value = { kind: 'hosts-sync' }
-    try {
-      // Refresh badges from the latest status written by the optional host helper.
-      const result = await apiSend('POST', '/api/hosts/sync', {})
-      data.pending_sync = !!result.pending_sync
-      if (result.hosts_status) {
-        data.hosts_status = result.hosts_status
-        showToast('success', trKey(result.message_key || 'hosts.status_refreshed'))
-      } else {
-        showToast('failure', t('hosts.controller_unavailable'))
-      }
-    } catch (error) {
-      showToast('failure', translateApiError(error))
-    } finally {
-      busy.value = false
-      pendingAction.value = null
-    }
-  }
-
   async function writeDomainHostsAdmin(domainName) {
+    if (!data.hosts_write_enabled) {
+      showToast('failure', t('error.hosts_write_disabled_remote'))
+      return
+    }
     const domain = String(domainName || '').toLowerCase()
     if (!domain) return
     busy.value = true
     pendingAction.value = { kind: 'hosts-admin', domain }
+    const write = beginHostsWrite()
     try {
       const result = await apiSend('POST', '/api/hosts/sync', {
         force_admin: true,
         domain_name: domain,
+        hosts_write_token: write.token,
       })
       data.pending_sync = !!result.pending_sync
-      await finishHostsWrite({
-        ...result,
-        manual: result.manual || data.hosts_status?.manual || null,
-      })
+      await finishHostsWrite(
+        {
+          ...result,
+          manual: result.manual || data.hosts_status?.manual || null,
+        },
+        write,
+      )
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -674,12 +710,26 @@ export function useManager() {
     return t(map[state] || 'php_controller.state_not_created')
   }
 
+  /** True while any Docker-managed service reports busy (drives faster status polling). */
+  const dockerStatusBusy = computed(() => {
+    const groups = [data.php_controllers?.statuses, data.infra_services?.statuses, data.supervisor_services?.statuses]
+    for (const statuses of groups) {
+      if (!statuses) continue
+      for (const row of Object.values(statuses)) {
+        if (row?.state === 'busy') return true
+      }
+    }
+    const nginx = data.nginx_management
+    if (nginx?.state === 'busy') return true
+    return false
+  })
+
   function phpServiceState(service) {
     return data.php_controllers.statuses[service]?.state || 'not_created'
   }
 
   function phpActionEnabled(service, action) {
-    if (busy.value) return false
+    if (isPending('php', { service })) return false
     const state = phpServiceState(service)
     const target = data.php_controllers.targets[service]
     if (action === 'create') {
@@ -700,7 +750,7 @@ export function useManager() {
   }
 
   function infraActionEnabled(service, action) {
-    if (busy.value) return false
+    if (isPending('infra', { service })) return false
     const state = infraServiceState(service)
     const target = data.infra_services.targets[service]
     if (action === 'create') {
@@ -738,6 +788,7 @@ export function useManager() {
     fieldErrors,
     busy,
     pendingAction,
+    dockerStatusBusy,
     modalOpen,
     bootstrapped,
     data,
@@ -754,6 +805,7 @@ export function useManager() {
     domainEntries,
     versionLabel,
     loadBootstrap,
+    logout,
     openAddModal,
     openHostsDomainAdd,
     closeModal,
@@ -769,7 +821,6 @@ export function useManager() {
     openDomainEdit,
     closeDomainModal,
     saveDomain,
-    syncHosts,
     writeDomainHostsAdmin,
     closeHostsManual,
     showHostsManual,

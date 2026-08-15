@@ -78,6 +78,10 @@ final class PhpControllerController extends Controller
     {
         $service = (string) ($params['service'] ?? '');
         $action = (string) ($params['action'] ?? '');
+        if ($action === 'create') {
+            // Repair missing include after a partial install (files written, queue failed).
+            (new PhpVersionInstaller())->repairComposeInclude($service);
+        }
         $runtime = new PhpRuntime();
         $requestId = $runtime->request($service, $action);
         $target = PhpRuntime::targets()[$service];

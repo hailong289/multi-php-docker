@@ -34,11 +34,6 @@ for arg in "$@"; do
   esac
 done
 
-if [ ! -f "$JSON_FILE" ]; then
-  echo "ERROR: $JSON_FILE not found"
-  exit 1
-fi
-
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq not found. Trying to install..."
   if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
@@ -78,7 +73,9 @@ mkdir -p "$RUNTIME_DIR"
 
 read_domains() {
   {
-    jq -r 'to_entries[] | select(.key | test("^SERVER_NAME")) | .value.DOMAIN_NAME // empty' "$JSON_FILE"
+    if [ -f "$JSON_FILE" ]; then
+      jq -r 'to_entries[] | select(.key | test("^SERVER_NAME")) | .value.DOMAIN_NAME // empty' "$JSON_FILE"
+    fi
     if [ -f "$EXTRA_FILE" ]; then
       jq -r '.[]?' "$EXTRA_FILE"
     fi

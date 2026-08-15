@@ -109,16 +109,22 @@ final class NginxController extends Controller
     {
         $action = (string) ($params['action'] ?? '');
         $runtime = new NginxManagement();
+        $requestId = $runtime->requestAction($action);
         return Response::json([
-            'request_id' => $runtime->requestAction($action),
+            'request_id' => $requestId,
             'message_key' => 'nginx.action_requested',
+            'nginx_management' => $runtime->details(),
         ]);
     }
 
     public function test(Request $request, array $params = []): Response
     {
-        (new NginxManagement())->requestTest();
-        return Response::json(['message_key' => 'nginx.test_requested']);
+        $runtime = new NginxManagement();
+        $runtime->requestTest();
+        return Response::json([
+            'message_key' => 'nginx.test_requested',
+            'nginx_management' => $runtime->details(),
+        ]);
     }
 
     public function status(Request $request, array $params = []): Response

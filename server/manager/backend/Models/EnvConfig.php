@@ -40,6 +40,21 @@ final class EnvConfig
         return $servers;
     }
 
+    /**
+     * Soft read for hosts-only flows: missing/unreadable env → empty servers.
+     * Corrupt/non-object content still raises like all().
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function allOrEmpty(): array
+    {
+        if (!is_file($this->path) || !is_readable($this->path)) {
+            return [];
+        }
+
+        return $this->all();
+    }
+
     public function save(array $servers): void
     {
         uksort($servers, static function (string $left, string $right): int {

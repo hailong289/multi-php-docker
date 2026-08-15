@@ -31,4 +31,25 @@ final class Config
         return rtrim(getenv('MANAGER_PROJECT_PATH') ?: '/var/host-project', '/');
     }
 
+    public static function managerRemote(): bool
+    {
+        $raw = strtolower(trim((string) (getenv('MANAGER_REMOTE') ?: '0')));
+
+        return in_array($raw, ['1', 'true', 'yes', 'on'], true);
+    }
+
+    public static function managerUsername(): string
+    {
+        return (string) (getenv('MANAGER_USERNAME') ?: '');
+    }
+
+    public static function managerPassword(): string
+    {
+        return (string) (getenv('MANAGER_PASSWORD') ?: '');
+    }
+
+    public static function managerDomain(): string
+    {
+        return trim((string) (getenv('MANAGER_DOMAIN') ?: ''));
+    }
 }

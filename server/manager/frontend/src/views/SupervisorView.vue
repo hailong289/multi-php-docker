@@ -23,7 +23,7 @@ const phpService = computed(() => String(route.params.service || ''))
 const supervisorService = computed(() => {
   const fromTarget = data.php_controllers?.targets?.[phpService.value]?.supervisor_service
   if (fromTarget) return fromTarget
-  if (phpService.value === 'php-8.2') return 'supervisor'
+  if (phpService.value === 'php-8.5') return 'supervisor-8.5'
   if (phpService.value.startsWith('php-')) return `supervisor-${phpService.value.slice(4)}`
   return ''
 })
@@ -70,7 +70,7 @@ function showCreate() {
 }
 
 function enabled(action) {
-  if (pending.value || loading.value) return false
+  if (pending.value) return false
   const state = currentState.value
   if (action === 'create') return state === 'not_created'
   if (state === 'busy' || state === 'error' || state === 'not_created') return false
@@ -220,11 +220,6 @@ async function saveConf() {
     confOriginal.value = confDraft.value
     confMeta.value = { ...(confMeta.value || {}), ...result.config }
     await loadConfigs({ silent: true })
-    if (result.request_id) {
-      setTimeout(() => {
-        loadBootstrap().then(() => loadDetails({ quiet: true }))
-      }, 1500)
-    }
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -252,11 +247,6 @@ async function deleteConf(name) {
       creating.value = false
     }
     await loadConfigs({ silent: true })
-    if (result.request_id) {
-      setTimeout(() => {
-        loadBootstrap().then(() => loadDetails({ quiet: true }))
-      }, 1500)
-    }
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -275,9 +265,7 @@ async function runAction(action) {
     if (result.supervisor_services) {
       data.supervisor_services = result.supervisor_services
     }
-    await new Promise((resolve) => setTimeout(resolve, 1400))
-    await loadBootstrap()
-    await loadDetails({ quiet: true })
+    if (result.supervisor) details.value = result.supervisor
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -317,12 +305,19 @@ function stopFollow() {
   }
 }
 
-function startFollow() {
+function startStatusPoll() {
   stopFollow()
-  if (!followLogs.value || !supervisorService.value || tab.value !== 'control') return
+  if (!supervisorService.value || tab.value !== 'control') return
+  const busy = currentState.value === 'busy'
+  const ms = followLogs.value ? 3000 : busy ? 2000 : 5000
   followTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible' || pending.value) return
     loadDetails({ quiet: true })
-  }, 3000)
+  }, ms)
+}
+
+function startFollow() {
+  startStatusPoll()
 }
 
 function refreshCurrent() {
@@ -366,6 +361,18 @@ watch(followLogs, () => {
   startFollow()
   if (followLogs.value) scrollLogToBottom()
 })
+
+watch(currentState, () => {
+  if (tab.value === 'control') startStatusPoll()
+})
+
+watch(
+  () => data.supervisor_services?.statuses?.[supervisorService.value],
+  (status) => {
+    if (!status || !details.value) return
+    details.value = { ...details.value, ...status }
+  },
+)
 
 onMounted(async () => {
   loading.value = true

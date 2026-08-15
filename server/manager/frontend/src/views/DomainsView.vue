@@ -1,7 +1,10 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import TableSkeleton from '../components/TableSkeleton.vue'
+import LocalDomainInput from '../components/LocalDomainInput.vue'
 import { useManager } from '../composables/useManager'
+import { authState } from '../lib/authState'
+import { HOSTS_PROTOCOL_WINDOW, hostsProtocolUrl } from '../lib/hostsProtocol'
 
 const {
   loading,
@@ -20,7 +23,6 @@ const {
   closeDomainModal,
   saveDomain,
   deleteDomain,
-  syncHosts,
   writeDomainHostsAdmin,
   closeHostsManual,
   hostsStateLabel,
@@ -30,6 +32,10 @@ const {
 } = useManager()
 
 const copied = ref(false)
+const hostsWriteEnabled = computed(
+  () => data.hosts_write_enabled !== false && authState.hosts_write_enabled !== false,
+)
+const hostsWriterHref = hostsProtocolUrl()
 
 async function copyManualLines() {
   const text = (hostsManual.value?.lines || []).join('\n')
@@ -64,45 +70,38 @@ async function copyManualLines() {
           >
             {{ $t('domains.add') }}
           </button>
-          <button
-            type="button"
-            data-tour="domains-sync"
-            :class="{ 'is-loading': isPending('hosts-sync') }"
-            :disabled="busy || loading"
-            @click="syncHosts"
+          <span
+            v-if="hostsProgress"
+            class="hosts-action-chip"
+            role="status"
+            aria-live="polite"
           >
-            <span v-if="isPending('hosts-sync')" class="btn-spinner" aria-hidden="true"></span>
-            {{ isPending('hosts-sync') ? $t('action.working') : $t('domains.sync_button') }}
-          </button>
+            <span class="hosts-action-chip-dot" aria-hidden="true"></span>
+            <span class="hosts-action-chip-text">{{ $t(hostsProgress.message_key) }}</span>
+          </span>
         </div>
       </div>
       <p class="status-line">
         <strong>{{ $t('domains.hosts_status') }}:</strong>
         {{ loading ? $t('loading') : hostsStatusText() }}
       </p>
-      <div v-if="hostsProgress" class="hosts-progress" aria-live="polite">
-        <div class="hosts-progress-head">
-          <span class="btn-spinner" aria-hidden="true"></span>
-          <strong>{{ $t('hosts.progress_title') }}</strong>
-          <span class="hosts-progress-count">
-            {{ hostsProgress.attempt }}/{{ hostsProgress.maxAttempts }}
-          </span>
-        </div>
-        <p class="status-line">{{ $t(hostsProgress.message_key) }}</p>
-        <div class="hosts-progress-bar" aria-hidden="true">
-          <span
-            class="hosts-progress-fill"
-            :style="{
-              width:
-                Math.max(8, (hostsProgress.attempt / hostsProgress.maxAttempts) * 100) + '%',
-            }"
-          ></span>
-        </div>
-      </div>
-      <p v-else-if="!loading && data.pending_sync" class="status-line warn">
-        {{ $t('hosts.watch_required') }}
+      <p v-if="!hostsWriteEnabled" class="status-line warn">
+        {{ $t('hosts.remote_disabled') }}
       </p>
-      <p v-else-if="!loading" class="status-line">{{ $t('hosts.sync_hint') }}</p>
+      <p v-if="!loading && !hostsProgress && !hostsWriteEnabled" class="status-line">
+        {{ $t('hosts.remote_disabled_hint') }}
+      </p>
+      <p v-else-if="!loading && !hostsProgress && data.pending_sync" class="status-line warn">
+        {{ $t('hosts.watch_required') }}
+        <a
+          v-if="hostsWriteEnabled"
+          :href="hostsWriterHref"
+          :target="HOSTS_PROTOCOL_WINDOW"
+          rel="noopener"
+          class="hosts-writer-link"
+        >{{ $t('hosts.open_writer') }}</a>
+      </p>
+      <p v-else-if="!loading && !hostsProgress" class="status-line">{{ $t('hosts.sync_hint') }}</p>
     </div>
 
     <TableSkeleton
@@ -154,7 +153,7 @@ async function copyManualLines() {
             <td>
               <div class="actions">
                 <button
-                  v-if="item.hosts_state !== 'synced'"
+                  v-if="hostsWriteEnabled && item.hosts_state !== 'synced'"
                   type="button"
                   class="primary"
                   :class="{
@@ -219,10 +218,10 @@ async function copyManualLines() {
       <form class="modal-body" @submit.prevent="saveDomain">
         <fieldset :disabled="busy" class="modal-fieldset">
           <label>{{ $t('form.domain') }}</label>
-          <input
-            v-model="domainForm.domain_name"
-            :placeholder="$t('form.domain_placeholder')"
-            required
+          <LocalDomainInput
+            v-model:name="domainForm.domain_label"
+            v-model:tld="domainForm.domain_tld"
+            v-model:custom="domainForm.domain_custom"
           />
           <div v-if="domainFieldErrors.domain_name" class="error">
             {{ domainFieldErrors.domain_name }}
