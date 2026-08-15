@@ -49,3 +49,7 @@
 /server/manager/frontend/.vite/
 /logs/supervisor-8.*/
 !/logs/supervisor-8.*/.gitkeep
+
+# Local agent brainstorming / plans (do not commit)
+.superpowers/
+docs/superpowers/

@@ -9,7 +9,7 @@ import { authState } from './lib/authState'
 
 const { t, locale } = useI18n()
 const route = useRoute()
-const { fatalError, loadBootstrap, bootstrapped, logout } = useManager()
+const { fatalError, loadBootstrap, bootstrapped, logout, dockerStatusBusy } = useManager()
 const { startCurrentTour } = useTour()
 
 const showChrome = computed(() => {
@@ -27,6 +27,9 @@ const accessBadge = computed(() => {
 
 const themeMode = ref(document.documentElement.dataset.themeMode || 'system')
 let statusPollTimer = null
+
+const STATUS_POLL_IDLE_MS = 5000
+const STATUS_POLL_BUSY_MS = 2000
 
 function applyTheme(mode) {
   themeMode.value = mode
@@ -60,6 +63,27 @@ function updateTitle() {
   document.title = pageKey ? `${t(pageKey)} · ${t('page.title')}` : t('page.title')
 }
 
+function shouldPollStatus() {
+  return document.visibilityState === 'visible' && bootstrapped.value && showChrome.value
+}
+
+function pollStatusOnce() {
+  if (shouldPollStatus()) loadBootstrap({ silent: true })
+}
+
+function stopStatusPoll() {
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
+}
+
+function startStatusPoll() {
+  stopStatusPoll()
+  const ms = dockerStatusBusy.value ? STATUS_POLL_BUSY_MS : STATUS_POLL_IDLE_MS
+  statusPollTimer = setInterval(pollStatusOnce, ms)
+}
+
 onMounted(async () => {
   applyTheme(themeMode.value)
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onSystemThemeChange)
@@ -68,27 +92,22 @@ onMounted(async () => {
     await loadBootstrap()
   }
   document.addEventListener('visibilitychange', onVisibilityRefresh)
-  statusPollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible' && bootstrapped.value && showChrome.value) {
-      loadBootstrap({ silent: true })
-    }
-  }, 5000)
+  startStatusPoll()
 })
 
 onUnmounted(() => {
   matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', onSystemThemeChange)
   document.removeEventListener('visibilitychange', onVisibilityRefresh)
-  if (statusPollTimer) {
-    clearInterval(statusPollTimer)
-    statusPollTimer = null
-  }
+  stopStatusPoll()
 })
 
 function onVisibilityRefresh() {
-  if (document.visibilityState === 'visible' && bootstrapped.value && showChrome.value) {
-    loadBootstrap({ silent: true })
-  }
+  if (shouldPollStatus()) loadBootstrap({ silent: true })
 }
+
+watch(dockerStatusBusy, () => {
+  startStatusPoll()
+})
 
 watch(locale, () => {
   updateTitle()

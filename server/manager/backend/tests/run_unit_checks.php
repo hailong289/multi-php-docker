@@ -14,6 +14,9 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+use Manager\Http\HttpException;
+use Manager\Models\EnvConfig;
+use Manager\Models\HostsSync;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\PhpExtensionCatalog;
@@ -149,6 +152,21 @@ $pullId = (new InfraRuntime($infraTmp))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
 
+use Manager\Support\ControllerRequests;
+
+$staleDir = sys_get_temp_dir() . '/mgr-req-stale-' . bin2hex(random_bytes(4));
+mkdir($staleDir, 0775, true);
+$staleFile = $staleDir . '/abc__nginx__start.json';
+file_put_contents($staleFile, "{}\n");
+touch($staleFile, time() - 7200);
+assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === false, 'stale nginx request purged');
+assert_true(!is_file($staleFile), 'stale request file removed');
+$freshFile = $staleDir . '/def__nginx__start.json';
+file_put_contents($freshFile, "{}\n");
+assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === true, 'fresh nginx request blocks');
+@unlink($freshFile);
+@rmdir($staleDir);
+
 use Manager\Support\RemoteAuth;
 
 putenv('MANAGER_REMOTE=0');
@@ -208,6 +226,13 @@ assert_true(DockerHubPhpTags::isFpmTag('5.6-fpm-jessie'), 'jessie fpm tagged');
 assert_true(!DockerHubPhpTags::isFpmTag('5.6-cli'), 'cli is not fpm');
 
 use Manager\Models\PhpVersionInstaller;
+use Manager\Support\AtomicFile;
+
+$atomicDir = sys_get_temp_dir() . '/atomic-' . bin2hex(random_bytes(4));
+mkdir($atomicDir, 0775, true);
+$atomicPath = $atomicDir . '/req.json';
+assert_true(AtomicFile::write($atomicPath, "{\"ok\":true}\n") === true, 'AtomicFile write');
+assert_true(is_file($atomicPath) && str_contains((string) file_get_contents($atomicPath), '"ok":true'), 'AtomicFile content');
 
 $installProj = sys_get_temp_dir() . '/php-install-' . bin2hex(random_bytes(4));
 mkdir($installProj . '/compose', 0775, true);
@@ -228,5 +253,59 @@ assert_true(!str_contains($updatedCompose, "\r"), 'compose rewritten as LF');
 $hasInclude = new ReflectionMethod(PhpVersionInstaller::class, 'hasComposeInclude');
 assert_true($hasInclude->invoke($installer, 'php-8.6') === true, 'hasComposeInclude finds php-8.6');
 assert_true($hasInclude->invoke($installer, 'php-9.9') === false, 'hasComposeInclude misses unknown');
+file_put_contents($installProj . '/compose/php-8.6.yml', "services:\n  php-8.6: {}\n");
+$installer->repairComposeInclude('php-8.6');
+assert_true($hasInclude->invoke($installer, 'php-8.6') === true, 'repairComposeInclude idempotent');
+
+$envMissingDir = sys_get_temp_dir() . '/mgr-env-missing-' . bin2hex(random_bytes(4));
+mkdir($envMissingDir, 0775, true);
+$missingPath = $envMissingDir . '/env.json';
+$envMissing = new EnvConfig($missingPath);
+assert_true($envMissing->allOrEmpty() === [], 'allOrEmpty missing file');
+try {
+    $envMissing->all();
+    assert_true(false, 'all() should throw when missing');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'error.env_missing', 'all() throws env_missing');
+}
+
+$validPath = $envMissingDir . '/valid-env.json';
+file_put_contents($validPath, "{\"SERVER_NAME1\":{\"DOMAIN_NAME\":\"a.test\",\"APP_NAME\":\"a\"}}\n");
+$envValid = new EnvConfig($validPath);
+$loaded = $envValid->allOrEmpty();
+assert_true(isset($loaded['SERVER_NAME1']), 'allOrEmpty loads existing env');
+
+$hostsTmp = sys_get_temp_dir() . '/hosts-sync-' . bin2hex(random_bytes(4));
+mkdir($hostsTmp, 0775, true);
+$hosts = new HostsSync($hostsTmp);
+$hosts->saveExtras(['solo.test']);
+$desired = $hosts->desiredDomains([]);
+assert_true($desired === ['solo.test'], 'desiredDomains extras only');
+$listed = $hosts->listedDomains([], null);
+assert_true(count($listed) === 1 && ($listed[0]['source'] ?? '') === 'hosts', 'listedDomains hosts-only');
+
+assert_true(HostsSync::normalizeWriteToken('DEADBEEFcafe') === 'deadbeefcafe', 'normalizeWriteToken lowercases hex');
+assert_true(HostsSync::normalizeWriteToken('not a token!') === '', 'normalizeWriteToken rejects junk');
+assert_true(HostsSync::normalizeWriteToken('abcd') === '', 'normalizeWriteToken rejects short token');
+
+$hosts->request(true, 'solo.test', 'deadbeefcafebabe');
+$sync = json_decode((string) file_get_contents($hostsTmp . '/hosts.sync'), true);
+assert_true(is_array($sync), 'hosts.sync is json');
+assert_true(($sync['request_id'] ?? '') === 'deadbeefcafebabe', 'request stores write token as request_id');
+assert_true(($sync['force_admin'] ?? false) === true, 'request force_admin');
+assert_true(($sync['focus_domain'] ?? '') === 'solo.test', 'request focus_domain');
+
+$hosts->request(false, '', 'bad token');
+$sync2 = json_decode((string) file_get_contents($hostsTmp . '/hosts.sync'), true);
+assert_true(($sync2['request_id'] ?? 'bad token') !== 'bad token', 'junk token not stored');
+assert_true(preg_match('/^[a-f0-9]{16}$/', (string) ($sync2['request_id'] ?? '')) === 1, 'generated request_id is 16 hex');
+
+assert_true($hosts->validateDomain('solo.test') === null, 'solo.test valid');
+assert_true($hosts->validateDomain('solo.local') === null, 'solo.local valid');
+assert_true($hosts->validateDomain('api.solo.test') === null, 'subdomain.test valid');
+assert_true($hosts->validateDomain('solo.com') === null, 'custom tld .com valid');
+assert_true($hosts->validateDomain('shop.lan') === null, 'custom tld .lan valid');
+assert_true(($hosts->validateDomain('solo')['key'] ?? '') === 'validation.local_domain', 'reject missing tld');
+assert_true(($hosts->validateDomain('.test')['key'] ?? '') === 'validation.local_domain', 'reject empty name');
 
 echo "All checks passed\n";

@@ -95,15 +95,6 @@ export function buildTourSteps(t) {
         },
       },
       {
-        element: '[data-tour="domains-sync"]',
-        popover: {
-          title: t('tour.domains.sync_title'),
-          description: t('tour.domains.sync_body'),
-          side: 'bottom',
-          align: 'end',
-        },
-      },
-      {
         element: '[data-tour="domains-table"]',
         popover: {
           title: t('tour.domains.table_title'),

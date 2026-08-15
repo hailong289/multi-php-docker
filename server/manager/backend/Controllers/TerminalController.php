@@ -20,6 +20,21 @@ final class TerminalController extends Controller
         return Response::json($result);
     }
 
+    public function stream(Request $request, array $params = []): Response
+    {
+        $id = (string) ($params['id'] ?? '');
+        $since = (int) $request->queryParam('since', 0);
+        $lastEventId = (int) $request->header('last-event-id', '0');
+        if ($lastEventId > $since) {
+            $since = $lastEventId;
+        }
+        TerminalSession::readOutput($id, $since);
+
+        return Response::stream(static function () use ($id, $since): void {
+            TerminalSession::streamSse($id, $since);
+        });
+    }
+
     public function output(Request $request, array $params = []): Response
     {
         $id = (string) ($params['id'] ?? '');
@@ -43,8 +58,16 @@ final class TerminalController extends Controller
             $raw = '';
         }
         TerminalSession::writeInput($id, $raw);
+        $since = (int) $request->input('since', 0);
+        $result = TerminalSession::readOutputWait($id, $since, 80);
 
-        return Response::json(['ok' => true]);
+        return Response::json([
+            'ok' => true,
+            'offset' => $result['offset'],
+            'data' => base64_encode($result['data']),
+            'closed' => $result['closed'],
+            'exit_code' => $result['exit_code'],
+        ]);
     }
 
     public function resize(Request $request, array $params = []): Response

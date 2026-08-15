@@ -300,7 +300,7 @@ watch(
           <div v-if="fieldErrors.app_name" class="error">{{ fieldErrors.app_name }}</div>
 
           <label>{{ $t('form.domain') }}</label>
-          <input v-model="form.domain_name" :placeholder="$t('form.domain_placeholder')" required />
+          <input v-model="form.domain_name" :placeholder="$t('form.server_domain_placeholder')" required />
           <div v-if="fieldErrors.domain_name" class="error">{{ fieldErrors.domain_name }}</div>
 
           <label>{{ $t('form.php_version') }}</label>

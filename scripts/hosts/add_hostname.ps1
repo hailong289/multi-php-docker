@@ -169,10 +169,6 @@ function Invoke-HostsWrite([string[]]$Domains, [switch]$Elevated) {
 }
 
 function Invoke-Apply([switch]$PreferAdmin) {
-    if (-not (Test-Path -LiteralPath $EnvJson)) {
-        throw "env.json not found at $EnvJson"
-    }
-
     $domains = @(Get-DesiredDomains)
     Write-Host ("Applying domains: {0}" -f ($(if ($domains.Count) { $domains -join ', ' } else { '(none)' })))
     $unknown = Build-DomainStates -Domains $domains -State 'unknown'

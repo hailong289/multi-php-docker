@@ -182,6 +182,7 @@ final class TerminalSession
         $dir = self::requireDir($id);
         $meta = self::readMeta($dir);
         $outFile = $dir . '/out.bin';
+        clearstatcache(true, $outFile);
         $size = is_file($outFile) ? (int) filesize($outFile) : 0;
         $since = max(0, $since);
         $data = '';
@@ -203,6 +204,85 @@ final class TerminalSession
             'closed' => (bool) ($meta['closed'] ?? false),
             'exit_code' => isset($meta['exit_code']) ? (is_int($meta['exit_code']) ? $meta['exit_code'] : null) : null,
         ];
+    }
+
+    /**
+     * Short wait after stdin so the PTY echo can return on the same request.
+     *
+     * @return array{offset: int, data: string, closed: bool, exit_code: ?int}
+     */
+    public static function readOutputWait(string $id, int $since, int $waitMs = 80): array
+    {
+        $waitMs = max(0, min(200, $waitMs));
+        $deadline = microtime(true) + ($waitMs / 1000);
+        do {
+            $result = self::readOutput($id, $since);
+            if ($result['data'] !== '' || $result['closed'] || $waitMs === 0) {
+                return $result;
+            }
+            usleep(4000);
+        } while (microtime(true) < $deadline);
+
+        return self::readOutput($id, $since);
+    }
+
+    public static function streamSse(string $id, int $since): void
+    {
+        ignore_user_abort(true);
+        set_time_limit(0);
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        header('Content-Type: text/event-stream; charset=utf-8');
+        header('Cache-Control: no-cache, no-store');
+        header('Connection: keep-alive');
+        header('X-Accel-Buffering: no');
+        echo ':' . str_repeat(' ', 2048) . "\n\n";
+        flush();
+
+        $since = max(0, $since);
+        $lastPing = time();
+        $started = time();
+        while (!connection_aborted()) {
+            if ((time() - $started) > 1200) {
+                echo "event: reconnect\ndata: {}\n\n";
+                flush();
+
+                return;
+            }
+            try {
+                $result = self::readOutput($id, $since);
+            } catch (HttpException) {
+                echo "event: gone\ndata: {}\n\n";
+                flush();
+
+                return;
+            }
+            if ($result['data'] !== '') {
+                $since = $result['offset'];
+                $payload = json_encode([
+                    'offset' => $result['offset'],
+                    'data' => base64_encode($result['data']),
+                    'closed' => $result['closed'],
+                    'exit_code' => $result['exit_code'],
+                ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+                echo 'id: ' . $since . "\n";
+                echo 'data: ' . $payload . "\n\n";
+                flush();
+            }
+            if (!empty($result['closed'])) {
+                echo "event: closed\ndata: {}\n\n";
+                flush();
+
+                return;
+            }
+            if ((time() - $lastPing) >= 15) {
+                echo ": ping\n\n";
+                flush();
+                $lastPing = time();
+            }
+            usleep(30000);
+        }
     }
 
     public static function writeInput(string $id, string $raw): void
