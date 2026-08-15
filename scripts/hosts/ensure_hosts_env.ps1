@@ -40,6 +40,14 @@ function Register-HostsProtocol {
     New-ItemProperty -Path $ClassesRoot -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
     New-Item -Path "$ClassesRoot\shell\open\command" -Force | Out-Null
     New-ItemProperty -Path "$ClassesRoot\shell\open\command" -Name '(Default)' -Value $command -PropertyType String -Force | Out-Null
+
+    $registered = [string](Get-ItemProperty -LiteralPath "$ClassesRoot\shell\open\command").'(default)'
+    if ($registered -notlike ('*{0}*' -f $ProtocolScript)) {
+        throw "Protocol command does not point at $ProtocolScript"
+    }
+    if ($registered -match '"([^"]+\.ps1)"' -and -not (Test-Path -LiteralPath $Matches[1])) {
+        throw "Protocol handler missing: $($Matches[1])"
+    }
     Write-Host "Registered ${ProtocolName}: → $ProtocolScript"
 }
 

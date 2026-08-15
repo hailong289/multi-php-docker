@@ -56,7 +56,7 @@ final class DomainController extends Controller
         $extras[] = $domain;
         $hosts->saveExtras($extras);
         // Force admin write so watch mode elevates immediately (Manager cannot write hosts itself).
-        $hosts->request(true, $domain);
+        $hosts->request(true, $domain, (string) ($body['hosts_write_token'] ?? ''));
 
         return Response::json([
             'domain_name' => $domain,
@@ -98,7 +98,7 @@ final class DomainController extends Controller
 
         $servers[$key] = $validation['server'];
         $env->save($servers);
-        $hosts->request(true, (string) ($validation['server']['DOMAIN_NAME'] ?? ''));
+        $hosts->request(true, (string) ($validation['server']['DOMAIN_NAME'] ?? ''), (string) ($body['hosts_write_token'] ?? ''));
 
         return Response::json([
             'key' => $key,
@@ -146,7 +146,7 @@ final class DomainController extends Controller
             $extras,
         ));
         $hosts->saveExtras($extras);
-        $hosts->request(true, $next);
+        $hosts->request(true, $next, (string) ($request->json()['hosts_write_token'] ?? ''));
 
         return Response::json([
             'key' => 'hosts:' . $next,
@@ -174,7 +174,7 @@ final class DomainController extends Controller
             static fn (string $item): bool => $item !== $domain,
         ));
         $hosts->saveExtras($extras);
-        $hosts->request(true);
+        $hosts->request(true, '', (string) ($request->json()['hosts_write_token'] ?? ''));
 
         $env = new EnvConfig();
         $servers = $env->allOrEmpty();

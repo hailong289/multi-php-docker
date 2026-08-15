@@ -284,4 +284,28 @@ assert_true($desired === ['solo.test'], 'desiredDomains extras only');
 $listed = $hosts->listedDomains([], null);
 assert_true(count($listed) === 1 && ($listed[0]['source'] ?? '') === 'hosts', 'listedDomains hosts-only');
 
+assert_true(HostsSync::normalizeWriteToken('DEADBEEFcafe') === 'deadbeefcafe', 'normalizeWriteToken lowercases hex');
+assert_true(HostsSync::normalizeWriteToken('not a token!') === '', 'normalizeWriteToken rejects junk');
+assert_true(HostsSync::normalizeWriteToken('abcd') === '', 'normalizeWriteToken rejects short token');
+
+$hosts->request(true, 'solo.test', 'deadbeefcafebabe');
+$sync = json_decode((string) file_get_contents($hostsTmp . '/hosts.sync'), true);
+assert_true(is_array($sync), 'hosts.sync is json');
+assert_true(($sync['request_id'] ?? '') === 'deadbeefcafebabe', 'request stores write token as request_id');
+assert_true(($sync['force_admin'] ?? false) === true, 'request force_admin');
+assert_true(($sync['focus_domain'] ?? '') === 'solo.test', 'request focus_domain');
+
+$hosts->request(false, '', 'bad token');
+$sync2 = json_decode((string) file_get_contents($hostsTmp . '/hosts.sync'), true);
+assert_true(($sync2['request_id'] ?? 'bad token') !== 'bad token', 'junk token not stored');
+assert_true(preg_match('/^[a-f0-9]{16}$/', (string) ($sync2['request_id'] ?? '')) === 1, 'generated request_id is 16 hex');
+
+assert_true($hosts->validateDomain('solo.test') === null, 'solo.test valid');
+assert_true($hosts->validateDomain('solo.local') === null, 'solo.local valid');
+assert_true($hosts->validateDomain('api.solo.test') === null, 'subdomain.test valid');
+assert_true($hosts->validateDomain('solo.com') === null, 'custom tld .com valid');
+assert_true($hosts->validateDomain('shop.lan') === null, 'custom tld .lan valid');
+assert_true(($hosts->validateDomain('solo')['key'] ?? '') === 'validation.local_domain', 'reject missing tld');
+assert_true(($hosts->validateDomain('.test')['key'] ?? '') === 'validation.local_domain', 'reject empty name');
+
 echo "All checks passed\n";

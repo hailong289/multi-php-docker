@@ -2,6 +2,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiGet, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
+import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
+import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
@@ -47,7 +49,9 @@ const form = reactive({
 })
 
 const domainForm = reactive({
-  domain_name: '',
+  domain_label: '',
+  domain_tld: '.test',
+  domain_custom: '',
 })
 const domainModalOpen = ref(false)
 const domainModalMode = ref('add')
@@ -354,13 +358,16 @@ export function useManager() {
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
     try {
-      const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`)
+      const write = beginHostsWrite()
+      const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`, {
+        hosts_write_token: write.token,
+      })
       if (domainEditingKey.value === key) closeDomainModal()
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_removed'))
       if (data.hosts_write_enabled) {
-        await finishHostsWrite(result)
+        await finishHostsWrite(result, write)
       }
     } catch (error) {
       showToast('failure', translateApiError(error))
@@ -417,7 +424,9 @@ export function useManager() {
     domainModalMode.value = 'add'
     domainEditingKey.value = null
     domainFieldErrors.value = {}
-    domainForm.domain_name = ''
+    domainForm.domain_label = ''
+    domainForm.domain_tld = '.test'
+    domainForm.domain_custom = ''
     domainModalOpen.value = true
   }
 
@@ -427,7 +436,10 @@ export function useManager() {
     domainModalMode.value = 'edit'
     domainEditingKey.value = key
     domainFieldErrors.value = {}
-    domainForm.domain_name = row.domain_name || ''
+    const parsed = parseLocalDomain(row.domain_name || '')
+    domainForm.domain_label = parsed.name
+    domainForm.domain_tld = parsed.tld
+    domainForm.domain_custom = parsed.custom
     domainModalOpen.value = true
   }
 
@@ -436,7 +448,9 @@ export function useManager() {
     domainModalMode.value = 'add'
     domainEditingKey.value = null
     domainFieldErrors.value = {}
-    domainForm.domain_name = ''
+    domainForm.domain_label = ''
+    domainForm.domain_tld = '.test'
+    domainForm.domain_custom = ''
   }
 
   function closeHostsManual() {
@@ -485,8 +499,8 @@ export function useManager() {
           continue
         }
         data.hosts_status = status
-        if (status.status === 'busy') {
-          latestBusy = status
+        if (status.status === 'busy' || (pendingSync && status.status === 'success')) {
+          latestBusy = status.status === 'busy' ? status : latestBusy
           hostsProgress.value = {
             attempt,
             maxAttempts,
@@ -511,41 +525,29 @@ export function useManager() {
     return { status: latestBusy, pendingSync }
   }
 
-  function launchHostsWriteProtocol() {
-    const ua = String(navigator.userAgent || '')
-    const platform = String(navigator.platform || '')
-    const isWin = /Win/i.test(ua) || /Win/i.test(platform)
-    const isMac = /Mac/i.test(platform) || /Mac OS/i.test(ua) || /Macintosh/i.test(ua)
-    // Windows + macOS: custom URL scheme registered by ensure_hosts_env.*
-    if (!isWin && !isMac) return false
-    try {
-      const frame = document.createElement('iframe')
-      frame.style.display = 'none'
-      frame.src = 'multi-php-hosts:write'
-      document.body.appendChild(frame)
-      setTimeout(() => frame.remove(), 2500)
-      return true
-    } catch (_) {
-      return false
-    }
+  function beginHostsWrite() {
+    const previousUpdatedAt = data.hosts_status?.updated_at || null
+    const token = newHostsWriteToken()
+    const launched = data.hosts_write_enabled ? launchHostsWriteProtocol(window, token) : false
+    return { token, launched, previousUpdatedAt }
   }
 
-  async function finishHostsWrite(result) {
-    const previousUpdatedAt = data.hosts_status?.updated_at || null
+  async function finishHostsWrite(result, write = {}) {
+    const previousUpdatedAt = write.previousUpdatedAt || data.hosts_status?.updated_at || null
+    const launched = !!write.launched
     if (result?.bootstrap) applyBootstrap(result.bootstrap)
     else if (result?.hosts_status) data.hosts_status = result.hosts_status
 
-    const launched = launchHostsWriteProtocol()
     hostsProgress.value = {
       attempt: 0,
-      maxAttempts: 15,
+      maxAttempts: 45,
       message_key: launched ? 'hosts.progress_protocol' : 'hosts.progress_starting',
     }
 
     try {
-      const outcome = await waitForHostsResult(previousUpdatedAt, 15)
+      const outcome = await waitForHostsResult(previousUpdatedAt, 45)
       const status = outcome?.status || null
-      await loadBootstrap()
+      await loadBootstrap({ silent: true })
       data.pending_sync = !!outcome?.pendingSync || !!data.pending_sync
 
       if (status?.status === 'success') {
@@ -583,55 +585,37 @@ export function useManager() {
     domainFieldErrors.value = {}
     const mode = domainModalMode.value
     const editingKeySnapshot = domainEditingKey.value
+    const write = beginHostsWrite()
     try {
       let result
+      const body = {
+        domain_name: composeLocalDomain(
+          domainForm.domain_label,
+          domainForm.domain_tld,
+          domainForm.domain_custom,
+        ),
+        hosts_write_token: write.token,
+      }
       if (mode === 'add') {
-        result = await apiSend('POST', '/api/domains', {
-          domain_name: domainForm.domain_name,
-        })
+        result = await apiSend('POST', '/api/domains', body)
       } else if (String(editingKeySnapshot).startsWith('hosts:')) {
         const current = String(editingKeySnapshot).slice('hosts:'.length)
-        result = await apiSend('PUT', `/api/domains/extra/${encodeURIComponent(current)}`, {
-          domain_name: domainForm.domain_name,
-        })
+        result = await apiSend('PUT', `/api/domains/extra/${encodeURIComponent(current)}`, body)
       } else {
-        result = await apiSend('PUT', `/api/domains/${editingKeySnapshot}`, {
-          domain_name: domainForm.domain_name,
-        })
+        result = await apiSend('PUT', `/api/domains/${editingKeySnapshot}`, body)
       }
       closeDomainModal()
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_added'))
       if (data.hosts_write_enabled) {
-        await finishHostsWrite(result)
+        await finishHostsWrite(result, write)
       }
     } catch (error) {
       const fields = error.payload?.error?.fields || {}
       domainFieldErrors.value = Object.fromEntries(
         Object.entries(fields).map(([k, v]) => [k, trKey(v.key, v.parameters || {})]),
       )
-      showToast('failure', translateApiError(error))
-    } finally {
-      busy.value = false
-      pendingAction.value = null
-    }
-  }
-
-  async function syncHosts() {
-    busy.value = true
-    pendingAction.value = { kind: 'hosts-sync' }
-    try {
-      // Refresh badges from the latest status written by the optional host helper.
-      const result = await apiSend('POST', '/api/hosts/sync', {})
-      data.pending_sync = !!result.pending_sync
-      if (result.hosts_status) {
-        data.hosts_status = result.hosts_status
-        showToast('success', trKey(result.message_key || 'hosts.status_refreshed'))
-      } else {
-        showToast('failure', t('hosts.controller_unavailable'))
-      }
-    } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
       busy.value = false
@@ -648,16 +632,21 @@ export function useManager() {
     if (!domain) return
     busy.value = true
     pendingAction.value = { kind: 'hosts-admin', domain }
+    const write = beginHostsWrite()
     try {
       const result = await apiSend('POST', '/api/hosts/sync', {
         force_admin: true,
         domain_name: domain,
+        hosts_write_token: write.token,
       })
       data.pending_sync = !!result.pending_sync
-      await finishHostsWrite({
-        ...result,
-        manual: result.manual || data.hosts_status?.manual || null,
-      })
+      await finishHostsWrite(
+        {
+          ...result,
+          manual: result.manual || data.hosts_status?.manual || null,
+        },
+        write,
+      )
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -832,7 +821,6 @@ export function useManager() {
     openDomainEdit,
     closeDomainModal,
     saveDomain,
-    syncHosts,
     writeDomainHostsAdmin,
     closeHostsManual,
     showHostsManual,

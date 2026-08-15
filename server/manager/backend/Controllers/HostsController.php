@@ -41,7 +41,7 @@ final class HostsController extends Controller
             throw new HttpException('error.hosts_write_disabled_remote', 403);
         }
 
-        $hosts->request(true, $focusDomain);
+        $hosts->request(true, $focusDomain, (string) ($body['hosts_write_token'] ?? ''));
         $desired = $hosts->desiredDomains($servers);
         $manualDomains = $focusDomain !== ''
             ? [$hosts->normalizeDomain($focusDomain)]

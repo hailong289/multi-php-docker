@@ -94,7 +94,17 @@ final class HostsSync
         return $present;
     }
 
-    public function request(bool $forceAdmin = false, string $focusDomain = ''): void
+    public static function normalizeWriteToken(string $token): string
+    {
+        $token = strtolower(trim($token));
+        if ($token === '' || preg_match('/^[a-f0-9]{8,64}$/', $token) !== 1) {
+            return '';
+        }
+
+        return $token;
+    }
+
+    public function request(bool $forceAdmin = false, string $focusDomain = '', string $writeToken = ''): void
     {
         // Remote Manager runs on a server: OS hosts helpers / protocol writes do not apply.
         if (!self::writeEnabled()) {
@@ -105,9 +115,10 @@ final class HostsSync
             throw new HttpException('error.runtime_directory', 500);
         }
 
+        $token = self::normalizeWriteToken($writeToken);
         $payload = [
             'requested_at' => date(DATE_ATOM),
-            'request_id' => bin2hex(random_bytes(8)),
+            'request_id' => $token !== '' ? $token : bin2hex(random_bytes(8)),
             'force_admin' => $forceAdmin,
         ];
         $focus = $this->normalizeDomain($focusDomain);
@@ -236,8 +247,11 @@ final class HostsSync
     public function validateDomain(string $domain): ?array
     {
         $domain = $this->normalizeDomain($domain);
-        if ($domain === '' || filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
-            return ['key' => 'validation.domain'];
+        if ($domain === '' || !str_contains($domain, '.') || str_starts_with($domain, '.') || str_ends_with($domain, '.')) {
+            return ['key' => 'validation.local_domain'];
+        }
+        if (filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
+            return ['key' => 'validation.local_domain'];
         }
 
         return null;
