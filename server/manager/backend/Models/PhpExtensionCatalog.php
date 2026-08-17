@@ -30,6 +30,17 @@ final class PhpExtensionCatalog
         return (bool) preg_match('/^[a-z][a-z0-9_]*$/', $name);
     }
 
+    /** php -m prints "Zend OPcache"; the catalog and UI use "opcache". */
+    public static function normalizeModuleName(string $name): string
+    {
+        $name = strtolower(trim($name));
+        if ($name === 'zend opcache' || $name === 'zend_opcache') {
+            return 'opcache';
+        }
+
+        return $name;
+    }
+
     public static function isSkippedBuiltin(string $name): bool
     {
         return in_array(strtolower($name), self::SKIP_DISPLAY, true);
@@ -51,7 +62,10 @@ final class PhpExtensionCatalog
     {
         $loaded = [];
         foreach ($modules as $m) {
-            $loaded[strtolower($m)] = true;
+            if (!is_string($m) || $m === '') {
+                continue;
+            }
+            $loaded[self::normalizeModuleName($m)] = true;
         }
         $names = self::NAMES;
         foreach ($extraNames as $extra) {

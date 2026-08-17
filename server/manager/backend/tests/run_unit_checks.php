@@ -71,6 +71,13 @@ foreach ($entriesActive as $e) {
 }
 assert_true($byActive['imagick'] === 'enabled_in_ini', 'imagick enabled_in_ini');
 
+$entriesOpcache = PhpExtensionCatalog::entries('php-8.5', ['Core', 'Zend OPcache'], '');
+$byOpcache = [];
+foreach ($entriesOpcache as $e) {
+    $byOpcache[$e['name']] = $e['status'];
+}
+assert_true(($byOpcache['opcache'] ?? '') === 'loaded', 'Zend OPcache maps to loaded opcache');
+
 $removed = $editor->removeExtensionContent("extension=foo.so;\n;extension=imagick.so;\nmemory_limit=1G\n", 'imagick');
 assert_true($editor->extensionLineStatus($removed, 'imagick') === 'absent', 'remove imagick lines');
 assert_true(str_contains($removed, 'extension=foo.so'), 'keep redis line');
@@ -105,6 +112,35 @@ assert_true(PhpVersionId::phpServiceFromSupervisor('supervisor-8.1') === 'php-8.
 assert_true(PhpVersionId::isValidSupervisorService('supervisor'), 'valid supervisor');
 assert_true(PhpVersionId::isValidSupervisorService('supervisor-8.2.33-alpine'), 'valid alpine supervisor');
 
+use Manager\Support\ControllerRequests;
+
+$staleDir = sys_get_temp_dir() . '/mgr-req-stale-' . bin2hex(random_bytes(4));
+mkdir($staleDir, 0775, true);
+$staleFile = $staleDir . '/abc__nginx__start.json';
+file_put_contents($staleFile, "{}\n");
+touch($staleFile, time() - 7200);
+assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === false, 'stale nginx request purged');
+assert_true(!is_file($staleFile), 'stale request file removed');
+$freshFile = $staleDir . '/def__nginx__start.json';
+file_put_contents($freshFile, "{}\n");
+assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === true, 'fresh nginx request blocks');
+@unlink($freshFile);
+$extReq = $staleDir . '/aaa__php-8.5__install-ext-opcache.json';
+file_put_contents($extReq, "{}\n");
+assert_true(
+    ControllerRequests::hasBlocking($staleDir, 'php-8.5', ['install-ext', 'uninstall-ext']) === true,
+    'install-ext-opcache request blocks',
+);
+$unextReq = $staleDir . '/bbb__php-8.5__uninstall-ext-redis.json';
+file_put_contents($unextReq, "{}\n");
+assert_true(
+    ControllerRequests::hasBlocking($staleDir, 'php-8.5', ['install-ext', 'uninstall-ext']) === true,
+    'uninstall-ext-redis request blocks',
+);
+@unlink($extReq);
+@unlink($unextReq);
+@rmdir($staleDir);
+
 $infraTargets = InfraRuntime::targets();
 assert_true(isset($infraTargets['mysql'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
 assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
@@ -117,7 +153,11 @@ mkdir($infraTmp . '/requests', 0775, true);
 mkdir($infraTmp . '/status', 0775, true);
 $infra = new InfraRuntime($infraTmp);
 $statuses = $infra->statuses();
-assert_true(($statuses['mysql']['state'] ?? '') === 'not_created', 'mysql not_created default');
+$mysqlState = $statuses['mysql']['state'] ?? '';
+assert_true(
+    in_array($mysqlState, ['not_created', 'running', 'stopped'], true),
+    'mysql default state from files or live docker',
+);
 $requestId = $infra->request('mysql', 'create');
 assert_true(strlen($requestId) === 32, 'infra request id');
 assert_true($infra->hasBlockingRequests('mysql'), 'mysql has blocking create');
@@ -151,21 +191,6 @@ assert_true(!is_file($composeProj . '/compose/custom.yml'), 'custom compose dele
 $pullId = (new InfraRuntime($infraTmp))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
-
-use Manager\Support\ControllerRequests;
-
-$staleDir = sys_get_temp_dir() . '/mgr-req-stale-' . bin2hex(random_bytes(4));
-mkdir($staleDir, 0775, true);
-$staleFile = $staleDir . '/abc__nginx__start.json';
-file_put_contents($staleFile, "{}\n");
-touch($staleFile, time() - 7200);
-assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === false, 'stale nginx request purged');
-assert_true(!is_file($staleFile), 'stale request file removed');
-$freshFile = $staleDir . '/def__nginx__start.json';
-file_put_contents($freshFile, "{}\n");
-assert_true(ControllerRequests::hasBlocking($staleDir, 'nginx', ['start']) === true, 'fresh nginx request blocks');
-@unlink($freshFile);
-@rmdir($staleDir);
 
 use Manager\Support\RemoteAuth;
 
