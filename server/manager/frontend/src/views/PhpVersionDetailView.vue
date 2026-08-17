@@ -109,6 +109,50 @@ async function saveIni() {
   }
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+function extensionStatus(list, name) {
+  return (list || []).find((ext) => ext.name === name)?.status || ''
+}
+
+function installSucceeded(status) {
+  return status === 'loaded' || status === 'enabled_in_ini'
+}
+
+function uninstallSucceeded(status, previousStatus) {
+  return status !== previousStatus && status !== 'loaded'
+}
+
+/**
+ * Install/uninstall is queued to php-controller (pecl can take minutes).
+ * Keep the button pending and refresh until the job leaves "busy" or status changes.
+ */
+async function waitForExtJob(name, action, previousStatus, maxMs = 180000) {
+  const started = Date.now()
+  let sawBusy = false
+  while (Date.now() - started < maxMs) {
+    await sleep(1500)
+    await load({ silent: true })
+    const current = extensionStatus(details.value?.extensions, name)
+    if (action === 'install' && installSucceeded(current)) {
+      return 'ok'
+    }
+    if (action === 'uninstall' && uninstallSucceeded(current, previousStatus)) {
+      return 'ok'
+    }
+    if (state.value === 'busy') {
+      sawBusy = true
+      continue
+    }
+    if (sawBusy || Date.now() - started > 4000) {
+      return 'failed'
+    }
+  }
+  return 'timeout'
+}
+
 async function extAction(name, action) {
   if (action === 'uninstall') {
     if (!window.confirm(t('php_controller.ext_uninstall_confirm', { extension: name }))) {
@@ -116,15 +160,21 @@ async function extAction(name, action) {
     }
   }
   pending.value = `${action}:${name}`
+  const previousStatus = extensionStatus(details.value?.extensions, name)
   try {
     const path = `/api/php-controllers/${service.value}/extensions/${name}/${action}`
-    const result = await apiSend('POST', path, {})
-    showToast(
-      'success',
-      t(result.message_key || 'php_controller.action_success', result.message_parameters || {}),
-    )
-    if (result.php_details) details.value = result.php_details
-    else if (result.php_controllers) data.php_controllers = result.php_controllers
+    await apiSend('POST', path, {})
+    const outcome = await waitForExtJob(name, action, previousStatus)
+    await load({ silent: true })
+    if (outcome === 'ok') {
+      showToast('success', t('php_controller.action_success'))
+    } else if (outcome === 'timeout') {
+      showToast('failure', t('php_controller.extension_install_timeout', { extension: name }))
+    } else if (action === 'uninstall') {
+      showToast('failure', t('php_controller.extension_uninstall_failed', { extension: name }))
+    } else {
+      showToast('failure', t('php_controller.extension_install_failed', { extension: name }))
+    }
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {

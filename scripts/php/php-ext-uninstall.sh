@@ -31,7 +31,7 @@ case "$ext" in
 esac
 
 # Fail if still loaded after cleanup (baked into binary / still enabled).
-if docker exec "$container" php -r "exit(extension_loaded('$ext') ? 0 : 1);" >/dev/null 2>&1; then
+if docker exec "$container" php -r "exit((extension_loaded('$ext') || ('$ext' === 'opcache' && extension_loaded('Zend OPcache'))) ? 0 : 1);" >/dev/null 2>&1; then
     echo "extension still loaded after uninstall: $ext" >&2
     exit 1
 fi
