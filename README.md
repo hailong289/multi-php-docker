@@ -20,9 +20,9 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP 8.4 | `php8.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | PHP 8.3 | `php8.3_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | PHP 8.2 | `php8.2_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
-| PHP 8.1 | `php8.1_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
-| PHP 8.0 | `php8.0_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
-| PHP 7.4 | `php7.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
+| PHP 8.1 | `php8.1_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
+| PHP 8.0 | `php8.0_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
+| PHP 7.4 | `php7.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
 | Redis | `redis_container` | `6379` | No password |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
@@ -38,8 +38,8 @@ The following images are provided:
 | Service | Image |
 | --- | --- |
 | `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8.0` | `long301001/multi-php-docker:php-8.0` |
-| `php-8.1` | `long301001/multi-php-docker:php-8.1` |
+| `php-8.0`, `supervisor-8.0` | `long301001/multi-php-docker:php-8.0` |
+| `php-8.1`, `supervisor-8.1` | `long301001/multi-php-docker:php-8.1` |
 | `php-8.5`, `supervisor-8.5`, `manager` | `long301001/multi-php-docker:php-8.5` |
 | `php-8.4`, `supervisor-8.4` | `long301001/multi-php-docker:php-8.4` |
 | `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
@@ -74,20 +74,14 @@ git clone <repository-url>
 cd <repository-folder>
 ```
 
-`env.json` contains machine-specific project configuration and must not be pushed to Git. Only `env.example.json` is committed as the configuration template. On the first Compose run, the `env-init` service automatically copies `env.example.json` to `env.json`; an existing file is always preserved. Compose mounts the project directory (not the optional `env.json` file itself) so bind-mount behavior stays consistent on Windows and macOS.
-
-To create the file before starting Docker, copy it manually:
-
-```bash
-cp env.example.json env.json
-```
+`env.json` is machine-specific and must not be pushed to Git. Only `env.example.json` is committed as the template. On the first Compose run, `env-init` copies `env.example.json` to `env.json` if the file is missing; an existing file is never overwritten. After the stack is up, add and edit projects in Server Manager instead of editing `env.json` by hand.
 
 ### 2. Place the source code in the correct directory
 
 - PHP 8.5: `server/source_php8.5/<project-name>`
 - PHP 8.4: `server/source_php8.4/<project-name>`
 - PHP 8.3: `server/source_php8.3/<project-name>`
-- PHP 8.5: `server/source_php8.5/<project-name>`
+- PHP 8.2: `server/source_php8.2/<project-name>`
 - PHP 8.1: `server/source_php8.1/<project-name>`
 - PHP 8.0: `server/source_php8.0/<project-name>`
 - PHP 7.4: `server/source_php7.4/<project-name>`
@@ -102,7 +96,7 @@ server/
 │   └── my-php84-app/
 ├── source_php8.3/
 │   └── my-php83-app/
-├── source_php8.5/
+├── source_php8.2/
 │   └── my-php82-app/
 ├── source_php8.1/
 │   └── my-php81-app/
@@ -112,111 +106,9 @@ server/
     └── my-php7-app/
 ```
 
-### 3. Define projects in `env.json`
+### 3. Pull images and start the environment
 
-
-
-Each project uses one `SERVER_NAME<N>` entry:
-
-```json
-{
-  "SERVER_NAME1": {
-    "APP_NAME": "my-php80-app",
-    "DOMAIN_NAME": "my-php80-app.test",
-    "SERVER_PATH": "/var/www/source_php8.0/my-php80-app/public",
-    "CONTAINER_PHP_VERSION": "php8.0_container"
-  },
-  "SERVER_NAME2": {
-    "APP_NAME": "my-php81-app",
-    "DOMAIN_NAME": "my-php81-app.test",
-    "SERVER_PATH": "/var/www/source_php8.1/my-php81-app/public",
-    "CONTAINER_PHP_VERSION": "php8.1_container"
-  },
-  "SERVER_NAME3": {
-    "APP_NAME": "my-php82-app",
-    "DOMAIN_NAME": "my-php82-app.test",
-    "SERVER_PATH": "/var/www/source_php8.5/my-php85-app/public",
-    "CONTAINER_PHP_VERSION": "php8.5_container"
-  },
-  "SERVER_NAME4": {
-    "APP_NAME": "my-php7-app",
-    "DOMAIN_NAME": "my-php7-app.test",
-    "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
-    "CONTAINER_PHP_VERSION": "php7.4_container"
-  }
-}
-```
-
-| Field | Description |
-| --- | --- |
-| `APP_NAME` | Project name and generated Nginx configuration filename |
-| `DOMAIN_NAME` | Domain used on the local machine |
-| `SERVER_PATH` | Absolute document-root path **inside the container** |
-| `CONTAINER_PHP_VERSION` | `php8.5_container` … `php8.0_container`, or `php7.4_container` |
-
-For Laravel or frameworks with a separate public directory, `SERVER_PATH` must point to `public`, `webroot`, or the directory containing `index.php`.
-
-### 4. Add domains to the `hosts` file
-
-The stack starts without mounting the OS hosts file. Manager reads the latest status from `runtime/hosts.status.json`, which is written by the optional helper running on the host. Before the helper runs, domains show **Unknown** and the UI still provides a manual hosts fallback.
-
-**Write hosts (needs host script + admin):**
-
-1. Run once to register the `multi-php-hosts:` helper/protocol. This setup is only needed for automatic hosts writing; it is not required to start Docker or create PHP containers:
-
-Windows:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1
-```
-
-Unregister: `powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1 -UnregisterProtocol`
-
-macOS:
-
-```bash
-chmod +x scripts/hosts/ensure_hosts_env.sh scripts/hosts/add_hostname.sh scripts/hosts/hosts_protocol_macos.sh
-./scripts/hosts/ensure_hosts_env.sh
-```
-
-Unregister: `./scripts/hosts/ensure_hosts_env.sh --unregister-protocol`
-
-2. In Manager use **Add domain** / **Write hosts (Admin)**. The browser opens `multi-php-hosts:write` → writes hosts (UAC on Windows / admin prompt on macOS). Allow the app if the browser prompts.
-
-Linux / WSL (no browser protocol):
-
-```bash
-chmod +x scripts/hosts/add_hostname.sh
-./scripts/hosts/add_hostname.sh --watch
-```
-
-The script only edits the `# multi-php-docker-serve:managed:*` block in the hosts file.
-
-**One-shot (without Manager):**
-
-```bash
-./scripts/hosts/add_hostname.sh
-```
-
-Windows:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1
-```
-
-The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.json` if present) and maps it to `127.0.0.1`. To configure domains manually, edit:
-
-- macOS/Linux: `/etc/hosts`
-- Windows: `C:\Windows\System32\drivers\etc\hosts`
-
-```text
-127.0.0.1 my-php8-app.test
-127.0.0.1 my-php7-app.test
-```
-
-### 5. Pull images and start the environment
-
-On the first run, pull the images and start directly. Zero-config startup does not require a `.env` file:
+On the first run, pull the images and start. Zero-config startup does not require a `.env` file:
 
 ```powershell
 docker compose pull
@@ -230,107 +122,57 @@ docker compose pull
 docker compose up -d
 ```
 
-The command above starts PHP 8.5 together with Nginx, Server Manager, and PHP Controller. Optional PHP versions (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, Redis, RabbitMQ, and Supervisor are not started.
+This starts PHP 8.5, Nginx, Server Manager, and PHP Controller. Optional PHP versions (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, Redis, RabbitMQ, and Supervisor stay off until you start them from Server Manager.
 
-`php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required. The host helper is an optional OS integration with a manual hosts fallback.
+`php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required.
 
-### Enable an optional PHP version
-
-Each optional version has a Compose profile with the same name (`php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
+Later starts:
 
 ```bash
-# Enable PHP 8.4 / 8.3 / 8.2
-docker compose --profile php-8.4 up -d
-docker compose --profile php-8.3 up -d
-docker compose --profile php-8.2 up -d
-
-# Enable PHP 8.1 / 8.0 / 7.4
-docker compose --profile php-8.1 up -d
-docker compose --profile php-8.0 up -d
-docker compose --profile php-7.4 up -d
+docker compose up -d
+docker compose ps
 ```
 
-Multiple versions can be enabled together:
+### 4. Open Server Manager
 
-```bash
-docker compose \
-  --profile php-8.2 \
-  --profile php-8.3 \
-  --profile php-8.4 \
-  up -d
-```
-
-Stop and remove an optional version with:
-
-```bash
-docker compose stop php-8.3
-docker compose rm -f php-8.3
-```
-
-When a project in `env.json` uses an optional PHP container (for example `php8.3_container`, `php8.5_container`, or `php7.4_container`), enable the matching profile before starting or recreating Nginx. Otherwise, Nginx cannot connect to that PHP upstream.
-
-### Enable MySQL, Redis, or RabbitMQ
-
-Each service has a Compose profile with the same name. Enabling the profile pulls the image if needed and starts the container — without building:
-
-```bash
-# MySQL
-docker compose --profile mysql up -d mysql
-
-# Redis
-docker compose --profile redis up -d redis
-
-# RabbitMQ
-docker compose --profile rabbitmq up -d rabbitmq
-```
-
-Enable several services together:
-
-```bash
-docker compose \
-  --profile mysql \
-  --profile redis \
-  --profile rabbitmq \
-  up -d
-```
-
-Or pull first, then start:
-
-```bash
-docker compose --profile mysql pull mysql
-docker compose --profile mysql up -d mysql
-```
-
-Stop a service with:
-
-```bash
-docker compose stop mysql
-docker compose rm -f mysql
-```
-
-### Enable Supervisor
-
-Each Supervisor container has its own profile (it does not start with PHP). Enable it from Server Manager: **PHP versions** → **Supervisor** for that version, or the CLI:
-
-```bash
-# Default PHP 8.5 Supervisor
-docker compose --profile supervisor-8.5 up -d supervisor-8.5
-
-# Other Supervisors
-docker compose --profile supervisor-8.4 up -d supervisor-8.4
-docker compose --profile supervisor-8.2 up -d supervisor-8.2
-docker compose --profile supervisor-8.1 up -d supervisor-8.1
-docker compose --profile supervisor-8.0 up -d supervisor-8.0
-docker compose --profile supervisor-7.4 up -d supervisor-7.4
-```
-
-The UI supports Create / Start / Stop / Restart and live log viewing under `logs/supervisor*` (manual refresh or Follow).
-
-## Manage servers in the web interface
-
-After running `docker compose up -d`, open:
+Open:
 
 [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
+
+Use this UI to manage virtual servers, PHP versions, hosts, Nginx, MySQL, Redis, RabbitMQ, and Supervisor. First-run order:
+
+1. **Add a server** — application name, domain (for example `my-php85-app.test`), PHP version, and document root. For Laravel or a framework with a public directory, point the document root at `public`, `webroot`, or the folder that contains `index.php`. Manager writes `env.json`; you do not need to edit that file by hand.
+2. **Start PHP if needed** — PHP 8.5 is already running. For another version, open **PHP versions** → **Create** → **Start**.
+3. **Write hosts** — once per machine, register the helper (not required to start Docker). Then in Manager use **Add domain** / **Write hosts (Admin)**.
+
+Windows (once):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1
+```
+
+macOS (once):
+
+```bash
+chmod +x scripts/hosts/ensure_hosts_env.sh scripts/hosts/add_hostname.sh scripts/hosts/hosts_protocol_macos.sh
+./scripts/hosts/ensure_hosts_env.sh
+```
+
+Linux / WSL (watch instead of a browser protocol):
+
+```bash
+chmod +x scripts/hosts/add_hostname.sh
+./scripts/hosts/add_hostname.sh --watch
+```
+
+The browser opens `multi-php-hosts:write` and writes hosts (UAC on Windows / admin prompt on macOS). Allow the app if the browser asks.
+
+4. Click **Apply & Reload Nginx**.
+5. Open the domain, for example `http://my-php85-app.test`.
+
+The next section lists everything Server Manager can do. Manual `env.json` format, hosts CLI, and Compose profile commands are optional alternatives after that.
+
+## Manage servers in the web interface
 
 Server Manager can:
 
@@ -345,6 +187,7 @@ Server Manager can:
 - Support Vietnamese and English; the first visit follows the browser language and the selected locale is then remembered in the session.
 - Support **System**, **Light**, and **Dark** appearances; the selection is stored in the browser, and System mode follows the operating-system preference.
 - Manage PHP container state directly with **Create**, **Start**, **Stop**, and **Restart** controls.
+- Start and stop **MySQL**, **Redis**, **RabbitMQ**, and **Supervisor** from the UI.
 - Open **Details** for each PHP version to list loaded extensions, toggle `extension=` lines in the mounted `php.ini`, install a curated set of extensions into a running container, and edit `php.ini` (after save you can choose to restart PHP-FPM).
 - Manage Nginx from a dedicated menu: **Start**, **Stop**, **Restart**, run `nginx -t`, **Apply & Reload**, and inspect up to 200 recent test/reload, error, and access log lines.
 
@@ -367,23 +210,7 @@ PHP and Nginx container **actions** still go through a fixed allowlist in `php-c
 
 By default the UI is published only on `127.0.0.1:8080` (CSRF protection, no login). For optional remote access on a primary server, see **Remote Server Manager** below.
 
-If `env.json` does not exist, the `env-init` service creates it from `env.example.json` before Server Manager and Nginx start. This short-lived service never overwrites existing configuration.
-
-For the default PHP 8.5 runtime, click **Apply & Reload Nginx** after adding, editing, or deleting a server. The container does not need to be restarted.
-
-The reload button does not start optional PHP profiles. If the server uses an optional PHP version (8.5, 8.4, 8.3, 8.1, 8.0, 7.4), run the profile command shown by the UI first. For example, with PHP 8.3:
-
-```bash
-docker compose --profile php-8.3 up -d
-```
-
-Then click **Apply & Reload Nginx**. Refresh the page to see the latest result below the button. Detailed errors are written to `runtime/nginx.reload.log`; `runtime/` contains temporary data and is ignored by Git.
-
-New domains must still be added to the `hosts` file:
-
-```bash
-./scripts/hosts/add_hostname.sh
-```
+After adding, editing, or deleting a server, click **Apply & Reload Nginx**. PHP 8.5 does not need a container restart. If the server uses an optional PHP version, **Create** and **Start** that version in the UI first (or run the profile command the UI shows). Refresh the page to see the latest result below the button. Detailed errors are written to `runtime/nginx.reload.log`; `runtime/` contains temporary data and is ignored by Git.
 
 Stop the UI separately when it is not needed:
 
@@ -391,19 +218,125 @@ Stop the UI separately when it is not needed:
 docker compose stop manager
 ```
 
-For subsequent starts, run:
+When Nginx starts, `scripts/nginx/auto-add-template.sh` reads `env.json`, generates virtual hosts from `nginx/examples/server_example.txt`, and loads the resulting configuration.
 
-```bash
-docker compose up -d
+## Optional CLI
+
+Prefer Server Manager for daily work. The commands below are equivalents if you are not using the UI.
+
+### `env.json` format
+
+Each project uses one `SERVER_NAME<N>` entry:
+
+```json
+{
+  "SERVER_NAME1": {
+    "APP_NAME": "my-php80-app",
+    "DOMAIN_NAME": "my-php80-app.test",
+    "SERVER_PATH": "/var/www/source_php8.0/my-php80-app/public",
+    "CONTAINER_PHP_VERSION": "php8.0_container"
+  },
+  "SERVER_NAME2": {
+    "APP_NAME": "my-php81-app",
+    "DOMAIN_NAME": "my-php81-app.test",
+    "SERVER_PATH": "/var/www/source_php8.1/my-php81-app/public",
+    "CONTAINER_PHP_VERSION": "php8.1_container"
+  },
+  "SERVER_NAME3": {
+    "APP_NAME": "my-php82-app",
+    "DOMAIN_NAME": "my-php82-app.test",
+    "SERVER_PATH": "/var/www/source_php8.2/my-php82-app/public",
+    "CONTAINER_PHP_VERSION": "php8.2_container"
+  },
+  "SERVER_NAME4": {
+    "APP_NAME": "my-php7-app",
+    "DOMAIN_NAME": "my-php7-app.test",
+    "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
+    "CONTAINER_PHP_VERSION": "php7.4_container"
+  }
+}
 ```
 
-Check the container status:
+| Field | Description |
+| --- | --- |
+| `APP_NAME` | Project name and generated Nginx configuration filename |
+| `DOMAIN_NAME` | Domain used on the local machine |
+| `SERVER_PATH` | Absolute document-root path **inside the container** |
+| `CONTAINER_PHP_VERSION` | `php8.5_container` … `php8.0_container`, or `php7.4_container` |
+
+### Hosts CLI
+
+The stack starts without mounting the OS hosts file. Manager reads `runtime/hosts.status.json` from the optional host helper. Before the helper runs, domains show **Unknown** and the UI still provides a manual fallback. The script only edits the `# multi-php-docker-serve:managed:*` block.
+
+Unregister Windows: `powershell -ExecutionPolicy Bypass -File .\scripts\hosts\ensure_hosts_env.ps1 -UnregisterProtocol`
+
+Unregister macOS: `./scripts/hosts/ensure_hosts_env.sh --unregister-protocol`
+
+One-shot (without Manager):
 
 ```bash
-docker compose ps
+./scripts/hosts/add_hostname.sh
 ```
 
-When Nginx starts, `scripts/nginx/auto-add-template.sh` reads `env.json`, generates virtual hosts from `nginx/examples/server_example.txt`, and loads the resulting configuration. Open a configured domain such as `http://my-php8-app.test`.
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\hosts\add_hostname.ps1
+```
+
+The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.json` if present) and maps it to `127.0.0.1`. To configure domains manually, edit:
+
+- macOS/Linux: `/etc/hosts`
+- Windows: `C:\Windows\System32\drivers\etc\hosts`
+
+```text
+127.0.0.1 my-php8-app.test
+127.0.0.1 my-php7-app.test
+```
+
+### PHP, MySQL, Redis, RabbitMQ, and Supervisor profiles
+
+Each optional PHP version has a Compose profile with the same name (`php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
+
+```bash
+docker compose --profile php-8.4 up -d
+docker compose --profile php-8.3 up -d
+docker compose --profile php-8.2 up -d
+docker compose --profile php-8.1 up -d
+docker compose --profile php-8.0 up -d
+docker compose --profile php-7.4 up -d
+```
+
+Stop and remove an optional version with:
+
+```bash
+docker compose stop php-8.3
+docker compose rm -f php-8.3
+```
+
+When a project uses an optional PHP container, start that version (from the UI or with the matching profile) before applying Nginx. Otherwise Nginx cannot connect to that PHP upstream.
+
+MySQL, Redis, and RabbitMQ:
+
+```bash
+docker compose --profile mysql up -d mysql
+docker compose --profile redis up -d redis
+docker compose --profile rabbitmq up -d rabbitmq
+```
+
+Supervisor (does not start with PHP). From Server Manager: **PHP versions** → **Supervisor**, or:
+
+```bash
+docker compose --profile supervisor-8.5 up -d supervisor-8.5
+docker compose --profile supervisor-8.4 up -d supervisor-8.4
+docker compose --profile supervisor-8.3 up -d supervisor-8.3
+docker compose --profile supervisor-8.2 up -d supervisor-8.2
+docker compose --profile supervisor-8.1 up -d supervisor-8.1
+docker compose --profile supervisor-8.0 up -d supervisor-8.0
+docker compose --profile supervisor-7.4 up -d supervisor-7.4
+```
+
+The UI supports Create / Start / Stop / Restart and live log viewing under `logs/supervisor*` (manual refresh or Follow).
 
 ## Remote Server Manager (opt-in)
 
@@ -478,14 +411,14 @@ Example for a custom PHP 8.5 image:
 ```yaml
 services:
   php-8.5:
-    image: my-project/php:8.2-local
+    image: my-project/php:8.5-local
     build:
       context: .
-      dockerfile: ./docker_files/php8.Dockerfile
+      dockerfile: ./docker_files/php8.5.Dockerfile
     # Keep the existing volumes, working_dir, and networks
 
-  supervisor:
-    image: my-project/php:8.2-local
+  supervisor-8.5:
+    image: my-project/php:8.5-local
     # Do not add build; Supervisor reuses the php-8.5 image
 ```
 
@@ -618,6 +551,7 @@ docker compose exec php-8.5 sh
 docker compose exec php-8.5 php -v
 docker compose exec php-8.4 php -v
 docker compose exec php-8.3 php -v
+docker compose exec php-8.2 php -v
 docker compose exec php-8.1 php -v
 docker compose exec php-8.0 php -v
 docker compose exec php-7.4 php -v
@@ -650,37 +584,18 @@ Applications running directly on the host should use `127.0.0.1` and the host po
 ## Adding or changing a project
 
 1. Place the source code in the appropriate PHP directory.
-2. Add or update the project in `env.json`.
-3. Run `./scripts/hosts/add_hostname.sh` again when adding a domain.
-4. Recreate Nginx to regenerate the virtual hosts:
+2. In Server Manager, add or edit the server, write hosts if the domain is new, then **Apply & Reload Nginx**.
+
+CLI alternative (without the UI):
+
+1. Add or update the project in `env.json`.
+2. Run `./scripts/hosts/add_hostname.sh` again when adding a domain.
+3. Recreate Nginx to regenerate the virtual hosts:
 
 ```bash
 docker compose up -d --force-recreate nginx
 docker compose exec nginx nginx -t
 ```
-
-## PHP 8.3 / 8.4 / 8.5 (already included)
-
-Compose fragments `compose/php-8.3.yml`, `php-8.4.yml`, and `php-8.5.yml`, plus `server/source_php8.x`, `configs/php8.x`, and `configs/supervisor.d/php8.x`, are already in the repository. Hub images: `long301001/multi-php-docker:php-8.3|8.4|8.5`.
-
-Enable a version (for example 8.3), add the project in `env.json` or Server Manager, then Apply & Reload Nginx:
-
-```bash
-docker compose --profile php-8.3 up -d
-```
-
-```json
-{
-  "SERVER_NAME5": {
-    "APP_NAME": "my-php83-app",
-    "DOMAIN_NAME": "my-php83-app.test",
-    "SERVER_PATH": "/var/www/source_php8.3/my-php83-app/public",
-    "CONTAINER_PHP_VERSION": "php8.3_container"
-  }
-}
-```
-
-`CONTAINER_PHP_VERSION` must match the compose `container_name` (`php8.3_container`, `php8.4_container`, `php8.5_container`).
 
 ## Adding another PHP version
 
@@ -867,6 +782,9 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 │   ├── source_php7.4/       # PHP 7.4 projects
 │   ├── source_php8.0/       # PHP 8.0 projects
 │   ├── source_php8.1/       # PHP 8.1 projects
+│   ├── source_php8.2/       # PHP 8.2 projects
+│   ├── source_php8.3/       # PHP 8.3 projects
+│   ├── source_php8.4/       # PHP 8.4 projects
 │   └── source_php8.5/       # PHP 8.5 projects
 ├── docker-compose.yml       # Root: include + nginx/manager/php-controller/env-init
 ├── env.example.json         # Committed project/domain template
