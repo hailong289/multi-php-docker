@@ -44,9 +44,7 @@
 
 
 # Manager frontend (Vite)
-/server/manager/frontend/node_modules/
-/server/manager/frontend/dist/
-/server/manager/frontend/.vite/
+/server/manager/frontend/
 .cache/
 **/.cache/
 /logs/supervisor-8.*/
