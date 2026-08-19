@@ -52,6 +52,8 @@ const sourcePrefix = computed(
   () => data.php_versions?.[form.php_version]?.source_prefix || '/var/www/source_php8.5',
 )
 
+const nginxReloadAvailable = computed(() => data.nginx_management?.state === 'running')
+
 const frameworkHint = computed(() => {
   const key = `form.framework_hint.${frameworkId.value}`
   const translated = t(key)
@@ -149,6 +151,7 @@ watch(
             {{ $t('form.add') }}
           </button>
           <button
+            v-if="nginxReloadAvailable"
             type="button"
             data-tour="home-reload"
             :class="{ 'is-loading': isPending('reload') }"
@@ -156,11 +159,15 @@ watch(
             @click="reloadNginx"
           >
             <span v-if="isPending('reload')" class="btn-spinner" aria-hidden="true"></span>
-            {{ isPending('reload') ? $t('action.working') : $t('reload.button') }}
+            {{ isPending('reload') ? $t('reload.waiting') : $t('reload.button') }}
           </button>
         </div>
       </div>
-      <p v-if="!loading && data.nginx_status" class="status-line">
+      <p v-if="!loading && isPending('reload')" class="status-line">
+        <span class="btn-spinner" aria-hidden="true" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>
+        {{ $t('reload.waiting') }}
+      </p>
+      <p v-else-if="!loading && data.nginx_status" class="status-line">
         <strong>
           {{ nginxStatusOk() ? $t('reload.success') : $t('reload.error') }}:
         </strong>
