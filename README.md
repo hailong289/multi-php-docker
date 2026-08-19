@@ -4,6 +4,13 @@
 
 This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis, and RabbitMQ. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those images. PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
 
+## Demo videos
+
+| Clone the source | Create services |
+| --- | --- |
+| [![Clone the source](https://img.youtube.com/vi/rUI_mtbsIIU/hqdefault.jpg)](https://youtu.be/rUI_mtbsIIU) | [![Create services](https://img.youtube.com/vi/2fw1NnIO-uo/hqdefault.jpg)](https://youtu.be/2fw1NnIO-uo) |
+| [Watch on YouTube](https://youtu.be/rUI_mtbsIIU) | [Watch on YouTube](https://youtu.be/2fw1NnIO-uo) |
+
 ## Default services and ports
 
 | Service | Container | Host ports | Default configuration |

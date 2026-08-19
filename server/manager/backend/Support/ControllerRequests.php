@@ -48,7 +48,7 @@ final class ControllerRequests
             $actions,
         ));
         foreach (glob(rtrim($requestDir, '/') . '/*__' . $service . '__*.json') ?: [] as $file) {
-            if (preg_match('/__(?:' . $actionRe . ')(?:\.json)?$/', basename($file))) {
+            if (preg_match('/__(?:' . $actionRe . ')(?:-[a-z0-9_]+)?\.json$/', basename($file))) {
                 return true;
             }
         }
