@@ -283,6 +283,45 @@ tr.is-disabled td {
   border: 1px solid color-mix(in srgb, var(--muted, #6b7280) 28%, transparent);
 }
 
+.status-pill.status-ssl {
+  color: var(--primary, #2563eb);
+  background: color-mix(in srgb, var(--primary, #2563eb) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary, #2563eb) 28%, transparent);
+}
+
+.status-pill.status-ssl-uploaded {
+  color: #047857;
+  background: color-mix(in srgb, #047857 14%, transparent);
+  border: 1px solid color-mix(in srgb, #047857 28%, transparent);
+}
+
+.ssl-warn {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--danger, #b91c1c);
+}
+
+.ssl-warn .linkish,
+button.linkish {
+  display: inline;
+  margin-left: 6px;
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--primary, #2563eb);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.form-ssl-toggle {
+  margin-top: 12px;
+  width: fit-content;
+}
+
 .locale-form {
   display: inline-flex;
   align-items: stretch;

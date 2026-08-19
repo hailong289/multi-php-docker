@@ -31,6 +31,7 @@ const {
   startEdit,
   saveServer,
   deleteServer,
+  regenerateSsl,
   toggleServerEnabled,
   isServerEnabled,
   reloadNginx,
@@ -131,6 +132,17 @@ watch(
     applyFrameworkPath()
   },
 )
+
+function isSslEnabled(server) {
+  return server?.ssl_enabled === true || server?.SSL_ENABLED === true
+}
+
+async function onSslFile(kind, event) {
+  const file = event.target.files?.[0]
+  const text = file ? await file.text() : ''
+  if (kind === 'cert') form.ssl_certificate = text
+  else form.ssl_private_key = text
+}
 </script>
 
 <template>
@@ -208,8 +220,38 @@ watch(
               >{{ $t('servers.disabled_badge') }}</span>
               <br />
               <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
-                {{ item.server.DOMAIN_NAME }}
+                http://{{ item.server.DOMAIN_NAME }}
               </a>
+              <template v-if="isSslEnabled(item.server)">
+                <br />
+                <a :href="'https://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
+                  https://{{ item.server.DOMAIN_NAME }}
+                </a>
+                <span
+                  class="status-pill"
+                  :class="item.server.ssl_mode === 'uploaded' ? 'status-ssl-uploaded' : 'status-ssl'"
+                >{{
+                  item.server.ssl_mode === 'uploaded'
+                    ? $t('ssl.badge_uploaded')
+                    : $t('ssl.badge_generated')
+                }}</span>
+                <p v-if="item.server.ssl_files_present === false" class="ssl-warn">
+                  {{ $t('ssl.files_missing') }}
+                  <button
+                    v-if="item.server.ssl_mode !== 'uploaded'"
+                    type="button"
+                    class="linkish"
+                    :class="{ 'is-loading': isPending('ssl-regenerate', { key: item.key }) }"
+                    :disabled="busy"
+                    @click="regenerateSsl(item.key)"
+                  >
+                    {{ $t('action.ssl_regenerate') }}
+                  </button>
+                </p>
+                <p v-else-if="item.server.ssl_names_match === false" class="ssl-warn">
+                  {{ $t('ssl.names_mismatch') }}
+                </p>
+              </template>
             </td>
             <td><code>{{ item.server.CONTAINER_PHP_VERSION }}</code></td>
             <td><code>{{ item.server.SERVER_PATH }}</code></td>
@@ -354,6 +396,20 @@ watch(
             </div>
             <p class="create-hint">{{ t('form.path_guide_note') }}</p>
           </div>
+
+          <label class="follow-toggle form-ssl-toggle">
+            <input v-model="form.ssl_enabled" type="checkbox" />
+            <span>{{ $t('form.ssl_enable') }}</span>
+          </label>
+          <p class="form-path-hint">{{ $t('form.ssl_hint') }}</p>
+          <template v-if="form.ssl_enabled">
+            <label>{{ $t('form.ssl_cert') }}</label>
+            <input type="file" accept=".crt,.pem,.cer,application/x-pem-file,application/x-x509-ca-cert" @change="onSslFile('cert', $event)" />
+            <div v-if="fieldErrors.ssl_certificate" class="error">{{ fieldErrors.ssl_certificate }}</div>
+            <label>{{ $t('form.ssl_key') }}</label>
+            <input type="file" accept=".key,.pem,application/x-pem-file" @change="onSslFile('key', $event)" />
+            <div v-if="fieldErrors.ssl_private_key" class="error">{{ fieldErrors.ssl_private_key }}</div>
+          </template>
         </fieldset>
 
         <div class="form-actions">

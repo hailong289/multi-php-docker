@@ -75,6 +75,7 @@ services:
       - ./nginx/examples:/etc/nginx/examples
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
+      - ./nginx/ssl:/etc/nginx/ssl
       - ./runtime:/var/runtime
       - .:/var/host-project:ro
     environment:

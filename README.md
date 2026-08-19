@@ -190,6 +190,7 @@ Server Manager can:
 - Start and stop **MySQL**, **Redis**, **RabbitMQ**, and **Supervisor** from the UI.
 - Open **Details** for each PHP version to list loaded extensions, toggle `extension=` lines in the mounted `php.ini`, install a curated set of extensions into a running container, and edit `php.ini` (after save you can choose to restart PHP-FPM).
 - Manage Nginx from a dedicated menu: **Start**, **Stop**, **Restart**, run `nginx -t`, **Apply & Reload**, and inspect up to 200 recent test/reload, error, and access log lines.
+- Enable **HTTPS** per site (opt-in). Leave the certificate files empty to generate a self-signed cert, or upload a `.crt`/`.pem` and `.key`. HTTP (port 80) and HTTPS (port 443) both keep serving; browsers warn on self-signed certs. Click **Apply & Reload Nginx** after changing SSL. Certificates are stored in `nginx/ssl/<app-name>/` and are not committed to Git. After pulling this change, recreate Nginx once (`docker compose up -d nginx`) so `./nginx/ssl` is mounted.
 
 The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. PHP 8.5 is created by default. For an optional PHP container that has never been created, click **Create** in the UI (equivalent to `docker compose --profile … create …`), then use **Start**. You can still create manually:
 
@@ -263,6 +264,9 @@ Each project uses one `SERVER_NAME<N>` entry:
 | `DOMAIN_NAME` | Domain used on the local machine |
 | `SERVER_PATH` | Absolute document-root path **inside the container** |
 | `CONTAINER_PHP_VERSION` | `php8.5_container` … `php8.0_container`, or `php7.4_container` |
+| `ENABLED` | When `false`, the site is skipped by Nginx generation |
+| `SSL_ENABLED` | When `true`, Nginx also listens on 443 if `nginx/ssl/<APP_NAME>/{cert,key}.pem` exist |
+| `SSL_MODE` | `generated` (self-signed) or `uploaded`; only stored when SSL is on |
 
 ### Hosts CLI
 
@@ -887,6 +891,7 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 ├── mysql/                   # MySQL configuration
 ├── nginx/
 │   ├── examples/            # Virtual-host template
+│   ├── ssl/                 # Per-site certificates (gitignored)
 │   ├── logs/                # Nginx logs
 │   └── templates/           # Configuration generated from env.json
 ├── scripts/                 # Startup and configuration scripts

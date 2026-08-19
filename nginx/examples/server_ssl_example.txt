@@ -1,0 +1,31 @@
+server {
+    listen 443 ssl;
+    server_name ${SERVER_NAME};
+    client_max_body_size 500M;
+
+    ssl_certificate ${SSL_DIR}/${APP_NAME}/cert.pem;
+    ssl_certificate_key ${SSL_DIR}/${APP_NAME}/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root ${SERVER_PATH};
+    index index.php index.html;
+
+    access_log /var/log/nginx/${SERVER_NAME}_ssl_access.log;
+    error_log /var/log/nginx/${SERVER_NAME}_ssl_error.log;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass ${CONTAINER_PHP_VERSION}:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param HTTPS on;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}

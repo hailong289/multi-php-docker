@@ -108,6 +108,15 @@ final class EnvConfig
         $serverPath = rtrim(trim((string) ($input['server_path'] ?? '')), '/');
         $phpVersion = (string) ($input['php_version'] ?? '');
         $enabled = self::normalizeEnabled($input['enabled'] ?? $input['ENABLED'] ?? true);
+        $previous = $currentKey !== null ? ($servers[$currentKey] ?? []) : [];
+        $sslEnabledInput = $input['ssl_enabled'] ?? $input['SSL_ENABLED'] ?? null;
+        if ($sslEnabledInput === null && $previous !== []) {
+            $sslEnabled = SslCertificates::isEnabled($previous);
+        } else {
+            $sslEnabled = self::normalizeEnabled($sslEnabledInput ?? false);
+        }
+        $certificatePem = trim((string) ($input['ssl_certificate'] ?? ''));
+        $privateKeyPem = trim((string) ($input['ssl_private_key'] ?? ''));
         $errors = [];
 
         if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/', $appName)) {
@@ -147,16 +156,43 @@ final class EnvConfig
             }
         }
 
+        $hasCert = $certificatePem !== '';
+        $hasKey = $privateKeyPem !== '';
+        if ($sslEnabled && ($hasCert xor $hasKey)) {
+            $errors[$hasCert ? 'ssl_private_key' : 'ssl_certificate'] = [
+                'key' => $hasCert ? 'validation.ssl_private_key' : 'validation.ssl_certificate',
+            ];
+        }
+
+        $sslMode = null;
+        if ($sslEnabled) {
+            if ($hasCert && $hasKey) {
+                $sslMode = SslCertificates::MODE_UPLOADED;
+            } elseif ($previous !== [] && SslCertificates::mode($previous) === SslCertificates::MODE_UPLOADED) {
+                $sslMode = SslCertificates::MODE_UPLOADED;
+            } else {
+                $sslMode = SslCertificates::MODE_GENERATED;
+            }
+        }
+
+        $server = [
+            'APP_NAME' => $appName,
+            'DOMAIN_NAME' => $domainName,
+            'SERVER_PATH' => $serverPath,
+            'CONTAINER_PHP_VERSION' => $versions[$phpVersion]['container'] ?? '',
+            'ENABLED' => $enabled,
+            'SSL_ENABLED' => $sslEnabled,
+        ];
+        if ($sslMode !== null) {
+            $server['SSL_MODE'] = $sslMode;
+        }
+
         return [
             'errors' => $errors,
-            'server' => [
-                'APP_NAME' => $appName,
-                'DOMAIN_NAME' => $domainName,
-                'SERVER_PATH' => $serverPath,
-                'CONTAINER_PHP_VERSION' => $versions[$phpVersion]['container'] ?? '',
-                'ENABLED' => $enabled,
-            ],
+            'server' => $server,
             'php_version' => $phpVersion,
+            'ssl_certificate' => $certificatePem,
+            'ssl_private_key' => $privateKeyPem,
         ];
     }
 
