@@ -333,4 +333,141 @@ assert_true($hosts->validateDomain('shop.lan') === null, 'custom tld .lan valid'
 assert_true(($hosts->validateDomain('solo')['key'] ?? '') === 'validation.local_domain', 'reject missing tld');
 assert_true(($hosts->validateDomain('.test')['key'] ?? '') === 'validation.local_domain', 'reject empty name');
 
+use Manager\Models\SslCertificates;
+
+$sslRoot = sys_get_temp_dir() . '/mgr-ssl-' . bin2hex(random_bytes(4));
+mkdir($sslRoot, 0775, true);
+$ssl = new SslCertificates($sslRoot);
+
+assert_true(SslCertificates::isEnabled([]) === false, 'ssl default off');
+assert_true(SslCertificates::isEnabled(['SSL_ENABLED' => true]) === true, 'ssl enabled true');
+assert_true(SslCertificates::mode(['SSL_ENABLED' => true, 'SSL_MODE' => 'generated']) === 'generated', 'ssl mode generated');
+
+$ssl->generate('my-app', 'my-app.test');
+assert_true($ssl->filesPresent('my-app'), 'generate writes cert and key');
+$certPem = (string) file_get_contents($ssl->directoryFor('my-app') . '/cert.pem');
+$parsed = openssl_x509_parse($certPem);
+$san = (string) ($parsed['extensions']['subjectAltName'] ?? '');
+assert_true(str_contains($san, 'DNS:my-app.test'), 'generated SAN has domain');
+assert_true($ssl->namesMatch('my-app', 'my-app.test'), 'names match generated domain');
+assert_true($ssl->namesMatch('my-app', 'other.test') === false, 'names mismatch other domain');
+
+$ssl->generate('my-app', 'renamed.test');
+assert_true($ssl->namesMatch('my-app', 'renamed.test'), 'regenerate updates SAN');
+
+$pairCert = (string) file_get_contents($ssl->directoryFor('my-app') . '/cert.pem');
+$pairKey = (string) file_get_contents($ssl->directoryFor('my-app') . '/key.pem');
+$ssl->writeUploaded('uploaded-app', $pairCert, $pairKey);
+assert_true($ssl->filesPresent('uploaded-app'), 'upload writes files');
+
+try {
+    $ssl->writeUploaded('bad', 'not-a-cert', $pairKey);
+    assert_true(false, 'non-PEM cert should throw');
+} catch (HttpException $e) {
+    assert_true($e->status() === 422, 'non-PEM cert is 422');
+    assert_true(isset($e->fields()['ssl_certificate']), 'error on ssl_certificate');
+}
+
+try {
+    $ssl->writeUploaded('bad', $pairCert, '');
+    assert_true(false, 'missing key should throw');
+} catch (HttpException $e) {
+    assert_true(isset($e->fields()['ssl_private_key']), 'error on ssl_private_key');
+}
+
+$ssl->generate('old-app', 'old.test');
+$ssl->persist(
+    ['APP_NAME' => 'old-app', 'DOMAIN_NAME' => 'old.test', 'SSL_ENABLED' => true, 'SSL_MODE' => 'generated'],
+    ['APP_NAME' => 'new-app', 'DOMAIN_NAME' => 'old.test', 'SSL_ENABLED' => true, 'SSL_MODE' => 'generated'],
+);
+assert_true($ssl->filesPresent('new-app'), 'persist renames app dir');
+assert_true($ssl->filesPresent('old-app') === false, 'old app dir gone');
+
+$ssl->deleteApp('new-app');
+assert_true($ssl->filesPresent('new-app') === false, 'deleteApp removes dir');
+
+$enriched = $ssl->enrich([
+    'APP_NAME' => 'uploaded-app',
+    'DOMAIN_NAME' => 'renamed.test',
+    'SSL_ENABLED' => true,
+    'SSL_MODE' => 'uploaded',
+]);
+assert_true(($enriched['ssl_enabled'] ?? null) === true, 'enrich ssl_enabled');
+assert_true(($enriched['ssl_mode'] ?? '') === 'uploaded', 'enrich ssl_mode');
+assert_true(($enriched['ssl_files_present'] ?? false) === true, 'enrich files present');
+assert_true(($enriched['ssl_names_match'] ?? true) === true, 'enrich names match uploaded cert');
+assert_true(!isset($enriched['ssl_private_key']), 'enrich omits private key');
+
+$tmpEnv = sys_get_temp_dir() . '/mgr-ssl-env-' . bin2hex(random_bytes(4)) . '.json';
+file_put_contents($tmpEnv, "{}\n");
+$envSsl = new EnvConfig($tmpEnv);
+$vOff = $envSsl->validate([
+    'app_name' => 'app-one',
+    'domain_name' => 'app-one.test',
+    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'php_version' => 'php-8.5',
+], []);
+assert_true(($vOff['server']['SSL_ENABLED'] ?? true) === false, 'validate default ssl off');
+assert_true(!isset($vOff['server']['SSL_MODE']), 'no ssl mode when off');
+
+$vOn = $envSsl->validate([
+    'app_name' => 'app-one',
+    'domain_name' => 'app-one.test',
+    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'php_version' => 'php-8.5',
+    'ssl_enabled' => true,
+], []);
+assert_true($vOn['errors'] === [] && $vOn['server']['SSL_ENABLED'] === true, 'ssl_enabled on');
+assert_true(($vOn['server']['SSL_MODE'] ?? '') === 'generated', 'default mode generated');
+
+$vUp = $envSsl->validate([
+    'app_name' => 'app-one',
+    'domain_name' => 'app-one.test',
+    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'php_version' => 'php-8.5',
+    'ssl_enabled' => true,
+    'ssl_certificate' => 'x',
+    'ssl_private_key' => 'y',
+], []);
+assert_true(($vUp['server']['SSL_MODE'] ?? '') === 'uploaded', 'both pems set uploaded mode');
+
+$vOne = $envSsl->validate([
+    'app_name' => 'app-one',
+    'domain_name' => 'app-one.test',
+    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'php_version' => 'php-8.5',
+    'ssl_enabled' => true,
+    'ssl_certificate' => 'x',
+], []);
+assert_true(isset($vOne['errors']['ssl_private_key']), 'one pem requires key');
+
+$existing = ['SERVER_NAME1' => $vOn['server']];
+$vKeep = $envSsl->validate([
+    'app_name' => 'app-one',
+    'domain_name' => 'app-one.test',
+    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'php_version' => 'php-8.5',
+    'enabled' => false,
+], $existing, 'SERVER_NAME1');
+assert_true($vKeep['server']['SSL_ENABLED'] === true, 'omitted ssl_enabled preserves previous');
+assert_true(($vKeep['server']['SSL_MODE'] ?? '') === 'generated', 'omitted mode preserves generated');
+
+$proj = sys_get_temp_dir() . '/mgr-ssl-ctrl-' . bin2hex(random_bytes(4));
+mkdir($proj, 0775, true);
+file_put_contents($proj . '/env.json', "{}\n");
+$envC = new EnvConfig($proj . '/env.json');
+$sslC = new SslCertificates($proj);
+$validated = $envC->validate([
+    'app_name' => 'ctrl-app',
+    'domain_name' => 'ctrl.test',
+    'server_path' => '/var/www/source_php8.5/ctrl-app/public',
+    'php_version' => 'php-8.5',
+    'ssl_enabled' => true,
+], []);
+$sslC->persist([], $validated['server']);
+$envC->save(['SERVER_NAME1' => $validated['server']]);
+assert_true($sslC->filesPresent('ctrl-app'), 'controller persist generates files');
+$sslC->deleteApp('ctrl-app');
+assert_true(!$sslC->filesPresent('ctrl-app'), 'deleteApp after destroy');
+
 echo "All checks passed\n";

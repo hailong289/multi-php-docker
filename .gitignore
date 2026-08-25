@@ -1,5 +1,7 @@
 /nginx/templates
 /nginx/logs
+/nginx/ssl/*
+!/nginx/ssl/.gitkeep
 /logs/
 /runtime/
 /php-controller-runtime/

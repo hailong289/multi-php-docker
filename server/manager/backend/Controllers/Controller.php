@@ -13,7 +13,9 @@ use Manager\Models\NginxManagement;
 use Manager\Models\NginxReload;
 use Manager\Models\PhpRuntime;
 use Manager\Models\PhpVersionCatalog;
+use Manager\Models\SslCertificates;
 use Manager\Models\SupervisorRuntime;
+use Manager\Support\Config;
 use Manager\Support\Csrf;
 
 abstract class Controller
@@ -28,8 +30,14 @@ abstract class Controller
         $supervisor = new SupervisorRuntime();
         $hosts = new HostsSync();
 
+        $ssl = new SslCertificates(Config::projectPath());
+        $serversOut = [];
+        foreach ($servers as $key => $server) {
+            $serversOut[$key] = $ssl->enrich(is_array($server) ? $server : []);
+        }
+
         return [
-            'servers' => $servers,
+            'servers' => $serversOut,
             'php_versions' => PhpVersionCatalog::forApi(),
             'profiles' => $env->requiredProfiles($servers),
             'apply_command' => $env->applyCommand($servers),
