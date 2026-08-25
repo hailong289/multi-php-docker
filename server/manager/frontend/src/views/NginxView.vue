@@ -32,21 +32,10 @@ const domainLogsLoading = ref(false)
 const selectedDomain = ref('')
 const domainLogs = ref(null)
 const domainLogsDetailLoading = ref(false)
-const domainRefreshSec = ref(5)
 let statusPollTimer = null
-let domainPollTimer = null
 
 const STATUS_POLL_IDLE_MS = 5000
 const STATUS_POLL_BUSY_MS = 2000
-const REFRESH_OPTIONS = [0, 5, 10, 15]
-
-try {
-  const raw = localStorage.getItem('manager-nginx-domain-log-refresh')
-  if (raw !== null) {
-    const saved = Number(raw)
-    if (REFRESH_OPTIONS.includes(saved)) domainRefreshSec.value = saved
-  }
-} catch (_) {}
 
 const stateLabel = computed(() => t(`nginx.state_${nginx.value.state || 'not_created'}`))
 const dirty = computed(() => draft.value !== original.value)
@@ -69,30 +58,10 @@ function formatTime(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
 }
 
-function refreshOptionLabel(sec) {
-  return sec === 0 ? t('nginx.domain_logs_refresh_off') : t('nginx.domain_logs_refresh_option', { sec })
-}
-
-function setDomainRefresh(sec) {
-  const next = Number(sec)
-  domainRefreshSec.value = REFRESH_OPTIONS.includes(next) ? next : 5
-  try {
-    localStorage.setItem('manager-nginx-domain-log-refresh', String(domainRefreshSec.value))
-  } catch (_) {}
-  restartDomainPoll()
-}
-
 function stopStatusPoll() {
   if (statusPollTimer) {
     clearInterval(statusPollTimer)
     statusPollTimer = null
-  }
-}
-
-function stopDomainPoll() {
-  if (domainPollTimer) {
-    clearInterval(domainPollTimer)
-    domainPollTimer = null
   }
 }
 
@@ -101,32 +70,14 @@ function startStatusPoll() {
   const ms = dockerStatusBusy.value || nginx.value.state === 'busy' ? STATUS_POLL_BUSY_MS : STATUS_POLL_IDLE_MS
   statusPollTimer = setInterval(() => {
     if (document.visibilityState !== 'visible' || pending.value) return
-    if (tab.value === 'domain-logs') return
+    if (tab.value === 'domain-logs') {
+      loadDomainLogList({ silent: true })
+      if (selectedDomain.value) openDomainLogs(selectedDomain.value, { silent: true })
+      return
+    }
     load({ silent: true })
     if (tab.value === 'templates') loadTemplates({ silent: true })
   }, ms)
-}
-
-function restartDomainPoll() {
-  stopDomainPoll()
-  if (domainRefreshSec.value <= 0) return
-  const ms = domainRefreshSec.value * 1000
-  domainPollTimer = setInterval(() => {
-    if (document.visibilityState !== 'visible' || pending.value) return
-    if (tab.value !== 'domain-logs') return
-    loadDomainLogList({ silent: true })
-    if (selectedDomain.value) openDomainLogs(selectedDomain.value, { silent: true })
-  }, ms)
-}
-
-function restartPoll() {
-  startStatusPoll()
-  restartDomainPoll()
-}
-
-function stopPoll() {
-  stopStatusPoll()
-  stopDomainPoll()
 }
 
 async function load({ silent = false } = {}) {
@@ -280,10 +231,38 @@ async function run(action, path) {
         service: result.nginx_management.service,
       }
     }
+    // For reload action: keep pending until result arrives via poll
+    if (action === 'reload') {
+      const previousUpdatedAt = nginx.value.reload_status?.updated_at || ''
+      showToast('success', t('reload.waiting'))
+      const POLL_INTERVAL = 1500
+      const POLL_TIMEOUT = 30000
+      const started = Date.now()
+      const poll = setInterval(async () => {
+        try {
+          await load({ silent: true })
+          const rs = nginx.value.reload_status
+          if (rs && rs.updated_at && rs.updated_at !== previousUpdatedAt) {
+            clearInterval(poll)
+            const msg = statusText(rs)
+            const ok = rs.status === 'success'
+            showToast(ok ? 'success' : 'failure', msg)
+            pending.value = ''
+          } else if (Date.now() - started > POLL_TIMEOUT) {
+            clearInterval(poll)
+            showToast('failure', t('reload.timeout'))
+            pending.value = ''
+          }
+        } catch (_) {
+          // ignore transient poll errors
+        }
+      }, POLL_INTERVAL)
+      return
+    }
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
-    pending.value = ''
+    if (pending.value !== 'reload') pending.value = ''
   }
 }
 
@@ -305,7 +284,7 @@ function refreshCurrentTab() {
 watch(tab, (next) => {
   if (next === 'templates') loadTemplates()
   if (next === 'domain-logs') loadDomainLogList()
-  restartPoll()
+  startStatusPoll()
 })
 
 watch(
@@ -329,11 +308,11 @@ watch(
 
 onMounted(() => {
   load()
-  restartPoll()
+  startStatusPoll()
 })
 
 onUnmounted(() => {
-  stopPoll()
+  stopStatusPoll()
 })
 </script>
 
@@ -345,18 +324,6 @@ onUnmounted(() => {
         <p>{{ t('nginx.subtitle') }}</p>
       </div>
       <div class="panel-heading-actions nginx-heading-actions">
-        <label class="nginx-refresh-select">
-          <span>{{ t('nginx.domain_logs_refresh') }}</span>
-          <select
-            :value="domainRefreshSec"
-            :disabled="!!pending"
-            @change="setDomainRefresh($event.target.value)"
-          >
-            <option v-for="sec in REFRESH_OPTIONS" :key="sec" :value="sec">
-              {{ refreshOptionLabel(sec) }}
-            </option>
-          </select>
-        </label>
         <button
           type="button"
           :disabled="loading || templatesLoading || domainLogsLoading || !!pending"
@@ -424,14 +391,19 @@ onUnmounted(() => {
               {{ pending === 'test' ? t('action.working') : t('nginx.test') }}
             </button>
             <button class="primary" :disabled="!enabled('reload')" @click="run('reload', '/api/nginx/reload')">
-              {{ pending === 'reload' ? t('action.working') : t('nginx.apply_reload') }}
+              <span v-if="pending === 'reload'" class="btn-spinner" aria-hidden="true"></span>
+              {{ pending === 'reload' ? t('reload.waiting') : t('nginx.apply_reload') }}
             </button>
           </div>
         </div>
 
         <div class="panel-body nginx-results">
           <p><strong>{{ t('nginx.test_result') }}:</strong> {{ statusText(nginx.test_status) }}</p>
-          <p><strong>{{ t('nginx.reload_result') }}:</strong> {{ statusText(nginx.reload_status) }}</p>
+          <p v-if="pending === 'reload'">
+            <span class="btn-spinner" aria-hidden="true" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>
+            {{ t('reload.waiting') }}
+          </p>
+          <p v-else><strong>{{ t('nginx.reload_result') }}:</strong> {{ statusText(nginx.reload_status) }}</p>
         </div>
 
         <div class="panel-body nginx-log-grid" data-tour="nginx-logs">

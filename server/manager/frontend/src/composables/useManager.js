@@ -380,13 +380,41 @@ export function useManager() {
   async function reloadNginx() {
     busy.value = true
     pendingAction.value = { kind: 'reload' }
+    const previousUpdatedAt = data.nginx_status?.updated_at || ''
     try {
-      const result = await apiSend('POST', '/api/nginx/reload', {})
-      toastFromResult(result)
-      // Status / reload result comes from silent bootstrap + Nginx page polls.
+      await apiSend('POST', '/api/nginx/reload', {})
+      showToast('success', t('reload.waiting'))
+
+      // Fast-poll /api/nginx/status until updated_at changes or timeout.
+      const POLL_INTERVAL = 1500
+      const POLL_TIMEOUT = 30000
+      const started = Date.now()
+      const poll = setInterval(async () => {
+        try {
+          const statusResult = await apiGet('/api/nginx/status')
+          const status = statusResult.nginx_status
+          if (status && status.updated_at && status.updated_at !== previousUpdatedAt) {
+            clearInterval(poll)
+            data.nginx_status = status
+            const ok = status.status === 'success' || status.ok === true
+            const raw = status.message || ''
+            const key = reloadMessageKeys[raw]
+            const msg = key ? t(key) : raw || t('reload.unknown')
+            showToast(ok ? 'success' : 'failure', msg)
+            busy.value = false
+            pendingAction.value = null
+          } else if (Date.now() - started > POLL_TIMEOUT) {
+            clearInterval(poll)
+            showToast('failure', t('reload.timeout'))
+            busy.value = false
+            pendingAction.value = null
+          }
+        } catch (_) {
+          // ignore transient poll errors
+        }
+      }, POLL_INTERVAL)
     } catch (error) {
       showToast('failure', translateApiError(error))
-    } finally {
       busy.value = false
       pendingAction.value = null
     }
