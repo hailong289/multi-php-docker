@@ -421,6 +421,7 @@ onUnmounted(() => {
       <button
         type="button"
         class="primary"
+        data-tour="php-run-session-add"
         :disabled="!!mutating || loading"
         @click="createSession"
       >
@@ -430,7 +431,7 @@ onUnmounted(() => {
 
     <p v-if="loading" class="panel-body">{{ t('loading') }}</p>
     <div v-else class="php-run-layout">
-      <aside class="php-run-sessions" :aria-label="t('php_controller.session_name')">
+      <aside class="php-run-sessions" data-tour="php-run-sessions" :aria-label="t('php_controller.session_name')">
         <div class="php-run-sessions-head">{{ t('php_controller.session_name') }}</div>
         <ul>
           <li
@@ -483,7 +484,7 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
-        <div class="php-run-editor">
+        <div class="php-run-editor" data-tour="php-run-editor">
           <MonacoEditor
             v-model="code"
             language="php"
@@ -492,7 +493,7 @@ onUnmounted(() => {
             @ready="(editor) => editor?.focus()"
           />
         </div>
-        <div class="form-actions php-run-actions">
+        <div class="form-actions php-run-actions" data-tour="php-run-actions">
           <button
             type="button"
             class="primary"
@@ -506,7 +507,7 @@ onUnmounted(() => {
           <span class="php-run-hint">{{ t('php_controller.run_shortcut') }}</span>
           <span class="php-run-save-status" :class="{ 'is-dirty': dirty }">{{ savedLabel }}</span>
         </div>
-        <div v-if="result" class="php-run-output" :class="exitClass">
+        <div v-if="result" class="php-run-output" :class="exitClass" data-tour="php-run-output">
           <div class="php-run-output-meta">
             <span v-if="result.timed_out">{{ t('php_controller.run_timed_out') }}</span>
             <span v-else>
