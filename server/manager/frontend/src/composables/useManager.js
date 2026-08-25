@@ -46,6 +46,9 @@ const form = reactive({
   server_path: '/var/www/source_php8.5/',
   php_version: 'php-8.5',
   enabled: true,
+  ssl_enabled: false,
+  ssl_certificate: '',
+  ssl_private_key: '',
 })
 
 const domainForm = reactive({
@@ -192,6 +195,9 @@ export function useManager() {
       : '/var/www/source_php8.5/'
     form.php_version = 'php-8.5'
     form.enabled = true
+    form.ssl_enabled = false
+    form.ssl_certificate = ''
+    form.ssl_private_key = ''
   }
 
   function openAddModal() {
@@ -214,6 +220,9 @@ export function useManager() {
     form.server_path = server.SERVER_PATH || ''
     form.php_version = versionFromContainer(server.CONTAINER_PHP_VERSION || '')
     form.enabled = isServerEnabled(server)
+    form.ssl_enabled = server.ssl_enabled === true || server.SSL_ENABLED === true
+    form.ssl_certificate = ''
+    form.ssl_private_key = ''
     modalOpen.value = true
   }
 
@@ -278,7 +287,16 @@ export function useManager() {
     pendingAction.value = { kind: 'save' }
     fieldErrors.value = {}
     try {
-      const body = { ...form }
+      const body = {
+        app_name: form.app_name,
+        domain_name: form.domain_name,
+        server_path: form.server_path,
+        php_version: form.php_version,
+        enabled: form.enabled,
+        ssl_enabled: !!form.ssl_enabled,
+      }
+      if (form.ssl_certificate) body.ssl_certificate = form.ssl_certificate
+      if (form.ssl_private_key) body.ssl_private_key = form.ssl_private_key
       const result = editingKey.value
         ? await apiSend('PUT', `/api/servers/${editingKey.value}`, body)
         : await apiSend('POST', '/api/servers', body)
@@ -307,6 +325,31 @@ export function useManager() {
       toastFromResult(result)
       if (editingKey.value === key) closeModal()
       if (domainEditingKey.value === key) closeDomainModal()
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function regenerateSsl(key) {
+    const server = data.servers[key]
+    if (!server) return
+    busy.value = true
+    pendingAction.value = { kind: 'ssl-regenerate', key }
+    try {
+      const body = {
+        app_name: server.APP_NAME || '',
+        domain_name: server.DOMAIN_NAME || '',
+        server_path: server.SERVER_PATH || '',
+        php_version: versionFromContainer(server.CONTAINER_PHP_VERSION || ''),
+        enabled: isServerEnabled(server),
+        ssl_enabled: true,
+      }
+      const result = await apiSend('PUT', `/api/servers/${key}`, body)
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      showToast('success', t('flash.ssl_regenerated'))
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -840,6 +883,7 @@ export function useManager() {
     startEdit,
     saveServer,
     deleteServer,
+    regenerateSsl,
     toggleServerEnabled,
     isServerEnabled,
     deleteDomain,

@@ -190,6 +190,7 @@ Server Manager cho phép:
 - Khởi động và dừng **MySQL**, **Redis**, **RabbitMQ** và **Supervisor** từ UI.
 - Mở **Chi tiết** từng phiên bản PHP để xem extension đã tải, bật/tắt dòng `extension=` trong `php.ini` đã mount, cài một số extension curated vào container đang chạy, và sửa nội dung `php.ini` (sau khi lưu có thể chọn Restart PHP-FPM).
 - Quản lý Nginx tại menu riêng: **Khởi động**, **Dừng**, **Khởi động lại**, chạy `nginx -t`, **Apply & Reload**, và xem tối đa 200 dòng log test/reload, error, access gần nhất.
+- Bật **HTTPS** từng site (opt-in). Để trống file chứng chỉ để tự sinh self-signed, hoặc upload cặp `.crt`/`.pem` và `.key`. HTTP (cổng 80) và HTTPS (cổng 443) cùng phục vụ; trình duyệt sẽ cảnh báo cert tự ký. Sau khi đổi SSL, nhấn **Apply & Reload Nginx**. Cert nằm trong `nginx/ssl/<app-name>/` và không commit lên Git. Sau khi cập nhật code này, tạo lại Nginx một lần (`docker compose up -d nginx`) để mount `./nginx/ssl`.
 
 Card **Các phiên bản PHP** hiển thị trạng thái `Đang chạy`, `Đã dừng`, `Chưa được tạo` hoặc `Đang xử lý`. PHP 8.5 được tạo mặc định. Với PHP tùy chọn chưa từng được tạo, bấm **Tạo** trong UI (tương đương `docker compose --profile … create …`), rồi dùng **Khởi động**. Vẫn có thể tạo thủ công:
 
@@ -263,6 +264,9 @@ Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
 | `DOMAIN_NAME` | Domain dùng trên máy local |
 | `SERVER_PATH` | Document root tuyệt đối **bên trong container** |
 | `CONTAINER_PHP_VERSION` | `php8.5_container` … `php8.0_container` hoặc `php7.4_container` |
+| `ENABLED` | `false` thì Nginx bỏ qua site |
+| `SSL_ENABLED` | `true` thì Nginx listen 443 nếu có `nginx/ssl/<APP_NAME>/{cert,key}.pem` |
+| `SSL_MODE` | `generated` (tự ký) hoặc `uploaded`; chỉ ghi khi SSL bật |
 
 ### CLI hosts
 
@@ -769,6 +773,7 @@ Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mụ
 ├── mysql/                   # Cấu hình MySQL
 ├── nginx/
 │   ├── examples/            # Virtual host mẫu
+│   ├── ssl/                 # Chứng chỉ từng site (gitignore)
 │   ├── logs/                # Log Nginx
 │   └── templates/           # Cấu hình được sinh từ env.json
 ├── scripts/                 # Script khởi động và tạo cấu hình
