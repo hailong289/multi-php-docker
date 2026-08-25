@@ -470,4 +470,105 @@ assert_true($sslC->filesPresent('ctrl-app'), 'controller persist generates files
 $sslC->deleteApp('ctrl-app');
 assert_true(!$sslC->filesPresent('ctrl-app'), 'deleteApp after destroy');
 
+use Manager\Models\PhpSnippetRunner;
+use Manager\Support\DockerExec;
+
+assert_true(
+    PhpSnippetRunner::normalizeCode('echo 1;') === "<?php\necho 1;",
+    'snippet prepends php tag',
+);
+assert_true(
+    PhpSnippetRunner::normalizeCode("<?php\necho 1;") === "<?php\necho 1;",
+    'snippet keeps php tag',
+);
+assert_true(
+    PhpSnippetRunner::normalizeCode('<?= 2 ?>') === '<?= 2 ?>',
+    'snippet keeps short echo tag',
+);
+assert_true(
+    PhpSnippetRunner::normalizeCode("\xEF\xBB\xBFecho 1;") === "<?php\necho 1;",
+    'snippet strips bom then prepends',
+);
+
+$frameOut = chr(1) . "\0\0\0" . pack('N', 5) . 'hello';
+$frameErr = chr(2) . "\0\0\0" . pack('N', 3) . 'err';
+[$muxOut, $muxErr, $muxRest] = DockerExec::splitMultiplexed($frameOut . $frameErr);
+assert_true($muxOut === 'hello', 'multiplex stdout');
+assert_true($muxErr === 'err', 'multiplex stderr');
+assert_true($muxRest === '', 'multiplex remainder empty');
+
+$partial = chr(1) . "\0\0\0" . pack('N', 10) . 'abc';
+[$pOut, $pErr, $pRest] = DockerExec::splitMultiplexed($partial);
+assert_true($pOut === '' && $pErr === '' && $pRest === $partial, 'incomplete multiplex frame stays remainder');
+
+use Manager\Models\PhpScratchPad;
+
+$scratchDir = sys_get_temp_dir() . '/php-scratch-' . bin2hex(random_bytes(4));
+$pad = new PhpScratchPad($scratchDir);
+$empty = $pad->read('php-8.5');
+assert_true($empty['code'] === PhpScratchPad::DEFAULT_CODE, 'scratch default code');
+assert_true($empty['result'] === null, 'scratch default result');
+assert_true(count($empty['sessions']) === 1, 'scratch default one session');
+assert_true(PhpScratchPad::isValidId((string) $empty['id']), 'scratch default session id');
+$written = $pad->write('php-8.5', "<?php echo 1;\n");
+assert_true($written['code'] === "<?php echo 1;\n", 'scratch write code');
+assert_true($written['updated_at'] !== '', 'scratch updated_at');
+$reread = $pad->read('php-8.5');
+assert_true($reread['code'] === "<?php echo 1;\n", 'scratch reread code');
+$withOut = $pad->write('php-8.5', "<?php echo 1;\n", [
+    'stdout' => "1\n",
+    'stderr' => '',
+    'exit_code' => 0,
+    'timed_out' => false,
+    'truncated' => false,
+    'duration_ms' => 12,
+    'php_version' => 'PHP 8.5',
+]);
+assert_true(($withOut['result']['stdout'] ?? '') === "1\n", 'scratch stores result');
+$keep = $pad->write('php-8.5', "<?php echo 2;\n");
+assert_true($keep['code'] === "<?php echo 2;\n", 'scratch updates code');
+assert_true(($keep['result']['stdout'] ?? '') === "1\n", 'scratch preserves last result');
+$created = $pad->create('php-8.5', 'Helpers');
+assert_true($created['name'] === 'Helpers', 'scratch create name');
+assert_true(count($created['sessions']) === 2, 'scratch create second session');
+assert_true($created['code'] === PhpScratchPad::DEFAULT_CODE, 'scratch create default code');
+$firstId = $keep['id'];
+$secondId = $created['id'];
+$renamed = $pad->rename('php-8.5', $secondId, '  Utils  ');
+assert_true($renamed['name'] === 'Utils', 'scratch rename');
+$pad->write('php-8.5', "<?php echo 'b';\n", null, true, $secondId);
+$activated = $pad->activate('php-8.5', $firstId);
+assert_true($activated['id'] === $firstId, 'scratch activate first');
+assert_true($activated['code'] === "<?php echo 2;\n", 'scratch activate keeps first code');
+$deleted = $pad->delete('php-8.5', $firstId);
+assert_true($deleted['id'] === $secondId, 'scratch delete switches to remaining');
+assert_true(count($deleted['sessions']) === 1, 'scratch delete leaves one');
+$legacyDir = sys_get_temp_dir() . '/php-scratch-legacy-' . bin2hex(random_bytes(4));
+mkdir($legacyDir, 0775, true);
+file_put_contents($legacyDir . '/php-8.5.json', json_encode([
+    'service' => 'php-8.5',
+    'code' => "<?php echo 'legacy';\n",
+    'result' => ['stdout' => "legacy\n", 'stderr' => '', 'exit_code' => 0],
+    'updated_at' => '2026-08-25T00:00:00+00:00',
+], JSON_THROW_ON_ERROR));
+$legacyPad = new PhpScratchPad($legacyDir);
+$migrated = $legacyPad->read('php-8.5');
+assert_true($migrated['code'] === "<?php echo 'legacy';\n", 'scratch migrates legacy code');
+assert_true(($migrated['result']['stdout'] ?? '') === "legacy\n", 'scratch migrates legacy result');
+assert_true(count($migrated['sessions']) === 1, 'scratch migrates to one session');
+$migratedAgain = $legacyPad->read('php-8.5');
+assert_true($migratedAgain['id'] === $migrated['id'], 'scratch migration keeps session id');
+try {
+    $pad->read('../evil');
+    assert_true(false, 'scratch rejects invalid service');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.invalid_service', 'scratch rejects invalid service');
+}
+try {
+    $pad->rename('php-8.5', 'ffffffffffff', 'Nope');
+    assert_true(false, 'scratch rejects missing session');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.session_not_found', 'scratch rejects missing session');
+}
+
 echo "All checks passed\n";

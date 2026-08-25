@@ -156,6 +156,13 @@ onMounted(() => {
                 </button>
                 <button
                   type="button"
+                  data-tour="php-run"
+                  @click="$router.push({ name: 'php-version-run', params: { service } })"
+                >
+                  {{ $t('php_controller.run') }}
+                </button>
+                <button
+                  type="button"
                   @click="$router.push({ name: 'php-version-detail', params: { service } })"
                 >
                   {{ $t('php_controller.details') }}

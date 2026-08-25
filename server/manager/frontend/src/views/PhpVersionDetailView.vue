@@ -260,6 +260,13 @@ onUnmounted(() => {
           </button>
           <button
             type="button"
+            data-tour="php-run"
+            @click="router.push({ name: 'php-version-run', params: { service: service } })"
+          >
+            {{ t('php_controller.run') }}
+          </button>
+          <button
+            type="button"
             :disabled="!!pending"
             @click="router.push({ name: 'php-version-supervisor', params: { service: service } })"
           >
