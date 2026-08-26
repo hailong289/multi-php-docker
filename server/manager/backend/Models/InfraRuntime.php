@@ -19,6 +19,12 @@ final class InfraRuntime
             'profile' => 'mysql',
             'ports' => '3306',
         ],
+        'postgres' => [
+            'label' => 'PostgreSQL',
+            'container' => 'postgres_container',
+            'profile' => 'postgres',
+            'ports' => '5432',
+        ],
         'redis' => [
             'label' => 'Redis',
             'container' => 'redis_container',

@@ -96,11 +96,12 @@ RUN apk add --no-cache \\
     libxml2-dev \\
     oniguruma-dev \\
     linux-headers \\
+    postgresql-dev \\
     supervisor \\
     && pecl install redis \\
     && docker-php-ext-enable redis \\
     && docker-php-ext-configure gd --with-freetype --with-jpeg \\
-    && docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl \\
+    && docker-php-ext-install pdo_mysql mysqli pdo_pgsql pgsql gd zip sockets pcntl \\
     && curl -sS https://getcomposer.org/installer | php \\
     && mv composer.phar /usr/local/bin/composer \\
     && apk del \$PHPIZE_DEPS
@@ -124,12 +125,13 @@ RUN apt-get update && apt-get install -y \\
     libz-dev \\
     curl \\
     supervisor \\
+    libpq-dev \\
     && pecl install redis \\
     && docker-php-ext-enable redis \\
     && curl -sS https://getcomposer.org/installer | php \\
     && mv composer.phar /usr/local/bin/composer
 
-RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl
+RUN docker-php-ext-install pdo_mysql mysqli pdo_pgsql pgsql gd zip sockets pcntl
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -187,6 +189,9 @@ services:
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       mysql:
+        condition: service_started
+        required: false
+      postgres:
         condition: service_started
         required: false
       redis:

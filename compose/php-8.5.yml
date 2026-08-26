@@ -1,6 +1,5 @@
 services:
   php-8.5:
-    profiles: ["php-8.5"]
     build:
       context: ./docker_files
       dockerfile: php8.5.Dockerfile
@@ -33,6 +32,9 @@ services:
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       mysql:
+        condition: service_started
+        required: false
+      postgres:
         condition: service_started
         required: false
       redis:

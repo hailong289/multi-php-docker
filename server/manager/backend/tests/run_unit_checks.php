@@ -83,6 +83,7 @@ assert_true($editor->extensionLineStatus($removed, 'imagick') === 'absent', 'rem
 assert_true(str_contains($removed, 'extension=foo.so'), 'keep redis line');
 
 assert_true(PhpExtensionCatalog::isCurated('redis'), 'curated redis');
+assert_true(PhpExtensionCatalog::isCurated('pdo_pgsql'), 'curated pdo_pgsql');
 assert_true(!PhpExtensionCatalog::isCurated('foobar'), 'not curated foobar');
 assert_true(PhpExtensionCatalog::isValidName('gd'), 'valid gd');
 assert_true(PhpExtensionCatalog::isValidName('pdo_mysql'), 'valid pdo_mysql');
@@ -142,10 +143,13 @@ assert_true(
 @rmdir($staleDir);
 
 $infraTargets = InfraRuntime::targets();
-assert_true(isset($infraTargets['mysql'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
+assert_true(isset($infraTargets['mysql'], $infraTargets['postgres'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
 assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
+assert_true($infraTargets['postgres']['profile'] === 'postgres', 'postgres profile');
+assert_true($infraTargets['postgres']['container'] === 'postgres_container', 'postgres container');
 assert_true($infraTargets['redis']['container'] === 'redis_container', 'redis container');
 assert_true($infraTargets['mysql']['compose_file'] === 'compose/mysql.yml', 'mysql compose file');
+assert_true($infraTargets['postgres']['compose_file'] === 'compose/postgres.yml', 'postgres compose file');
 assert_true(str_contains($infraTargets['rabbitmq']['create_command'], '--profile rabbitmq'), 'rabbitmq create cmd');
 
 $infraTmp = sys_get_temp_dir() . '/infra-runtime-' . bin2hex(random_bytes(4));
@@ -179,6 +183,7 @@ assert_true(($created['name'] ?? '') === 'custom.yml', 'compose create custom');
 $list = $compose->list();
 assert_true(count($list) >= 2, 'compose list has files');
 assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
+assert_true($compose->isCoreFile('postgres.yml'), 'postgres is core');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {
     $compose->deleteFile('mysql.yml');

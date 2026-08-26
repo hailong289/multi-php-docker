@@ -9,14 +9,14 @@ use Manager\Support\Config;
 
 /**
  * List/read/write/delete *.yml|*.yaml under compose/.
- * Core service files (mysql|redis|rabbitmq).yml cannot be deleted.
+ * Core service files (mysql|postgres|redis|rabbitmq).yml cannot be deleted.
  */
 final class InfraCompose
 {
     private const MAX_BYTES = 524288;
 
     /** @var list<string> */
-    public const CORE_FILES = ['mysql.yml', 'redis.yml', 'rabbitmq.yml'];
+    public const CORE_FILES = ['mysql.yml', 'postgres.yml', 'redis.yml', 'rabbitmq.yml'];
 
     private readonly string $projectPath;
 
@@ -69,7 +69,7 @@ final class InfraCompose
     /** Map mysql.yml → mysql when it is a managed infra service. */
     public function serviceForFile(string $name): ?string
     {
-        if (!preg_match('/^(mysql|redis|rabbitmq)\.ya?ml$/i', $name, $m)) {
+        if (!preg_match('/^(mysql|postgres|redis|rabbitmq)\.ya?ml$/i', $name, $m)) {
             return null;
         }
 

@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis, and RabbitMQ. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those images. PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis, and RabbitMQ. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those images. PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Demo videos
 
@@ -24,6 +24,7 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP 8.0 | `php8.0_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | PHP 7.4 | `php7.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
+| PostgreSQL | `postgres_container` | `5432` | User `postgres`, password `1` |
 | Redis | `redis_container` | `6379` | No password |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor85_container` | Not published | Runs PHP 8.5 background workers (profile) |
@@ -31,7 +32,7 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
 | Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
-PHP 8.5 is the default version. `docker compose up -d` starts only PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3, and 8.4 are assigned to separate profiles and remain disabled by default. MySQL, Redis, RabbitMQ, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
+PHP 8.5 is the default version. `docker compose up -d` starts only PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3, and 8.4 are assigned to separate profiles and remain disabled by default. MySQL, PostgreSQL, Redis, RabbitMQ, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
 
 The following images are provided:
 
@@ -47,6 +48,7 @@ The following images are provided:
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `php-controller` | `docker:cli` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
+| `postgres` | `long301001/multi-php-docker:postgres` |
 | `redis` | `long301001/multi-php-docker:redis-alpine` |
 | `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
 | `env-init` | `alpine:latest` |
@@ -122,7 +124,7 @@ docker compose pull
 docker compose up -d
 ```
 
-This starts PHP 8.5, Nginx, Server Manager, and PHP Controller. Optional PHP versions (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, Redis, RabbitMQ, and Supervisor stay off until you start them from Server Manager.
+This starts PHP 8.5, Nginx, Server Manager, and PHP Controller. Optional PHP versions (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, PostgreSQL, Redis, RabbitMQ, and Supervisor stay off until you start them from Server Manager.
 
 `php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required.
 
@@ -139,7 +141,7 @@ Open:
 
 [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
 
-Use this UI to manage virtual servers, PHP versions, hosts, Nginx, MySQL, Redis, RabbitMQ, and Supervisor. First-run order:
+Use this UI to manage virtual servers, PHP versions, hosts, Nginx, MySQL, PostgreSQL, Redis, RabbitMQ, and Supervisor. First-run order:
 
 1. **Add a server** — application name, domain (for example `my-php85-app.test`), PHP version, and document root. For Laravel or a framework with a public directory, point the document root at `public`, `webroot`, or the folder that contains `index.php`. Manager writes `env.json`; you do not need to edit that file by hand.
 2. **Start PHP if needed** — PHP 8.5 is already running. For another version, open **PHP versions** → **Create** → **Start**.
@@ -187,7 +189,7 @@ Server Manager can:
 - Support Vietnamese and English; the first visit follows the browser language and the selected locale is then remembered in the session.
 - Support **System**, **Light**, and **Dark** appearances; the selection is stored in the browser, and System mode follows the operating-system preference.
 - Manage PHP container state directly with **Create**, **Start**, **Stop**, and **Restart** controls.
-- Start and stop **MySQL**, **Redis**, **RabbitMQ**, and **Supervisor** from the UI.
+- Start and stop **MySQL**, **PostgreSQL**, **Redis**, **RabbitMQ**, and **Supervisor** from the UI.
 - Open **Details** for each PHP version to list loaded extensions, toggle `extension=` lines in the mounted `php.ini`, install a curated set of extensions into a running container, and edit `php.ini` (after save you can choose to restart PHP-FPM).
 - Manage Nginx from a dedicated menu: **Start**, **Stop**, **Restart**, run `nginx -t`, **Apply & Reload**, and inspect up to 200 recent test/reload, error, and access log lines.
 - Enable **HTTPS** per site (opt-in). Leave the certificate files empty to generate a self-signed cert, or upload a `.crt`/`.pem` and `.key`. HTTP (port 80) and HTTPS (port 443) both keep serving; browsers warn on self-signed certs. Click **Apply & Reload Nginx** after changing SSL. Certificates are stored in `nginx/ssl/<app-name>/` and are not committed to Git. After pulling this change, recreate Nginx once (`docker compose up -d nginx`) so `./nginx/ssl` is mounted.
@@ -298,7 +300,7 @@ The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.js
 127.0.0.1 my-php7-app.test
 ```
 
-### PHP, MySQL, Redis, RabbitMQ, and Supervisor profiles
+### PHP, MySQL, PostgreSQL, Redis, RabbitMQ, and Supervisor profiles
 
 Each optional PHP version has a Compose profile with the same name (`php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
 
@@ -320,10 +322,11 @@ docker compose rm -f php-8.3
 
 When a project uses an optional PHP container, start that version (from the UI or with the matching profile) before applying Nginx. Otherwise Nginx cannot connect to that PHP upstream.
 
-MySQL, Redis, and RabbitMQ:
+MySQL, PostgreSQL, Redis, and RabbitMQ:
 
 ```bash
 docker compose --profile mysql up -d mysql
+docker compose --profile postgres up -d postgres
 docker compose --profile redis up -d redis
 docker compose --profile rabbitmq up -d rabbitmq
 ```
@@ -380,6 +383,7 @@ docker compose logs -f
 docker compose logs -f nginx
 docker compose logs -f php-8.5
 docker compose logs -f mysql
+docker compose logs -f postgres
 ```
 
 ### Stop, restart, and remove containers
@@ -437,7 +441,7 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Valid service names: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `redis`, and `rabbitmq`.
+Valid service names: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `postgres`, `redis`, and `rabbitmq`.
 
 ## Running background workers with Supervisor
 
@@ -487,11 +491,11 @@ docker compose logs -f supervisor-8.5
 ls logs/supervisor-8.5
 ```
 
-Supervisor uses `mysql`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` with `required: false` only orders startup when the MySQL/Redis/RabbitMQ profiles are enabled; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
+Supervisor uses `mysql`, `postgres`, `redis`, and `rabbitmq` as hostnames inside `app-network`. `depends_on` with `required: false` only orders startup when the MySQL/PostgreSQL/Redis/RabbitMQ profiles are enabled; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
 
 ### Using Supervisor with other PHP versions
 
-Each Supervisor container contains one PHP runtime. PHP (+ Supervisor) lives in `compose/php-X.Y.yml`. MySQL, Redis, and RabbitMQ are shared and defined in `compose/mysql.yml`, `compose/redis.yml`, and `compose/rabbitmq.yml`. The root `docker-compose.yml` `include`s those files.
+Each Supervisor container contains one PHP runtime. PHP (+ Supervisor) lives in `compose/php-X.Y.yml`. MySQL, PostgreSQL, Redis, and RabbitMQ are shared and defined in `compose/mysql.yml`, `compose/postgres.yml`, `compose/redis.yml`, and `compose/rabbitmq.yml`. The root `docker-compose.yml` `include`s those files.
 
 | PHP-FPM service | Supervisor service | File | Shared image |
 | --- | --- | --- | --- |
@@ -560,6 +564,7 @@ docker compose exec php-8.1 php -v
 docker compose exec php-8.0 php -v
 docker compose exec php-7.4 php -v
 docker compose exec mysql mysql -uroot -p1
+docker compose exec postgres psql -U postgres
 ```
 
 ## Connecting applications to services
@@ -571,6 +576,14 @@ DB_HOST=mysql
 DB_PORT=3306
 DB_USERNAME=root
 DB_PASSWORD=1
+
+# PostgreSQL (use these instead of the MySQL block above)
+# DB_CONNECTION=pgsql
+# DB_HOST=postgres
+# DB_PORT=5432
+# DB_DATABASE=postgres
+# DB_USERNAME=postgres
+# DB_PASSWORD=1
 
 REDIS_HOST=redis
 REDIS_PORT=6379
@@ -611,7 +624,7 @@ PHP 7.4 and 8.0–8.5 are already shipped. Use this section for a newer release 
 cp docker_files/php8.5.Dockerfile docker_files/php8.6.Dockerfile
 ```
 
-Change the base image (for example `FROM php:8.6-fpm`). Keep or adjust packages and extensions; current 8.x images typically include `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl`, and Redis.
+Change the base image (for example `FROM php:8.6-fpm`). Keep or adjust packages and extensions; current 8.x images typically include `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl`, and Redis. PostgreSQL (`pdo_pgsql` / `pgsql`) can be installed from Server Manager.
 
 ### 2. Create PHP config, source, and Supervisor dirs
 
@@ -683,6 +696,44 @@ docker run --rm \
 docker compose start mysql
 ```
 
+## Backing up and restoring PostgreSQL
+
+The PostgreSQL named volume is `postgres-data`.
+
+### Backup
+
+Stop PostgreSQL to keep the direct volume backup consistent:
+
+```bash
+docker compose stop postgres
+
+docker run --rm \
+  -v postgres-data:/data:ro \
+  -v "$(pwd):/backup" \
+  alpine \
+  tar czf /backup/postgres-data.tar.gz -C /data .
+
+docker compose start postgres
+```
+
+The backup is created as `./postgres-data.tar.gz`.
+
+### Restore
+
+> Restoring writes backup data into the current volume. Back up the current volume before proceeding.
+
+```bash
+docker compose stop postgres
+
+docker run --rm \
+  -v postgres-data:/data \
+  -v "$(pwd):/backup:ro" \
+  alpine \
+  tar xzf /backup/postgres-data.tar.gz -C /data
+
+docker compose start postgres
+```
+
 ## Troubleshooting
 
 ### A domain cannot be reached
@@ -699,11 +750,11 @@ docker compose start mysql
 
 ### A port is already in use
 
-Stop the application using the port or change the host side of the mapping in `compose/mysql.yml`. For example, change `"3306:3306"` to `"3307:3306"` to expose MySQL on host port `3307`.
+Stop the application using the port or change the host side of the mapping in `compose/mysql.yml` or `compose/postgres.yml`. For example, change `"3306:3306"` to `"3307:3306"` to expose MySQL on host port `3307`, or `"5432:5432"` to `"5433:5432"` for PostgreSQL.
 
-### PHP cannot connect to MySQL, Redis, or RabbitMQ
+### PHP cannot connect to MySQL, PostgreSQL, Redis, or RabbitMQ
 
-Inside a container, use `mysql`, `redis`, and `rabbitmq` as hostnames instead of `localhost`. Check container status with `docker compose ps`. If a container is not running, enable its profile and start it, for example `docker compose --profile mysql up -d mysql`.
+Inside a container, use `mysql`, `postgres`, `redis`, and `rabbitmq` as hostnames instead of `localhost`. Check container status with `docker compose ps`. If a container is not running, enable its profile and start it, for example `docker compose --profile mysql up -d mysql` or `docker compose --profile postgres up -d postgres`.
 
 ### An image fails to build
 
@@ -745,7 +796,7 @@ services:
         - linux/arm64
 ```
 
-Áp dụng cùng cấu trúc cho `php-8.0`, `php-8.1`, `php-7.4`, `mysql`, `redis` và `rabbitmq`. Service `supervisor` không có `build`; nó tiếp tục dùng cùng image với `php-8.2`.
+Áp dụng cùng cấu trúc cho `php-8.0`, `php-8.1`, `php-7.4`, `mysql`, `postgres`, `redis` và `rabbitmq`. Service `supervisor` không có `build`; nó tiếp tục dùng cùng image với `php-8.2`.
 
 > Không dùng các tag local như `server-php:8.2-local` khi push. Hãy đổi sang `<registry>/<namespace>/<image>:<tag>`, ví dụ `docker.io/my-user/server-php:8.2-v1.0.0`.
 
@@ -874,7 +925,7 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 
 ```text
 .
-├── compose/                 # Compose fragments (PHP+Supervisor, mysql, redis, rabbitmq)
+├── compose/                 # Compose fragments (PHP+Supervisor, mysql, postgres, redis, rabbitmq)
 │   ├── mysql.yml
 │   ├── php-7.4.yml
 │   ├── php-8.0.yml
@@ -883,12 +934,14 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 │   ├── php-8.3.yml
 │   ├── php-8.4.yml
 │   ├── php-8.5.yml
+│   ├── postgres.yml
 │   ├── rabbitmq.yml
 │   └── redis.yml
 ├── configs/                 # PHP and Supervisor configuration
 │   └── supervisor.d/        # Workers per version (php8.5/, php8.4/, …)
 ├── docker_files/            # Dockerfiles used to build services
 ├── mysql/                   # MySQL configuration
+├── postgres/                # PostgreSQL configuration
 ├── nginx/
 │   ├── examples/            # Virtual-host template
 │   ├── ssl/                 # Per-site certificates (gitignored)

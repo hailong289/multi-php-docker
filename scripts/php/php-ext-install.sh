@@ -74,6 +74,10 @@ case "$ext" in
         pkg_install "libgmp-dev" "gmp-dev"
         install_builtin gmp
         ;;
+    pdo_pgsql|pgsql)
+        pkg_install "libpq-dev" "postgresql-dev"
+        install_builtin "$ext"
+        ;;
     opcache)
         # Many images compile Zend OPcache in; otherwise enable the .so.
         run "docker-php-ext-enable opcache || docker-php-ext-install opcache"

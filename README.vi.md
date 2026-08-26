@@ -2,7 +2,7 @@
 
 # Môi trường phát triển PHP với Docker
 
-Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis và RabbitMQ. Tất cả PHP 7.4–8.5 dùng image multi-architecture sẵn trên Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` không tự build image. PHP 8.5 chạy mặc định; các bản còn lại dùng Compose profile riêng và mặc định tắt. Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
+Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis và RabbitMQ. Tất cả PHP 7.4–8.5 dùng image multi-architecture sẵn trên Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` không tự build image. PHP 8.5 chạy mặc định; các bản còn lại dùng Compose profile riêng và mặc định tắt. Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
 ## Video hướng dẫn
 
@@ -24,6 +24,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | PHP 8.0 | `php8.0_container` | Không public | PHP-FPM cổng `9000` trong Docker network (profile) |
 | PHP 7.4 | `php7.4_container` | Không public | PHP-FPM cổng `9000` trong Docker network (profile) |
 | MySQL | `mysql_container` | `3306` | User `root`, password `1` |
+| PostgreSQL | `postgres_container` | `5432` | User `postgres`, password `1` |
 | Redis | `redis_container` | `6379` | Không có mật khẩu |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
 | Supervisor | `supervisor85_container` | Không public | Chạy background worker bằng PHP 8.5 (profile) |
@@ -31,7 +32,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | PHP Controller | `php_controller_container` | Không public | Điều khiển allowlist PHP container qua Docker socket |
 | Env Init | `env_init_container` | Không public | Tạo `env.json` nếu thiếu rồi thoát với mã `0` |
 
-PHP 8.5 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3 và 8.4 được đặt trong profile riêng và mặc định không chạy. MySQL, Redis, RabbitMQ và Supervisor cũng nằm trong profile riêng: mặc định không khởi động cho đến khi bạn bật profile tương ứng.
+PHP 8.5 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3 và 8.4 được đặt trong profile riêng và mặc định không chạy. MySQL, PostgreSQL, Redis, RabbitMQ và Supervisor cũng nằm trong profile riêng: mặc định không khởi động cho đến khi bạn bật profile tương ứng.
 
 Các image được cung cấp sẵn:
 
@@ -47,6 +48,7 @@ Các image được cung cấp sẵn:
 | `php-7.4` | `long301001/multi-php-docker:php-7.4` |
 | `php-controller` | `docker:cli` |
 | `mysql` | `long301001/multi-php-docker:mysql` |
+| `postgres` | `long301001/multi-php-docker:postgres` |
 | `redis` | `long301001/multi-php-docker:redis-alpine` |
 | `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
 | `env-init` | `alpine:latest` |
@@ -122,7 +124,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Lệnh này khởi động PHP 8.5, Nginx, Server Manager và PHP Controller. PHP tùy chọn (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, Redis, RabbitMQ và Supervisor mặc định tắt — bật chúng từ Server Manager.
+Lệnh này khởi động PHP 8.5, Nginx, Server Manager và PHP Controller. PHP tùy chọn (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, PostgreSQL, Redis, RabbitMQ và Supervisor mặc định tắt — bật chúng từ Server Manager.
 
 `HOST_PROJECT_PATH` được `php-controller` tự suy ra từ bind mount `/project`. `.env` cũ vẫn được hỗ trợ làm override tương thích ngược, nhưng không bắt buộc.
 
@@ -139,7 +141,7 @@ Mở:
 
 [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
 
-Dùng UI này để quản lý virtual server, phiên bản PHP, hosts, Nginx, MySQL, Redis, RabbitMQ và Supervisor. Thứ tự lần đầu:
+Dùng UI này để quản lý virtual server, phiên bản PHP, hosts, Nginx, MySQL, PostgreSQL, Redis, RabbitMQ và Supervisor. Thứ tự lần đầu:
 
 1. **Thêm server** — tên ứng dụng, domain (ví dụ `my-php85-app.test`), phiên bản PHP và document root. Với Laravel hoặc framework có thư mục public riêng, trỏ document root tới `public`, `webroot` hoặc thư mục chứa `index.php`. Manager ghi `env.json`; không cần sửa file đó bằng tay.
 2. **Khởi động PHP nếu cần** — PHP 8.5 đã chạy. Với phiên bản khác, mở **Các phiên bản PHP** → **Tạo** → **Khởi động**.
@@ -187,7 +189,7 @@ Server Manager cho phép:
 - Hỗ trợ giao diện Tiếng Việt và English; lần truy cập đầu tiên tự nhận ngôn ngữ trình duyệt, sau đó ghi nhớ lựa chọn trong session.
 - Hỗ trợ giao diện **Hệ thống**, **Sáng** và **Tối**; lựa chọn được lưu trong trình duyệt và chế độ Hệ thống tự đi theo cài đặt của hệ điều hành.
 - Quản lý trực tiếp trạng thái các PHP container bằng các nút **Tạo**, **Khởi động**, **Dừng** và **Khởi động lại**.
-- Khởi động và dừng **MySQL**, **Redis**, **RabbitMQ** và **Supervisor** từ UI.
+- Khởi động và dừng **MySQL**, **PostgreSQL**, **Redis**, **RabbitMQ** và **Supervisor** từ UI.
 - Mở **Chi tiết** từng phiên bản PHP để xem extension đã tải, bật/tắt dòng `extension=` trong `php.ini` đã mount, cài một số extension curated vào container đang chạy, và sửa nội dung `php.ini` (sau khi lưu có thể chọn Restart PHP-FPM).
 - Quản lý Nginx tại menu riêng: **Khởi động**, **Dừng**, **Khởi động lại**, chạy `nginx -t`, **Apply & Reload**, và xem tối đa 200 dòng log test/reload, error, access gần nhất.
 - Bật **HTTPS** từng site (opt-in). Để trống file chứng chỉ để tự sinh self-signed, hoặc upload cặp `.crt`/`.pem` và `.key`. HTTP (cổng 80) và HTTPS (cổng 443) cùng phục vụ; trình duyệt sẽ cảnh báo cert tự ký. Sau khi đổi SSL, nhấn **Apply & Reload Nginx**. Cert nằm trong `nginx/ssl/<app-name>/` và không commit lên Git. Sau khi cập nhật code này, tạo lại Nginx một lần (`docker compose up -d nginx`) để mount `./nginx/ssl`.
@@ -298,7 +300,7 @@ Script đọc `DOMAIN_NAME` trong `env.json` (và `runtime/hosts.extra.json` n�
 127.0.0.1 my-php7-app.test
 ```
 
-### Profile PHP, MySQL, Redis, RabbitMQ và Supervisor
+### Profile PHP, MySQL, PostgreSQL, Redis, RabbitMQ và Supervisor
 
 Mỗi phiên bản PHP tùy chọn có Compose profile cùng tên (`php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
 
@@ -320,10 +322,11 @@ docker compose rm -f php-8.3
 
 Khi project dùng PHP tùy chọn, hãy khởi động phiên bản đó (từ UI hoặc profile tương ứng) trước khi Apply Nginx. Nếu không, Nginx không kết nối được upstream PHP.
 
-MySQL, Redis và RabbitMQ:
+MySQL, PostgreSQL, Redis và RabbitMQ:
 
 ```bash
 docker compose --profile mysql up -d mysql
+docker compose --profile postgres up -d postgres
 docker compose --profile redis up -d redis
 docker compose --profile rabbitmq up -d rabbitmq
 ```
@@ -380,6 +383,7 @@ docker compose logs -f
 docker compose logs -f nginx
 docker compose logs -f php-8.5
 docker compose logs -f mysql
+docker compose logs -f postgres
 ```
 
 ### Dừng, khởi động lại và xóa container
@@ -437,7 +441,7 @@ docker compose build <service-name>
 docker compose up -d <service-name>
 ```
 
-Tên service hợp lệ: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `redis`, `rabbitmq`.
+Tên service hợp lệ: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`, `manager`, `php-controller`, `mysql`, `postgres`, `redis`, `rabbitmq`.
 
 ## Chạy background worker với Supervisor
 
@@ -487,11 +491,11 @@ docker compose logs -f supervisor-8.5
 ls logs/supervisor-8.5
 ```
 
-Supervisor dùng hostname `mysql`, `redis` và `rabbitmq` để kết nối các dịch vụ trong `app-network`. `depends_on` với `required: false` chỉ sắp thứ tự khởi động khi các profile MySQL/Redis/RabbitMQ đang bật; không đảm bảo dịch vụ đã sẵn sàng nhận kết nối — worker nên có cơ chế retry.
+Supervisor dùng hostname `mysql`, `postgres`, `redis` và `rabbitmq` để kết nối các dịch vụ trong `app-network`. `depends_on` với `required: false` chỉ sắp thứ tự khởi động khi các profile MySQL/PostgreSQL/Redis/RabbitMQ đang bật; không đảm bảo dịch vụ đã sẵn sàng nhận kết nối — worker nên có cơ chế retry.
 
 ### Dùng Supervisor với phiên bản PHP khác
 
-Mỗi container Supervisor chỉ có một PHP runtime. PHP (+ Supervisor) nằm trong `compose/php-X.Y.yml`. MySQL, Redis và RabbitMQ dùng chung, khai báo ở `compose/mysql.yml`, `compose/redis.yml` và `compose/rabbitmq.yml`. Root `docker-compose.yml` `include` các file đó.
+Mỗi container Supervisor chỉ có một PHP runtime. PHP (+ Supervisor) nằm trong `compose/php-X.Y.yml`. MySQL, PostgreSQL, Redis và RabbitMQ dùng chung, khai báo ở `compose/mysql.yml`, `compose/postgres.yml`, `compose/redis.yml` và `compose/rabbitmq.yml`. Root `docker-compose.yml` `include` các file đó.
 
 | PHP-FPM service | Supervisor service | File | Image dùng chung |
 | --- | --- | --- | --- |
@@ -560,6 +564,7 @@ docker compose exec php-8.1 php -v
 docker compose exec php-8.0 php -v
 docker compose exec php-7.4 php -v
 docker compose exec mysql mysql -uroot -p1
+docker compose exec postgres psql -U postgres
 ```
 
 ## Kết nối dịch vụ từ ứng dụng
@@ -571,6 +576,14 @@ DB_HOST=mysql
 DB_PORT=3306
 DB_USERNAME=root
 DB_PASSWORD=1
+
+# PostgreSQL (dùng các dòng này thay cho khối MySQL ở trên)
+# DB_CONNECTION=pgsql
+# DB_HOST=postgres
+# DB_PORT=5432
+# DB_DATABASE=postgres
+# DB_USERNAME=postgres
+# DB_PASSWORD=1
 
 REDIS_HOST=redis
 REDIS_PORT=6379
@@ -611,7 +624,7 @@ PHP 7.4 và 8.0–8.5 đã có sẵn. Mục này dành cho phiên bản mới h�
 cp docker_files/php8.5.Dockerfile docker_files/php8.6.Dockerfile
 ```
 
-Đổi base image trong Dockerfile (ví dụ `FROM php:8.6-fpm`). Giữ hoặc điều chỉnh package/extension; các bản 8.x hiện có thường gồm `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl` và Redis.
+Đổi base image trong Dockerfile (ví dụ `FROM php:8.6-fpm`). Giữ hoặc điều chỉnh package/extension; các bản 8.x hiện có thường gồm `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl` và Redis. PostgreSQL (`pdo_pgsql` / `pgsql`) có thể cài từ Server Manager.
 
 ### 2. Tạo cấu hình PHP, source và Supervisor
 
@@ -683,6 +696,44 @@ docker run --rm \
 docker compose start mysql
 ```
 
+## Sao lưu và khôi phục PostgreSQL
+
+Named volume PostgreSQL có tên `postgres-data`.
+
+### Sao lưu
+
+Dừng PostgreSQL để dữ liệu nhất quán khi sao lưu trực tiếp volume:
+
+```bash
+docker compose stop postgres
+
+docker run --rm \
+  -v postgres-data:/data:ro \
+  -v "$(pwd):/backup" \
+  alpine \
+  tar czf /backup/postgres-data.tar.gz -C /data .
+
+docker compose start postgres
+```
+
+File sao lưu được tạo tại `./postgres-data.tar.gz`.
+
+### Khôi phục
+
+> Khôi phục sẽ ghi dữ liệu từ bản sao lưu vào volume hiện tại. Hãy sao lưu volume hiện tại trước khi thực hiện.
+
+```bash
+docker compose stop postgres
+
+docker run --rm \
+  -v postgres-data:/data \
+  -v "$(pwd):/backup:ro" \
+  alpine \
+  tar xzf /backup/postgres-data.tar.gz -C /data
+
+docker compose start postgres
+```
+
 ## Xử lý lỗi thường gặp
 
 ### Domain không truy cập được
@@ -699,11 +750,11 @@ docker compose start mysql
 
 ### Cổng đã được sử dụng
 
-Tắt ứng dụng đang chiếm cổng hoặc đổi cổng host trong `compose/mysql.yml`. Ví dụ, đổi `"3306:3306"` thành `"3307:3306"` để MySQL dùng cổng `3307` trên host.
+Tắt ứng dụng đang chiếm cổng hoặc đổi cổng host trong `compose/mysql.yml` hoặc `compose/postgres.yml`. Ví dụ, đổi `"3306:3306"` thành `"3307:3306"` để MySQL dùng cổng `3307` trên host, hoặc `"5432:5432"` thành `"5433:5432"` cho PostgreSQL.
 
-### Không kết nối được MySQL, Redis hoặc RabbitMQ từ PHP
+### Không kết nối được MySQL, PostgreSQL, Redis hoặc RabbitMQ từ PHP
 
-Trong container, dùng hostname `mysql`, `redis`, `rabbitmq`, không dùng `localhost`. Kiểm tra trạng thái bằng `docker compose ps`. Nếu container chưa chạy, bật profile rồi khởi động, ví dụ `docker compose --profile mysql up -d mysql`.
+Trong container, dùng hostname `mysql`, `postgres`, `redis`, `rabbitmq`, không dùng `localhost`. Kiểm tra trạng thái bằng `docker compose ps`. Nếu container chưa chạy, bật profile rồi khởi động, ví dụ `docker compose --profile mysql up -d mysql` hoặc `docker compose --profile postgres up -d postgres`.
 
 ### Build image thất bại
 
@@ -756,7 +807,7 @@ Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mụ
 
 ```text
 .
-├── compose/                 # Compose fragments (PHP+Supervisor, mysql, redis, rabbitmq)
+├── compose/                 # Compose fragments (PHP+Supervisor, mysql, postgres, redis, rabbitmq)
 │   ├── mysql.yml
 │   ├── php-7.4.yml
 │   ├── php-8.0.yml
@@ -765,12 +816,14 @@ Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mụ
 │   ├── php-8.3.yml
 │   ├── php-8.4.yml
 │   ├── php-8.5.yml
+│   ├── postgres.yml
 │   ├── rabbitmq.yml
 │   └── redis.yml
 ├── configs/                 # Cấu hình PHP và Supervisor
 │   └── supervisor.d/        # Worker theo version (php8.5/, php8.4/, …)
 ├── docker_files/            # Dockerfile để build các dịch vụ
 ├── mysql/                   # Cấu hình MySQL
+├── postgres/                # Cấu hình PostgreSQL
 ├── nginx/
 │   ├── examples/            # Virtual host mẫu
 │   ├── ssl/                 # Chứng chỉ từng site (gitignore)
