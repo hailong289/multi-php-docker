@@ -9,6 +9,7 @@ export function tourIdForRoute(routeName) {
     'php-version-detail': 'php-version-detail',
     'php-version-catalog': 'php-version-catalog',
     'php-version-supervisor': 'php-version-supervisor',
+    'php-version-run': 'php-version-run',
   }
   return map[routeName] || null
 }
@@ -253,6 +254,15 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="php-run"]',
+        popover: {
+          title: t('tour.php.run_title'),
+          description: t('tour.php.run_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="php-supervisor"]',
         popover: {
           title: t('tour.php.supervisor_title'),
@@ -277,6 +287,15 @@ export function buildTourSteps(t) {
         popover: {
           title: t('tour.php_detail.actions_title'),
           description: t('tour.php_detail.actions_body'),
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+      {
+        element: '[data-tour="php-run"]',
+        popover: {
+          title: t('tour.php.run_title'),
+          description: t('tour.php.run_body'),
           side: 'bottom',
           align: 'end',
         },
@@ -385,6 +404,62 @@ export function buildTourSteps(t) {
         popover: {
           title: t('tour.supervisor.conf_editor_title'),
           description: t('tour.supervisor.conf_editor_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+    ],
+    'php-version-run': [
+      {
+        element: '[data-tour="php-run-panel"]',
+        popover: {
+          title: t('tour.php_run.intro_title'),
+          description: t('tour.php_run.intro_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-session-add"]',
+        popover: {
+          title: t('tour.php_run.add_title'),
+          description: t('tour.php_run.add_body'),
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+      {
+        element: '[data-tour="php-run-sessions"]',
+        popover: {
+          title: t('tour.php_run.sessions_title'),
+          description: t('tour.php_run.sessions_body'),
+          side: 'right',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-editor"]',
+        popover: {
+          title: t('tour.php_run.editor_title'),
+          description: t('tour.php_run.editor_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-actions"]',
+        popover: {
+          title: t('tour.php_run.actions_title'),
+          description: t('tour.php_run.actions_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-output"]',
+        popover: {
+          title: t('tour.php_run.output_title'),
+          description: t('tour.php_run.output_body'),
           side: 'top',
           align: 'start',
         },

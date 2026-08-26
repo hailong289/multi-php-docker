@@ -21,6 +21,7 @@ const PAGE_READY = {
   'php-version-detail': '[data-tour="php-detail-panel"]',
   'php-version-catalog': '[data-tour="php-catalog-panel"]',
   'php-version-supervisor': '[data-tour="supervisor-panel"]',
+  'php-version-run': '[data-tour="php-run-sessions"]',
   terminal: '[data-tour="terminal-panel"]',
 }
 
@@ -161,6 +162,7 @@ export function useTour() {
       'php-versions',
       'php-version-detail',
       'php-version-supervisor',
+      'php-version-run',
     ].includes(tourId)
   }
 
