@@ -311,6 +311,77 @@ final class DockerExec
     }
 
     /**
+     * Decode docker logs API bytes (multiplexed stdout/stderr, or raw TTY).
+     */
+    public static function decodeLogStream(string $data, int $maxBytes = 262144): string
+    {
+        if ($data === '') {
+            return '';
+        }
+        $len = strlen($data);
+        $looksMultiplexed = $len >= 8
+            && in_array(ord($data[0]), [1, 2], true)
+            && $data[1] === "\0"
+            && $data[2] === "\0"
+            && $data[3] === "\0";
+        if (!$looksMultiplexed) {
+            $out = $data;
+            if (strlen($out) > $maxBytes) {
+                $out = substr($out, -$maxBytes);
+            }
+            if (!preg_match('//u', $out)) {
+                $out = (string) iconv('UTF-8', 'UTF-8//IGNORE', $out);
+            }
+
+            return $out;
+        }
+
+        $out = '';
+        $offset = 0;
+        while ($offset + 8 <= $len) {
+            $header = substr($data, $offset, 8);
+            $type = ord($header[0]);
+            $size = unpack('N', substr($header, 4, 4));
+            $payloadSize = is_array($size) ? (int) ($size[1] ?? 0) : 0;
+            if ($payloadSize < 0 || $payloadSize > 16 * 1024 * 1024 || $offset + 8 + $payloadSize > $len) {
+                break;
+            }
+            if ($type === 1 || $type === 2) {
+                $out .= substr($data, $offset + 8, $payloadSize);
+                if (strlen($out) > $maxBytes) {
+                    $out = substr($out, -$maxBytes);
+                }
+            }
+            $offset += 8 + $payloadSize;
+        }
+        if (!preg_match('//u', $out)) {
+            $out = (string) iconv('UTF-8', 'UTF-8//IGNORE', $out);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Last stdout/stderr lines for a container name (`docker logs`).
+     */
+    public static function containerLogs(string $containerName, int $tail = 300): ?string
+    {
+        $id = self::containerIdByName($containerName);
+        if ($id === null) {
+            return null;
+        }
+        $tail = max(1, min(2000, $tail));
+        $path = '/containers/' . rawurlencode($id)
+            . '/logs?stdout=1&stderr=1&timestamps=1&tail=' . $tail;
+        $raw = self::httpRequest('GET', $path, null, null, [200]);
+        if ($raw === null) {
+            return null;
+        }
+
+        return self::decodeLogStream($raw);
+    }
+
+    /**
      * @param resource $fp
      * @return array{0: string, 1: string, 2: bool, 3: bool} stdout, stderr, timed_out, truncated
      */

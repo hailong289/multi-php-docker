@@ -260,6 +260,14 @@ onUnmounted(() => {
           </button>
           <button
             type="button"
+            data-tour="php-logs-btn"
+            :disabled="phpServiceState(service) === 'not_created'"
+            @click="router.push({ name: 'php-version-logs', params: { service: service } })"
+          >
+            {{ t('php_controller.view_logs') }}
+          </button>
+          <button
+            type="button"
             data-tour="php-run"
             @click="router.push({ name: 'php-version-run', params: { service: service } })"
           >

@@ -8,6 +8,7 @@ import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import PhpRunView from '../views/PhpRunView.vue'
 import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
+import ServiceLogsView from '../views/ServiceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
 import TerminalView from '../views/TerminalView.vue'
 import { apiGet, setCsrfToken } from '../api'
@@ -55,6 +56,12 @@ const router = createRouter({
       meta: { titleKey: 'nav.services', manager: true },
     },
     {
+      path: '/services/:service/logs',
+      name: 'service-logs',
+      component: ServiceLogsView,
+      meta: { titleKey: 'services.logs_page_title', manager: true, logsKind: 'infra' },
+    },
+    {
       path: '/php-versions',
       name: 'php-versions',
       component: PhpVersionsView,
@@ -77,6 +84,12 @@ const router = createRouter({
       name: 'php-version-run',
       component: PhpRunView,
       meta: { titleKey: 'php_controller.run_page_title', manager: true },
+    },
+    {
+      path: '/php-versions/:service/logs',
+      name: 'php-version-logs',
+      component: ServiceLogsView,
+      meta: { titleKey: 'php_controller.logs_page_title', manager: true, logsKind: 'php' },
     },
     {
       path: '/php-versions/:service',
