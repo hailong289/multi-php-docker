@@ -155,6 +155,7 @@ export function useManager() {
     if (meta.service != null && current.service !== meta.service) return false
     if (meta.action != null && current.action !== meta.action) return false
     if (meta.domain != null && current.domain !== meta.domain) return false
+    if (meta.name != null && current.name !== meta.name) return false
     return true
   }
 
@@ -508,6 +509,20 @@ export function useManager() {
       const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  /** Queue a Supervisor container lifecycle action; status updates via bootstrap poll. */
+  async function supervisorAction(service, action) {
+    pendingAction.value = { kind: 'supervisor', service, action }
+    try {
+      const result = await apiSend('POST', `/api/supervisor/${service}/${action}`, {})
+      toastFromResult(result)
+      if (result.supervisor_services) data.supervisor_services = result.supervisor_services
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -870,6 +885,104 @@ export function useManager() {
     return infraServiceState(service) === 'not_created' && target.profile !== null
   }
 
+  function supervisorServiceState(service) {
+    return data.supervisor_services.statuses[service]?.state || 'not_created'
+  }
+
+  function supervisorActionEnabled(service, action) {
+    if (isPending('supervisor', { service })) return false
+    if (!phpControllerDaemonRunning.value) return false
+    const state = supervisorServiceState(service)
+    if (action === 'create') return state === 'not_created'
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
+    return false
+  }
+
+  function composeYamlActionEnabled(item, action) {
+    if (item?.runtime !== 'compose') return false
+    if (isPending('compose-file', { name: item.name, action })) return false
+    if (!phpControllerDaemonRunning.value) return false
+    const state = item.state || 'not_created'
+    if (state === 'busy') return false
+    if (action === 'create') return state === 'not_created'
+    if (state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    return false
+  }
+
+  async function composeYamlAction(item, action) {
+    if (item?.runtime !== 'compose') return
+    pendingAction.value = { kind: 'compose-file', name: item.name, action }
+    try {
+      const result = await apiSend(
+        'POST',
+        `/api/infra-services/compose-files/${encodeURIComponent(item.name)}/${action}`,
+        {},
+      )
+      toastFromResult(result)
+      return result
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  function composeTabActionEnabled(item, action) {
+    if (!item?.runtime) return false
+    if (item.runtime === 'compose') return composeYamlActionEnabled(item, action)
+    if (!item.service) return false
+    if (action === 'create') {
+      if (item.runtime === 'infra') return infraActionEnabled(item.service, 'create')
+      if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'create')
+    }
+    if (action === 'start') {
+      if (item.runtime === 'infra') return infraActionEnabled(item.service, 'start')
+      if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'start')
+    }
+    return false
+  }
+
+  async function composeTabAction(item, action) {
+    if (item.runtime === 'compose') return composeYamlAction(item, action)
+    if (!item?.runtime || !item.service) return
+    if (item.runtime === 'infra') return infraAction(item.service, action)
+    if (item.runtime === 'supervisor') return supervisorAction(item.service, action)
+  }
+
+  function composeFileState(itemOrRuntime, service) {
+    if (itemOrRuntime && typeof itemOrRuntime === 'object') {
+      const item = itemOrRuntime
+      if (item.runtime === 'compose') return item.state || 'not_created'
+      if (!item.runtime || !item.service) return 'not_created'
+      return composeFileState(item.runtime, item.service)
+    }
+    const runtime = itemOrRuntime
+    if (runtime === 'infra') return infraServiceState(service)
+    if (runtime === 'php') return phpServiceState(service)
+    if (runtime === 'supervisor') return supervisorServiceState(service)
+    return 'not_created'
+  }
+
+  function composeFileActionEnabled(item, action) {
+    return composeTabActionEnabled(item, action)
+  }
+
+  async function composeFileAction(item, action) {
+    return composeTabAction(item, action)
+  }
+
+  function showComposeCreateHint(item) {
+    if (!item?.runtime) return false
+    if (item.runtime === 'compose') {
+      return (item.state || 'not_created') === 'not_created'
+    }
+    if (!item.service) return false
+    return composeFileState(item) === 'not_created'
+  }
+
   watch(
     () => form.php_version,
     (version) => {
@@ -922,6 +1035,7 @@ export function useManager() {
     phpAction,
     startPhpControllerDaemon,
     infraAction,
+    supervisorAction,
     openDomainEdit,
     closeDomainModal,
     saveDomain,
@@ -941,6 +1055,15 @@ export function useManager() {
     infraServiceState,
     infraActionEnabled,
     showInfraCreateHint,
+    supervisorServiceState,
+    supervisorActionEnabled,
+    composeFileState,
+    composeFileActionEnabled,
+    composeFileAction,
+    composeYamlAction,
+    composeTabAction,
+    composeTabActionEnabled,
+    showComposeCreateHint,
     isPending,
     showToast,
     dismissToast,

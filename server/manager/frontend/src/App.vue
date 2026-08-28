@@ -33,6 +33,7 @@ const showChrome = computed(() => {
 const PHP_CONTROLLER_BANNER_ROUTES = new Set([
   'nginx',
   'services',
+  'compose-yaml',
   'service-logs',
   'php-versions',
   'php-version-catalog',
@@ -224,6 +225,13 @@ watch(() => route.fullPath, updateTitle)
         :aria-current="route.name === 'services' || route.name === 'service-logs' ? 'page' : undefined"
       >
         {{ t('nav.services') }}
+      </RouterLink>
+      <RouterLink
+        to="/compose"
+        data-tour="nav-compose"
+        :aria-current="route.name === 'compose-yaml' ? 'page' : undefined"
+      >
+        {{ t('nav.compose_yaml') }}
       </RouterLink>
       <RouterLink
         to="/php-versions"

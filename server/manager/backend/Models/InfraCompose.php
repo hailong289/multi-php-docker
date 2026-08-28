@@ -69,32 +69,190 @@ final class InfraCompose
     /** Map mysql.yml → mysql when it is a managed infra service. */
     public function serviceForFile(string $name): ?string
     {
-        if (!preg_match('/^(mysql|redis|rabbitmq)\.ya?ml$/i', $name, $m)) {
+        return $this->actionContextForFile($name)['service'] ?? null;
+    }
+
+    /**
+     * Map a compose file to the runtime that controls its primary container.
+     *
+     * @return array{runtime: 'infra'|'php'|'supervisor'|'compose', service: string, pull_recreate: bool, compose_services?: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>, has_build?: bool, included?: bool}|null
+     */
+    public function actionContextForFile(string $name, ?string $content = null): ?array
+    {
+        $stem = basename($name);
+        if (!preg_match('/^(.+)\.ya?ml$/i', $stem, $m)) {
+            return null;
+        }
+        $service = $m[1];
+
+        if (preg_match('/^(mysql|redis|rabbitmq)$/i', $service)) {
+            return $this->enrichWithComposeServices([
+                'runtime' => 'infra',
+                'service' => strtolower($service),
+                'pull_recreate' => true,
+            ], $name, $content);
+        }
+        if (PhpVersionId::isValidService($service)) {
+            return $this->enrichWithComposeServices([
+                'runtime' => 'php',
+                'service' => $service,
+                'pull_recreate' => false,
+            ], $name, $content);
+        }
+        if (PhpVersionId::isValidSupervisorService($service)) {
+            return $this->enrichWithComposeServices([
+                'runtime' => 'supervisor',
+                'service' => $service,
+                'pull_recreate' => false,
+            ], $name, $content);
+        }
+
+        if ($this->isProtectedFile($name)) {
             return null;
         }
 
-        return strtolower($m[1]);
+        $yaml = $this->readYamlContent($name, $content);
+        if ($yaml === null) {
+            return null;
+        }
+        $composeServices = ComposeFileParser::services($yaml);
+        if ($composeServices === []) {
+            return null;
+        }
+
+        return $this->enrichWithComposeServices([
+            'runtime' => 'compose',
+            'service' => $composeServices[0]['name'],
+            'pull_recreate' => false,
+        ], $name, $content, $composeServices);
+    }
+
+    /**
+     * @param array{runtime: string, service: string, pull_recreate: bool} $context
+     * @param list<array{name: string, profile: ?string, container: ?string, has_build: bool}>|null $parsed
+     * @return array{runtime: string, service: string, pull_recreate: bool, compose_services: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>, has_build: bool, included: bool}
+     */
+    private function enrichWithComposeServices(array $context, string $name, ?string $content, ?array $parsed = null): array
+    {
+        $yaml = $this->readYamlContent($name, $content);
+        $composeServices = $parsed ?? ($yaml !== null ? ComposeFileParser::services($yaml) : []);
+
+        return [
+            ...$context,
+            'compose_services' => $composeServices,
+            'has_build' => ComposeFileRuntime::hasBuild($composeServices),
+            'included' => (new ComposeInclude($this->projectPath))->isIncluded($name),
+        ];
+    }
+
+    private function readYamlContent(string $name, ?string $content): ?string
+    {
+        if ($content !== null) {
+            return $content;
+        }
+        $path = $this->projectPath . '/compose/' . basename($name);
+        if (!is_file($path)) {
+            return null;
+        }
+
+        return (string) file_get_contents($path);
+    }
+
+    /**
+     * @param array{runtime?: string, service?: string, pull_recreate?: bool, compose_services?: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>, has_build?: bool, included?: bool} $context
+     * @return array{runtime: ?string, service: ?string, pull_recreate: bool, compose_services: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>, has_build: bool, included: bool}
+     */
+    private function fileActionMeta(array $context): array
+    {
+        return [
+            'runtime' => $context['runtime'] ?? null,
+            'service' => $context['service'] ?? null,
+            'pull_recreate' => (bool) ($context['pull_recreate'] ?? false),
+            'compose_services' => $context['compose_services'] ?? [],
+            'has_build' => (bool) ($context['has_build'] ?? false),
+            'included' => (bool) ($context['included'] ?? false),
+        ];
+    }
+
+    /**
+     * @param array{runtime?: ?string, service?: ?string, compose_services?: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>} $meta
+     */
+    private function stateForActionMeta(string $name, array $meta): string
+    {
+        $runtime = $meta['runtime'] ?? null;
+        $service = (string) ($meta['service'] ?? '');
+        if ($runtime === 'compose' && ($meta['compose_services'] ?? []) !== []) {
+            return (string) ((new ComposeFileRuntime(projectPath: $this->projectPath))
+                ->statusForServices($name, $meta['compose_services'])['state'] ?? 'not_created');
+        }
+        if ($runtime === 'infra' && $service !== '') {
+            return (string) ((new InfraRuntime())->statuses()[$service]['state'] ?? 'not_created');
+        }
+        if ($runtime === 'php' && $service !== '') {
+            return (string) ((new PhpRuntime())->statuses()[$service]['state'] ?? 'not_created');
+        }
+        if ($runtime === 'supervisor' && $service !== '') {
+            return (string) ((new SupervisorRuntime())->statuses()[$service]['state'] ?? 'not_created');
+        }
+
+        return 'not_created';
     }
 
     public function defaultContent(): string
     {
         return <<<'YAML'
-# Optional Compose fragment. Include it from docker-compose.yml if needed.
+# Custom Compose fragment — rename "example" to match your service (e.g. postgres, kafka).
+# After saving, use Create then Start in the manager UI.
 services:
-  # example:
-  #   profiles: ["example"]
-  #   image: example:latest
-  #   container_name: example_container
-  #   networks:
-  #     - app-network
+  example:
+    profiles: ["example"]
+    image: postgres:16
+    container_name: example_container
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    networks:
+      - app-network
 
-# networks:
-#   app-network:
-#     external: true
+networks:
+  app-network:
+    driver: bridge
 YAML;
     }
 
-    /** @return list<array{name: string, relative_path: string, size: int, updated_at: string, core: bool, service: ?string}> */
+    public function defaultContentFor(string $name): string
+    {
+        $stem = preg_replace('/\.ya?ml$/i', '', basename($name));
+        if ($stem === '' || !preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/', $stem)) {
+            return $this->defaultContent();
+        }
+
+        return <<<YAML
+# Custom Compose fragment for {$stem}.
+services:
+  {$stem}:
+    profiles: ["{$stem}"]
+    image: alpine:latest
+    container_name: {$stem}_container
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+YAML;
+    }
+
+    /** PHP compose fragments are managed on the PHP versions page, not Services → Compose YAML. */
+    public function isHiddenInServicesList(string $name): bool
+    {
+        $lower = strtolower(basename($name));
+
+        return (bool) preg_match('/^php-.*\.(yml|yaml)$/', $lower);
+    }
+
+    /** @return list<array{name: string, relative_path: string, size: int, updated_at: string, core: bool, protected: bool, service: ?string, runtime: ?string, pull_recreate: bool, compose_services: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>, has_build: bool, included: bool, state: string}> */
     public function list(): array
     {
         $dir = $this->composeDirAbsolute();
@@ -108,9 +266,13 @@ YAML;
                 continue;
             }
             $name = basename($path);
-            if (!$this->isSafeName($name)) {
+            if (!$this->isSafeName($name) || $this->isHiddenInServicesList($name)) {
                 continue;
             }
+            $content = (string) file_get_contents($path);
+            $action = $this->actionContextForFile($name, $content);
+            $meta = $this->fileActionMeta($action ?? []);
+            $state = $this->stateForActionMeta($name, $meta);
             $files[] = [
                 'name' => $name,
                 'relative_path' => 'compose/' . $name,
@@ -118,7 +280,13 @@ YAML;
                 'updated_at' => date(DATE_ATOM, (int) filemtime($path)),
                 'core' => $this->isCoreFile($name),
                 'protected' => $this->isProtectedFile($name),
-                'service' => $this->serviceForFile($name),
+                'service' => $meta['service'],
+                'runtime' => $meta['runtime'],
+                'pull_recreate' => $meta['pull_recreate'],
+                'compose_services' => $meta['compose_services'],
+                'has_build' => $meta['has_build'],
+                'included' => $meta['included'],
+                'state' => $state,
             ];
         }
         usort($files, static function (array $a, array $b): int {
@@ -133,7 +301,7 @@ YAML;
     }
 
     /**
-     * @return array{name: string, relative_path: string, content: string, size: int, updated_at: string, core: bool, service: ?string}
+     * @return array{name: string, relative_path: string, content: string, size: int, updated_at: string, core: bool, protected: bool, service: ?string, runtime: ?string, pull_recreate: bool}
      */
     public function readFile(string $name): array
     {
@@ -150,6 +318,10 @@ YAML;
         }
         $base = basename($path);
 
+        $action = $this->actionContextForFile($base, $content);
+        $meta = $this->fileActionMeta($action ?? []);
+        $state = $this->stateForActionMeta($base, $meta);
+
         return [
             'name' => $base,
             'relative_path' => 'compose/' . $base,
@@ -158,12 +330,18 @@ YAML;
             'updated_at' => date(DATE_ATOM, (int) filemtime($path)),
             'core' => $this->isCoreFile($base),
             'protected' => $this->isProtectedFile($base),
-            'service' => $this->serviceForFile($base),
+            'service' => $meta['service'],
+            'runtime' => $meta['runtime'],
+            'pull_recreate' => $meta['pull_recreate'],
+            'compose_services' => $meta['compose_services'],
+            'has_build' => $meta['has_build'],
+            'included' => $meta['included'],
+            'state' => $state,
         ];
     }
 
     /**
-     * @return array{name: string, relative_path: string, size: int, updated_at: string, core: bool, service: ?string, created: bool}
+     * @return array{name: string, relative_path: string, size: int, updated_at: string, core: bool, protected: bool, service: ?string, runtime: ?string, pull_recreate: bool, created: bool}
      */
     public function writeFile(string $name, string $content, bool $create): array
     {
@@ -198,6 +376,15 @@ YAML;
         clearstatcache(true, $path);
         $base = basename($path);
 
+        if (!$this->isProtectedFile($base) && !$this->isCoreFile($base)) {
+            (new ComposeInclude($this->projectPath))->ensureIncluded($base);
+        }
+
+        $content = (string) file_get_contents($path);
+        $action = $this->actionContextForFile($base, $content);
+        $meta = $this->fileActionMeta($action ?? []);
+        $state = $this->stateForActionMeta($base, $meta);
+
         return [
             'name' => $base,
             'relative_path' => 'compose/' . $base,
@@ -205,7 +392,13 @@ YAML;
             'updated_at' => date(DATE_ATOM, (int) filemtime($path)),
             'core' => $this->isCoreFile($base),
             'protected' => $this->isProtectedFile($base),
-            'service' => $this->serviceForFile($base),
+            'service' => $meta['service'],
+            'runtime' => $meta['runtime'],
+            'pull_recreate' => $meta['pull_recreate'],
+            'compose_services' => $meta['compose_services'],
+            'has_build' => $meta['has_build'],
+            'included' => (new ComposeInclude($this->projectPath))->isIncluded($base),
+            'state' => $state,
             'created' => $create,
         ];
     }
@@ -222,6 +415,9 @@ YAML;
         }
         if (!is_writable($path) || !unlink($path)) {
             throw new HttpException('services.compose_delete_failed', 500);
+        }
+        if (!$this->isProtectedFile($base)) {
+            (new ComposeInclude($this->projectPath))->removeIncluded($base);
         }
     }
 

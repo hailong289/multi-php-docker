@@ -248,6 +248,236 @@ run_compose_pull_recreate() {
     run_compose_recreate_start "$project_name" "$compose_file" "$profile" "$service"
 }
 
+run_compose_file_pull() {
+    project_name="$1"
+    compose_yml="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_yml"
+    if [ -n "$profile" ]; then
+        set -- "$@" --profile "$profile"
+    fi
+    set -- "$@" pull "$service"
+    "$@"
+}
+
+run_compose_file_build() {
+    project_name="$1"
+    compose_yml="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_yml"
+    if [ -n "$profile" ]; then
+        set -- "$@" --profile "$profile"
+    fi
+    set -- "$@" build "$service"
+    "$@"
+}
+
+run_compose_file_create() {
+    project_name="$1"
+    compose_yml="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_yml"
+    if [ -n "$profile" ]; then
+        set -- "$@" --profile "$profile"
+    fi
+    set -- "$@" create "$service"
+    "$@"
+}
+
+compose_file_safe_name() {
+    name=$(basename "$1")
+    case "$name" in
+        *.yml|*.yaml) ;;
+        *) return 1 ;;
+    esac
+    printf '%s' "$name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(yml|yaml)$' || return 1
+    printf '%s' "$name"
+}
+
+write_compose_file_status() {
+    queue_key="$1"
+    state="$2"
+    message_key="$3"
+    request_id="$4"
+    compose_file="$5"
+    updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    temp_file="$STATUS_DIR/$queue_key.json.tmp"
+    printf '{"compose_file":"%s","queue_key":"%s","state":"%s","message_key":"%s","request_id":"%s","updated_at":"%s"}\n' \
+        "$compose_file" "$queue_key" "$state" "$message_key" "$request_id" "$updated_at" > "$temp_file"
+    mv "$temp_file" "$STATUS_DIR/$queue_key.json"
+}
+
+parse_compose_file_request() {
+    request="$1"
+    compose_file=$(printf '%s' "$request" | sed -n 's/^.*"compose_file":"\([^"]*\)".*$/\1/p')
+    queue_key=$(printf '%s' "$request" | sed -n 's/^.*"queue_key":"\([^"]*\)".*$/\1/p')
+    action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
+    request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
+
+    compose_file=$(compose_file_safe_name "$compose_file") || return 1
+    printf '%s' "$request_id" | grep -Eq '^[0-9a-f]{32}$' || return 1
+    case "$action" in
+        create|start) ;;
+        *) return 1 ;;
+    esac
+    printf '%s' "$queue_key" | grep -Eq '^compose-file__[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(yml|yaml)$' || return 1
+    [ -f "/project/compose/$compose_file" ] || return 1
+    return 0
+}
+
+handle_compose_file_request() {
+    request="$1"
+    request_file="$2"
+
+    target_compose_file=$(printf '%s' "$request" | sed -n 's/^.*"compose_file":"\([^"]*\)".*$/\1/p')
+    queue_key=$(printf '%s' "$request" | sed -n 's/^.*"queue_key":"\([^"]*\)".*$/\1/p')
+    action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
+    request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
+
+    write_compose_file_status "$queue_key" "busy" "services.processing" "$request_id" "$target_compose_file"
+    ok=0
+    host_project=$(resolve_host_project) || true
+    if [ -n "$host_project" ]; then
+        project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
+        if [ -z "$project_name" ]; then
+            project_name=$(basename "$host_project")
+        fi
+        tmp_dir="/tmp/compose-file.$$"
+        prepare_compose_tmp "$host_project" "$tmp_dir"
+        log_file="$STATUS_DIR/$queue_key.last-$action.log"
+        : >"$log_file"
+        while IFS='|' read -r service profile container has_build; do
+            [ -n "$service" ] || continue
+            case "$action" in
+                create)
+                    if [ "$has_build" = "1" ]; then
+                        if run_compose_file_build "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 \
+                            && run_compose_file_create "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
+                            ok=1
+                        fi
+                    elif run_compose_file_create "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
+                        ok=1
+                    else
+                        if run_compose_file_pull "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 \
+                            && run_compose_file_create "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
+                            ok=1
+                        fi
+                    fi
+                    ;;
+                start)
+                    if [ -n "$container" ] && docker start "$container" >>"$log_file" 2>&1; then
+                        sleep 2
+                        if container_running "$container"; then
+                            ok=1
+                        else
+                            docker logs --tail 40 "$container" >>"$log_file" 2>&1 || true
+                        fi
+                    fi
+                    ;;
+            esac
+        done <<EOF
+$(awk '
+BEGIN { svc=""; profile=""; container=""; has_build="0"; has_image="0" }
+/^services:[[:space:]]*$/ { in_services=1; next }
+in_services && /^[^ #]/ && !/^  / { exit }
+in_services && /^  [a-zA-Z0-9][a-zA-Z0-9._-]*:[[:space:]]*$/ {
+    if (svc != "") print svc "|" profile "|" container "|" (has_build == "1" && has_image != "1" ? "1" : "0")
+    svc=$1
+    sub(/:$/, "", svc)
+    profile=""
+    container=""
+    has_build="0"
+    has_image="0"
+    next
+}
+in_services && /^    profiles:/ {
+    if (match($0, /"([^"]+)"/)) {
+        profile=substr($0, RSTART + 1, RLENGTH - 2)
+    }
+    next
+}
+in_services && /^    container_name:/ {
+    container=$2
+    gsub(/"/, "", container)
+    next
+}
+in_services && /^    image:/ { has_image="1" }
+in_services && /^    build:/ { has_build="1" }
+END { if (svc != "") print svc "|" profile "|" container "|" (has_build == "1" && has_image != "1" ? "1" : "0") }
+' "/project/compose/$target_compose_file")
+EOF
+        rm -rf "$tmp_dir"
+    fi
+
+    final_state="error"
+    if [ "$ok" -eq 1 ]; then
+        final_state="not_created"
+        while IFS='|' read -r _svc _profile container _has_build; do
+            [ -n "$container" ] || continue
+            s=$(container_state "$container")
+            if [ "$s" = "running" ]; then
+                final_state="running"
+                break
+            fi
+            if [ "$s" = "stopped" ]; then
+                final_state="stopped"
+            fi
+        done <<EOF2
+$(awk '
+BEGIN { svc=""; profile=""; container=""; has_build="0"; has_image="0" }
+/^services:[[:space:]]*$/ { in_services=1; next }
+in_services && /^[^ #]/ && !/^  / { exit }
+in_services && /^  [a-zA-Z0-9][a-zA-Z0-9._-]*:[[:space:]]*$/ {
+    if (svc != "") print svc "|" profile "|" container "|" (has_build == "1" && has_image != "1" ? "1" : "0")
+    svc=$1
+    sub(/:$/, "", svc)
+    profile=""
+    container=""
+    has_build="0"
+    has_image="0"
+    next
+}
+in_services && /^    profiles:/ {
+    if (match($0, /"([^"]+)"/)) {
+        profile=substr($0, RSTART + 1, RLENGTH - 2)
+    }
+    next
+}
+in_services && /^    container_name:/ {
+    container=$2
+    gsub(/"/, "", container)
+    next
+}
+in_services && /^    image:/ { has_image="1" }
+in_services && /^    build:/ { has_build="1" }
+END { if (svc != "") print svc "|" profile "|" container "|" (has_build == "1" && has_image != "1" ? "1" : "0") }
+' "/project/compose/$target_compose_file")
+EOF2
+        write_compose_file_status "$queue_key" "$final_state" "php_controller.action_success" "$request_id" "$target_compose_file"
+    else
+        write_compose_file_status "$queue_key" "error" "php_controller.action_failed" "$request_id" "$target_compose_file"
+    fi
+    rm -f "$request_file"
+}
+
 container_state() {
     container="$1"
     state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null) || {
@@ -259,6 +489,12 @@ container_state() {
     else
         printf '%s' 'stopped'
     fi
+}
+
+container_running() {
+    container="$1"
+    state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null) || return 1
+    [ "$state" = "running" ]
 }
 
 write_status() {
@@ -415,6 +651,15 @@ while true; do
         [ -e "$request_file" ] || break
         request=$(tr -d '\r\n' < "$request_file")
 
+        if printf '%s' "$request" | grep -q '"compose_file"'; then
+            if parse_compose_file_request "$request"; then
+                handle_compose_file_request "$request" "$request_file"
+            else
+                reject_request "$request_file"
+            fi
+            continue
+        fi
+
         if ! parse_request_fields "$request"; then
             reject_request "$request_file"
             continue
@@ -535,11 +780,13 @@ while true; do
                     ok=1
                 fi
             elif is_infra_service "$service"; then
+                log_file="$STATUS_DIR/$service.last-create.log"
+                : >"$log_file"
                 if run_compose_pull_create "$project_name" "$tmp_dir/docker-compose.yml" \
-                    "$profile" "$service" >"/tmp/${service}-create.log" 2>&1; then
+                    "$profile" "$service" >>"$log_file" 2>&1; then
                     ok=1
                 else
-                    cp "/tmp/${service}-create.log" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+                    cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
                 fi
             elif is_supervisor_service "$service"; then
                 if run_compose_create_or_pull "$project_name" "$tmp_dir/docker-compose.yml" \
@@ -556,8 +803,15 @@ while true; do
             fi
             rm -rf "$tmp_dir"
         elif [ "$action" = "start" ]; then
-            if docker start "$container" >/dev/null 2>&1; then
-                ok=1
+            start_log_file="$STATUS_DIR/$service.last-start.log"
+            : >"$start_log_file"
+            if docker start "$container" >>"$start_log_file" 2>&1; then
+                sleep 2
+                if container_running "$container"; then
+                    ok=1
+                else
+                    docker logs --tail 40 "$container" >>"$start_log_file" 2>&1 || true
+                fi
             else
                 profile=$(profile_for_service "$service") || true
                 host_project=$(resolve_host_project) || true
@@ -569,10 +823,10 @@ while true; do
                     tmp_dir="/tmp/compose-start.$$"
                     prepare_compose_tmp "$host_project" "$tmp_dir"
                     if run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" \
-                        "$profile" "$service" >/tmp/php-start.log 2>&1; then
+                        "$profile" "$service" >>"$start_log_file" 2>&1; then
                         ok=1
                     else
-                        cp /tmp/php-start.log "$STATUS_DIR/last-start-error.log" 2>/dev/null || true
+                        cp "$start_log_file" "$STATUS_DIR/last-start-error.log" 2>/dev/null || true
                     fi
                     rm -rf "$tmp_dir"
                 fi

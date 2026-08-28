@@ -17,6 +17,9 @@ spl_autoload_register(static function (string $class): void {
 use Manager\Http\HttpException;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
+use Manager\Models\ComposeFileParser;
+use Manager\Models\ComposeFileRuntime;
+use Manager\Models\ComposeInclude;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\NginxManagement;
@@ -185,8 +188,12 @@ assert_true(($written['size'] ?? 0) > 10, 'compose write size');
 assert_true(str_contains((string) file_get_contents($composeProj . '/compose/mysql.yml'), 'mysql:8.4'), 'compose file updated');
 $created = $compose->writeFile('custom.yml', "services:\n  custom:\n    image: alpine\n", true);
 assert_true(($created['name'] ?? '') === 'custom.yml', 'compose create custom');
+file_put_contents($composeProj . '/compose/php-8.5.yml', "services:\n  php-8.5: {}\n");
 $list = $compose->list();
 assert_true(count($list) >= 2, 'compose list has files');
+$listedNames = array_column($list, 'name');
+assert_true(!in_array('php-8.5.yml', $listedNames, true), 'php compose hidden from services list');
+assert_true(in_array('mysql.yml', $listedNames, true), 'mysql compose listed');
 assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {
@@ -197,6 +204,88 @@ try {
 }
 $compose->deleteFile('custom.yml');
 assert_true(!is_file($composeProj . '/compose/custom.yml'), 'custom compose deleted');
+$mysqlCtx = $compose->actionContextForFile('mysql.yml');
+assert_true(($mysqlCtx['runtime'] ?? '') === 'infra', 'mysql compose runtime');
+assert_true(($mysqlCtx['service'] ?? '') === 'mysql', 'mysql compose service');
+assert_true(($mysqlCtx['pull_recreate'] ?? false) === true, 'mysql compose pull recreate');
+file_put_contents($composeProj . '/compose/php-8.5.yml', "services:\n  php-8.5: {}\n");
+$phpCtx = $compose->actionContextForFile('php-8.5.yml');
+assert_true(($phpCtx['runtime'] ?? '') === 'php', 'php compose runtime');
+assert_true(($phpCtx['service'] ?? '') === 'php-8.5', 'php compose service');
+assert_true(($phpCtx['pull_recreate'] ?? true) === false, 'php compose no pull recreate');
+assert_true($compose->actionContextForFile('custom.yml') === null, 'custom compose no runtime');
+$postgresYaml = <<<'YAML'
+services:
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16
+    container_name: postgres_container
+YAML;
+$parsed = ComposeFileParser::services($postgresYaml);
+assert_true(($parsed[0]['name'] ?? '') === 'postgres', 'parser service name');
+assert_true(($parsed[0]['has_build'] ?? true) === false, 'image-only service has no build');
+$buildYaml = <<<'YAML'
+services:
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+    container_name: app_container
+YAML;
+$built = ComposeFileParser::services($buildYaml);
+assert_true(($built[0]['has_build'] ?? false) === true, 'build-only service needs build');
+$bothYaml = <<<'YAML'
+services:
+  mysql:
+    image: mysql:8
+    build:
+      context: .
+YAML;
+$both = ComposeFileParser::services($bothYaml);
+assert_true(($both[0]['has_build'] ?? true) === false, 'image plus build uses pull not build button');
+assert_true(($parsed[0]['profile'] ?? '') === 'postgres', 'parser profile');
+assert_true(($parsed[0]['container'] ?? '') === 'postgres_container', 'parser container');
+$withNetworks = <<<'YAML'
+services:
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16
+    container_name: postgres_container
+
+networks:
+  app-network:
+    driver: bridge
+YAML;
+$parsedNetworks = ComposeFileParser::services($withNetworks);
+assert_true(count($parsedNetworks) === 1, 'parser ignores networks section');
+assert_true(($parsedNetworks[0]['name'] ?? '') === 'postgres', 'parser networks section service name');
+$customCtx = (new InfraCompose($composeProj))->actionContextForFile('postgres.yml', $postgresYaml);
+assert_true(($customCtx['runtime'] ?? '') === 'compose', 'custom compose runtime');
+assert_true(($customCtx['has_build'] ?? true) === false, 'custom compose no build');
+file_put_contents($composeProj . '/compose/postgres.yml', $postgresYaml);
+$composeProjDocker = sys_get_temp_dir() . '/compose-include-' . bin2hex(random_bytes(4));
+mkdir($composeProjDocker . '/compose', 0775, true);
+file_put_contents(
+    $composeProjDocker . '/docker-compose.yml',
+    "include:\n  - path: compose/redis.yml\n    project_directory: .\n\nservices: {}\n",
+);
+$composeInclude = new ComposeInclude($composeProjDocker);
+$composeInclude->ensureIncluded('postgres.yml');
+assert_true($composeInclude->isIncluded('postgres.yml'), 'postgres included in docker-compose');
+$composeFileRuntime = new ComposeFileRuntime($infraTmp, $composeProj, $runningDaemon);
+$composeReq = $composeFileRuntime->request('postgres.yml', 'create');
+assert_true(strlen($composeReq) === 32, 'compose file create request id');
+assert_true($composeFileRuntime->hasBlockingRequests('postgres.yml'), 'compose file blocking create');
+
+$logDir = $infraTmp . '/status';
+file_put_contents($logDir . '/compose-file__postgres.yml.last-create.log', "create ok\n");
+file_put_contents(
+    $logDir . '/compose-file__postgres.yml.json',
+    '{"compose_file":"postgres.yml","queue_key":"compose-file__postgres.yml","state":"error","message_key":"php_controller.action_failed","request_id":"a","updated_at":"2026-08-28T10:00:00Z"}' . "\n",
+);
+$actionLogs = $composeFileRuntime->actionLogs('postgres.yml');
+assert_true(($actionLogs['state'] ?? '') === 'error', 'compose action logs state');
+assert_true(str_contains((string) ($actionLogs['content'] ?? ''), 'create ok'), 'compose action logs content');
 $pullId = (new InfraRuntime($infraTmp, $runningDaemon))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp, $runningDaemon))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
@@ -145,6 +146,48 @@ final class InfraRuntime
         }
 
         return $requestId;
+    }
+
+    /**
+     * @return array{
+     *     service: string,
+     *     state: string,
+     *     message_key: string,
+     *     request_id: string,
+     *     available: bool,
+     *     content: string,
+     *     create_log: string,
+     *     start_log: string,
+     *     docker_log: string,
+     *     updated_at: string
+     * }
+     */
+    public function actionLogs(string $service, int $dockerTail = 120): array
+    {
+        $targets = self::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('services.invalid_service', 400);
+        }
+
+        $bundle = ActionLogReader::bundle(
+            $this->basePath . '/status',
+            $service,
+            static fn (array $decoded): bool => ($decoded['service'] ?? null) === $service,
+        );
+
+        $docker = $this->logs($service, $dockerTail);
+        $dockerLog = $docker['available'] ? (string) ($docker['content'] ?? '') : '';
+        $content = $bundle['content'];
+        if ($dockerLog !== '') {
+            $content = $content !== '' ? $content . "\n\n=== container ===\n" . $dockerLog : "=== container ===\n" . $dockerLog;
+        }
+
+        return array_merge($bundle, [
+            'service' => $service,
+            'docker_log' => $dockerLog,
+            'available' => $bundle['available'] || $dockerLog !== '',
+            'content' => $content,
+        ]);
     }
 
     /**

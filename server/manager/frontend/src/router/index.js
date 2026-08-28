@@ -8,6 +8,7 @@ import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import PhpRunView from '../views/PhpRunView.vue'
 import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
+import ComposeYamlView from '../views/ComposeYamlView.vue'
 import ServiceLogsView from '../views/ServiceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
 import TerminalView from '../views/TerminalView.vue'
@@ -54,6 +55,12 @@ const router = createRouter({
       name: 'services',
       component: ServicesView,
       meta: { titleKey: 'nav.services', manager: true },
+    },
+    {
+      path: '/compose',
+      name: 'compose-yaml',
+      component: ComposeYamlView,
+      meta: { titleKey: 'nav.compose_yaml', manager: true },
     },
     {
       path: '/services/:service/logs',

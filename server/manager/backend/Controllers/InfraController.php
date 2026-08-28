@@ -6,6 +6,7 @@ namespace Manager\Controllers;
 
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\ComposeFileRuntime;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 
@@ -67,11 +68,12 @@ final class InfraController extends Controller
     {
         $body = $request->json();
         $name = (string) ($body['name'] ?? '');
+        $compose = new InfraCompose();
         $content = (string) ($body['content'] ?? '');
         if ($content === '') {
-            $content = (new InfraCompose())->defaultContent();
+            $content = $compose->defaultContentFor($name);
         }
-        $saved = (new InfraCompose())->writeFile($name, $content, true);
+        $saved = $compose->writeFile($name, $content, true);
 
         return Response::json([
             'compose' => $saved,
@@ -100,6 +102,48 @@ final class InfraController extends Controller
         return Response::json([
             'message_key' => 'services.compose_deleted',
         ]);
+    }
+
+    public function composeFileAction(Request $request, array $params = []): Response
+    {
+        $name = (string) ($params['name'] ?? '');
+        $action = (string) ($params['action'] ?? '');
+        $runtime = new ComposeFileRuntime();
+        $requestId = $runtime->request($name, $action);
+        $compose = (new InfraCompose())->readFile($name);
+
+        return Response::json([
+            'request_id' => $requestId,
+            'message_key' => 'services.compose_action_requested',
+            'message_parameters' => [
+                'action' => 'services.compose_' . $action,
+                'name' => $compose['name'],
+            ],
+            'compose' => $compose,
+        ]);
+    }
+
+    public function composeFileActionLogs(Request $request, array $params = []): Response
+    {
+        $name = (string) ($params['name'] ?? '');
+        $compose = new InfraCompose();
+        $meta = $compose->readFile($name);
+        $ctx = $compose->actionContextForFile($name, (string) ($meta['content'] ?? ''));
+        if ($ctx === null) {
+            throw new HttpException('services.compose_action_logs_unavailable', 404);
+        }
+
+        $runtime = (string) ($ctx['runtime'] ?? '');
+        $service = (string) ($ctx['service'] ?? '');
+        if ($runtime === 'compose') {
+            $logs = (new ComposeFileRuntime())->actionLogs($name);
+        } elseif ($runtime === 'infra' && $service !== '') {
+            $logs = (new InfraRuntime())->actionLogs($service);
+        } else {
+            throw new HttpException('services.compose_action_logs_unavailable', 404);
+        }
+
+        return Response::json(['logs' => $logs]);
     }
 
     public function composeShow(Request $request, array $params = []): Response
