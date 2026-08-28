@@ -25,6 +25,7 @@ use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 use Manager\Models\PhpRuntime;
 use Manager\Models\PhpVersionId;
+use Manager\Models\SupervisorRuntime;
 
 function assert_true(bool $cond, string $msg): void
 {
@@ -314,6 +315,24 @@ assert_true($hasInclude->invoke($installer, 'php-9.9') === false, 'hasComposeInc
 file_put_contents($installProj . '/compose/php-8.6.yml', "services:\n  php-8.6: {}\n");
 $installer->repairComposeInclude('php-8.6');
 assert_true($hasInclude->invoke($installer, 'php-8.6') === true, 'repairComposeInclude idempotent');
+
+$installStoppedProj = sys_get_temp_dir() . '/php-install-stopped-' . bin2hex(random_bytes(4));
+mkdir($installStoppedProj . '/compose', 0775, true);
+file_put_contents(
+    $installStoppedProj . '/docker-compose.yml',
+    "include:\n  - path: compose/php-8.5.yml\n    project_directory: .\n\nservices: {}\n",
+);
+try {
+    (new PhpVersionInstaller($installStoppedProj, $stoppedDaemon))->install('8.6');
+    assert_true(false, 'PHP install must refuse when daemon stopped');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'PHP install refuse key');
+}
+assert_true(
+    !is_dir($installStoppedProj . '/docker_files/generated')
+        && !is_file($installStoppedProj . '/compose/php-8.6.yml'),
+    'PHP install wrote no files when daemon stopped',
+);
 
 $envMissingDir = sys_get_temp_dir() . '/mgr-env-missing-' . bin2hex(random_bytes(4));
 mkdir($envMissingDir, 0775, true);
@@ -705,6 +724,17 @@ try {
 $phpReqFiles = glob($phpTmp . '/requests/*.json') ?: [];
 assert_true($phpReqFiles === [], 'php request wrote no files');
 
+$supervisorTmp = sys_get_temp_dir() . '/supervisor-runtime-' . bin2hex(random_bytes(4));
+mkdir($supervisorTmp . '/requests', 0775, true);
+$supervisorStopped = new SupervisorRuntime($supervisorTmp, Config::projectPath(), $stoppedDaemon);
+try {
+    $supervisorStopped->request('supervisor-8.5', 'restart');
+    assert_true(false, 'supervisor request must refuse when daemon stopped');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'supervisor request refuse key');
+}
+assert_true((glob($supervisorTmp . '/requests/*.json') ?: []) === [], 'supervisor request wrote no files');
+
 $infraStopped = new InfraRuntime($infraTmp, $stoppedDaemon);
 try {
     $infraStopped->request('mysql', 'start');
@@ -720,11 +750,33 @@ file_put_contents($nginxTmp . '/requests/aaa__nginx__start.json', "{}\n");
 $nginxBusyDown = new NginxManagement($nginxTmp, '', '', $stoppedDaemon);
 $nginxStatusDown = $nginxBusyDown->status();
 assert_true(($nginxStatusDown['state'] ?? '') !== 'busy', 'nginx not busy overlay when daemon down');
+@unlink($nginxTmp . '/requests/aaa__nginx__start.json');
+try {
+    $nginxBusyDown->requestAction('start');
+    assert_true(false, 'nginx request must refuse when daemon stopped');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'nginx request refuse key');
+}
+assert_true((glob($nginxTmp . '/requests/*.json') ?: []) === [], 'nginx request wrote no files');
 
 file_put_contents($infraTmp . '/requests/ccc__mysql__start.json', "{}\n");
 $infraBusyDown = new InfraRuntime($infraTmp, $stoppedDaemon);
 $downStatuses = $infraBusyDown->statuses();
 assert_true(($downStatuses['mysql']['state'] ?? '') !== 'busy', 'mysql not busy overlay when daemon down');
+
+file_put_contents($phpTmp . '/requests/ddd__php-8.5__start.json', "{}\n");
+$phpStatusesDown = $phpStopped->statuses();
+assert_true(($phpStatusesDown['php-8.5']['state'] ?? '') !== 'busy', 'PHP not busy overlay when daemon down');
+
+$routes = require dirname(__DIR__) . '/routes.php';
+$hasPhpControllerStart = false;
+foreach ($routes as $route) {
+    if (($route[0] ?? null) === 'POST' && ($route[1] ?? null) === '/php-controller/start') {
+        $hasPhpControllerStart = true;
+        break;
+    }
+}
+assert_true($hasPhpControllerStart, 'POST /php-controller/start route registered');
 
 $bootCtrl = new class extends \Manager\Controllers\Controller {
     public function payload(): array

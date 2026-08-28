@@ -11,8 +11,10 @@ use Manager\Support\Config;
 /** Writes compose/Dockerfile/ini/source assets for a new PHP version (+ alpine/trixie). */
 final class PhpVersionInstaller
 {
-    public function __construct(private readonly string $projectPath = '')
-    {
+    public function __construct(
+        private readonly string $projectPath = '',
+        private readonly ?PhpControllerDaemon $daemon = null,
+    ) {
     }
 
     private function root(): string
@@ -40,6 +42,8 @@ final class PhpVersionInstaller
         ) {
             throw new HttpException('php_controller.version_already_installed', 409);
         }
+
+        ($this->daemon ?? new PhpControllerDaemon())->assertRunning();
 
         $root = $this->root();
         $this->writeDockerfile($version, $variant);
