@@ -58,6 +58,7 @@ return [
     ['PUT', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/configs/(?P<name>[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}\\.conf)', [SupervisorController::class, 'configSave']],
     ['DELETE', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/configs/(?P<name>[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}\\.conf)', [SupervisorController::class, 'configDelete']],
     ['POST', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/(?P<action>start|stop|restart|create)', [SupervisorController::class, 'action']],
+    ['POST', '/php-controller/start', [PhpControllerController::class, 'startDaemon']],
     ['GET', '/php-controllers', [PhpControllerController::class, 'index']],
     ['GET', '/php-controllers/available-versions', [PhpControllerController::class, 'availableVersions']],
     ['POST', '/php-controllers/install-version', [PhpControllerController::class, 'installVersion']],

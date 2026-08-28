@@ -726,4 +726,16 @@ $infraBusyDown = new InfraRuntime($infraTmp, $stoppedDaemon);
 $downStatuses = $infraBusyDown->statuses();
 assert_true(($downStatuses['mysql']['state'] ?? '') !== 'busy', 'mysql not busy overlay when daemon down');
 
+$bootCtrl = new class extends \Manager\Controllers\Controller {
+    public function payload(): array
+    {
+        return $this->bootstrapPayload();
+    }
+};
+$boot = $bootCtrl->payload();
+assert_true(isset($boot['php_controller_daemon']['container']), 'bootstrap daemon key');
+assert_true($boot['php_controller_daemon']['container'] === 'php_controller_container', 'bootstrap daemon container');
+assert_true(in_array($boot['php_controller_daemon']['state'], ['running', 'stopped', 'not_created'], true), 'bootstrap daemon state');
+assert_true(array_key_exists('start_available', $boot['php_controller_daemon']), 'bootstrap start_available');
+
 echo "All checks passed\n";
