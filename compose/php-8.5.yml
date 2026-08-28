@@ -1,6 +1,5 @@
 services:
   php-8.5:
-    profiles: ["php-8.5"]
     build:
       context: ./docker_files
       dockerfile: php8.5.Dockerfile
