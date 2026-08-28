@@ -11,11 +11,20 @@ use Manager\Support\DockerLiveState;
 
 final class NginxManagement
 {
+    private ?PhpControllerDaemon $daemon;
+
     public function __construct(
         private readonly string $controllerPath = '',
         private readonly string $runtimePath = '',
         private readonly string $logsPath = '',
+        ?PhpControllerDaemon $daemon = null,
     ) {
+        $this->daemon = $daemon;
+    }
+
+    private function daemon(): PhpControllerDaemon
+    {
+        return $this->daemon ??= new PhpControllerDaemon();
     }
 
     public function status(): array
@@ -36,7 +45,7 @@ final class NginxManagement
                 $status = array_merge($status, array_intersect_key($decoded, $status));
             }
         }
-        if (ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
+        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
         } else {
@@ -54,6 +63,8 @@ final class NginxManagement
         if (!in_array($action, ['start', 'stop', 'restart'], true)) {
             throw new HttpException('nginx.invalid_action', 400);
         }
+        $this->daemon()->assertRunning();
+
         $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/');
         $dir = $base . '/requests';
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {

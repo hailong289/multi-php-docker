@@ -7,6 +7,7 @@ namespace Manager\Controllers;
 use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\PhpControllerDaemon;
 use Manager\Models\PhpDetails;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
@@ -307,5 +308,12 @@ final class PhpControllerController extends Controller
             'message_key' => 'php_controller.extension_uninstall_requested',
             'message_parameters' => ['extension' => $name],
         ]);
+    }
+
+    public function startDaemon(Request $request, array $params = []): Response
+    {
+        $result = (new PhpControllerDaemon())->start();
+
+        return Response::json($result);
     }
 }

@@ -499,6 +499,19 @@ export const en = {
   'php_controller.action_failed': 'The last container action failed.',
   'php_controller.status_refreshed': 'Container state refreshed.',
   'php_controller.status_unavailable': 'Controller status is not available yet.',
+  'php_controller.daemon_banner':
+    'The PHP controller container is not running. Start/Stop/Create for PHP versions, Nginx, and services will not work until it is started.',
+  'php_controller.daemon_start': 'Start controller',
+  'php_controller.daemon_not_created_hint':
+    'This container does not exist yet. On the host run: docker compose up -d php-controller',
+  'php_controller.daemon_started': 'PHP controller started.',
+  'php_controller.daemon_already_running': 'PHP controller is already running.',
+  'php_controller.daemon_not_created': 'The PHP controller container has not been created.',
+  'php_controller.daemon_not_running':
+    'The PHP controller is not running. Start it before managing containers.',
+  'php_controller.daemon_docker_unavailable':
+    'Docker is not available, so the PHP controller cannot be started.',
+  'php_controller.daemon_start_failed': 'Could not start the PHP controller container.',
   'php_controller.create_hint': 'Create this optional container once (or run docker compose --profile <version> create <version> manually), then refresh.',
   'php_controller.details': 'Details',
   'php_controller.supervisor': 'Supervisor',
