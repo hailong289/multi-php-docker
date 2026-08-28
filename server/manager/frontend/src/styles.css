@@ -25,6 +25,9 @@
   --failure-text: #ffc1c7;
   --failure-line: #753744;
   --failure-bg: #3a1d27;
+  --warning-text: #f5d9a8;
+  --warning-line: #7a5b28;
+  --warning-bg: #3a2d16;
   --danger-text: #ffb1b8;
   --danger-line: #713745;
   --danger-bg: #301a24;
@@ -60,6 +63,9 @@
   --failure-text: #9d2434;
   --failure-line: #e0a1aa;
   --failure-bg: #fff0f2;
+  --warning-text: #8a5a10;
+  --warning-line: #e0c48a;
+  --warning-bg: #fff7e8;
   --danger-text: #a12838;
   --danger-line: #dc9ba5;
   --danger-bg: #fff0f2;
@@ -1138,6 +1144,28 @@ select:focus {
   color: var(--failure-text);
   border-color: var(--failure-line);
   background: var(--failure-bg);
+}
+
+.warning {
+  color: var(--warning-text);
+  border-color: var(--warning-line);
+  background: var(--warning-bg);
+}
+
+.php-controller-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.php-controller-banner-copy p {
+  margin: 8px 0 0;
+}
+
+.php-controller-banner .state-badge {
+  margin-right: 8px;
 }
 
 .command {

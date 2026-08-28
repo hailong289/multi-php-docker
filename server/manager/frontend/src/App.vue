@@ -9,7 +9,18 @@ import { authState } from './lib/authState'
 
 const { t, locale } = useI18n()
 const route = useRoute()
-const { fatalError, loadBootstrap, bootstrapped, logout, dockerStatusBusy } = useManager()
+const {
+  fatalError,
+  loadBootstrap,
+  bootstrapped,
+  logout,
+  dockerStatusBusy,
+  data,
+  stateClass,
+  stateLabel,
+  startPhpControllerDaemon,
+  isPending,
+} = useManager()
 const { startCurrentTour } = useTour()
 
 const showChrome = computed(() => {
@@ -17,6 +28,24 @@ const showChrome = computed(() => {
   if (!route.meta?.manager) return false
   if (authState.remote && (!authState.authenticated || authState.locked)) return false
   return true
+})
+
+const PHP_CONTROLLER_BANNER_ROUTES = new Set([
+  'nginx',
+  'services',
+  'service-logs',
+  'php-versions',
+  'php-version-catalog',
+  'php-version-detail',
+  'php-version-supervisor',
+  'php-version-run',
+  'php-version-logs',
+])
+
+const showPhpControllerBanner = computed(() => {
+  if (!showChrome.value || !bootstrapped.value) return false
+  if (data.php_controller_daemon?.state === 'running') return false
+  return PHP_CONTROLLER_BANNER_ROUTES.has(route.name)
 })
 
 const accessBadge = computed(() => {
@@ -213,6 +242,46 @@ watch(() => route.fullPath, updateTitle)
         {{ t('nav.php_versions') }}
       </RouterLink>
     </nav>
+
+    <div
+      v-if="showPhpControllerBanner"
+      class="notice warning php-controller-banner"
+      role="status"
+    >
+      <div class="php-controller-banner-copy">
+        <span
+          class="state-badge"
+          :class="stateClass(data.php_controller_daemon?.state)"
+        >
+          {{ stateLabel(data.php_controller_daemon?.state) }}
+        </span>
+        <p>{{ t('php_controller.daemon_banner') }}</p>
+        <p
+          v-if="!data.php_controller_daemon?.start_available"
+          class="create-hint"
+        >
+          {{ t('php_controller.daemon_not_created_hint') }}
+        </p>
+      </div>
+      <button
+        type="button"
+        class="primary"
+        :class="{ 'is-loading': isPending('php-daemon') }"
+        :disabled="!data.php_controller_daemon?.start_available || isPending('php-daemon')"
+        @click="startPhpControllerDaemon"
+      >
+        <span
+          v-if="isPending('php-daemon')"
+          class="btn-spinner"
+          aria-hidden="true"
+        ></span>
+        {{
+          isPending('php-daemon')
+            ? t('action.working')
+            : t('php_controller.daemon_start')
+        }}
+      </button>
+    </div>
 
     <div v-if="showChrome && fatalError" class="notice failure">{{ fatalError }}</div>
     <RouterView v-if="!showChrome || !fatalError" />

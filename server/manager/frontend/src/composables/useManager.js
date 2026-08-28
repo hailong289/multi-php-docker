@@ -38,6 +38,11 @@ const data = reactive({
   php_controllers: { targets: {}, statuses: {} },
   infra_services: { targets: {}, statuses: {} },
   supervisor_services: { targets: {}, statuses: {} },
+  php_controller_daemon: {
+    container: 'php_controller_container',
+    state: 'running',
+    start_available: false,
+  },
 })
 
 const form = reactive({
@@ -171,6 +176,11 @@ export function useManager() {
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
     data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
     data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
+    data.php_controller_daemon = payload.php_controller_daemon || {
+      container: 'php_controller_container',
+      state: 'running',
+      start_available: false,
+    }
     if (payload.csrf_token) setCsrfToken(payload.csrf_token)
   }
 
@@ -470,6 +480,20 @@ export function useManager() {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  async function startPhpControllerDaemon() {
+    pendingAction.value = { kind: 'php-daemon', action: 'start' }
+    try {
+      const result = await apiSend('POST', '/api/php-controller/start', {})
+      toastFromResult(result)
+      if (result.php_controller_daemon) data.php_controller_daemon = result.php_controller_daemon
+      await loadBootstrap({ silent: true })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -795,12 +819,17 @@ export function useManager() {
     return false
   })
 
+  const phpControllerDaemonRunning = computed(
+    () => data.php_controller_daemon?.state === 'running',
+  )
+
   function phpServiceState(service) {
     return data.php_controllers.statuses[service]?.state || 'not_created'
   }
 
   function phpActionEnabled(service, action) {
     if (isPending('php', { service })) return false
+    if (!phpControllerDaemonRunning.value) return false
     const state = phpServiceState(service)
     const target = data.php_controllers.targets[service]
     if (action === 'create') {
@@ -822,6 +851,7 @@ export function useManager() {
 
   function infraActionEnabled(service, action) {
     if (isPending('infra', { service })) return false
+    if (!phpControllerDaemonRunning.value) return false
     const state = infraServiceState(service)
     const target = data.infra_services.targets[service]
     if (action === 'create') {
@@ -860,6 +890,7 @@ export function useManager() {
     busy,
     pendingAction,
     dockerStatusBusy,
+    phpControllerDaemonRunning,
     modalOpen,
     bootstrapped,
     data,
@@ -889,6 +920,7 @@ export function useManager() {
     deleteDomain,
     reloadNginx,
     phpAction,
+    startPhpControllerDaemon,
     infraAction,
     openDomainEdit,
     closeDomainModal,

@@ -66,6 +66,7 @@ async function loadCatalog({ forceRefresh = false, keepRows = false } = {}) {
 }
 
 async function installVersion(row) {
+  if (data.php_controller_daemon?.state !== 'running') return
   if (row.installed || !row.installable || installing.value) return
   installing.value = row.tag
   try {
@@ -224,7 +225,7 @@ onMounted(async () => {
                 v-if="row.installable && !row.installed"
                 type="button"
                 class="primary"
-                :disabled="!!installing || refreshing"
+                :disabled="!!installing || refreshing || data.php_controller_daemon?.state !== 'running'"
                 @click="installVersion(row)"
               >
                 <span
