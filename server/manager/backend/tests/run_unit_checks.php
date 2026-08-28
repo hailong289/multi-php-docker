@@ -21,6 +21,7 @@ use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
+use Manager\Models\PhpRuntime;
 use Manager\Models\PhpVersionId;
 
 function assert_true(bool $cond, string $msg): void
@@ -191,6 +192,31 @@ assert_true(!is_file($composeProj . '/compose/custom.yml'), 'custom compose dele
 $pullId = (new InfraRuntime($infraTmp))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
+
+$frame = pack('C', 1) . "\0\0\0" . pack('N', 5) . 'hello';
+assert_true(\Manager\Support\DockerExec::decodeLogStream($frame) === 'hello', 'decode multiplexed docker logs');
+assert_true(\Manager\Support\DockerExec::decodeLogStream("plain\nlog") === "plain\nlog", 'decode raw docker logs');
+$mysqlLogs = (new InfraRuntime($infraTmp))->logs('mysql', 50);
+assert_true(($mysqlLogs['service'] ?? '') === 'mysql', 'infra logs service');
+assert_true(($mysqlLogs['container'] ?? '') === 'mysql_container', 'infra logs container');
+assert_true(array_key_exists('available', $mysqlLogs), 'infra logs available key');
+try {
+    (new InfraRuntime($infraTmp))->logs('nope');
+    assert_true(false, 'invalid infra logs service');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'services.invalid_service', 'invalid infra logs service');
+}
+
+$phpLogs = (new PhpRuntime())->logs('php-8.5', 50);
+assert_true(($phpLogs['service'] ?? '') === 'php-8.5', 'php logs service');
+assert_true(($phpLogs['container'] ?? '') === 'php8.5_container', 'php logs container');
+assert_true(array_key_exists('available', $phpLogs), 'php logs available key');
+try {
+    (new PhpRuntime())->logs('nope');
+    assert_true(false, 'invalid php logs service');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.invalid_service', 'invalid php logs service');
+}
 
 use Manager\Support\RemoteAuth;
 

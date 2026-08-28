@@ -123,4 +123,14 @@ final class InfraController extends Controller
             'message_key' => 'services.compose_saved',
         ]);
     }
+
+    public function logs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $tail = (int) ($request->queryParam('tail') ?? 300);
+
+        return Response::json([
+            'logs' => (new InfraRuntime())->logs($service, $tail),
+        ]);
+    }
 }

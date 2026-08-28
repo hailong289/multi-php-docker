@@ -1,12 +1,14 @@
 <script setup>
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import TableSkeleton from '../components/TableSkeleton.vue'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
+const router = useRouter()
 const { t } = useI18n()
 const {
   loading,
@@ -199,6 +201,10 @@ async function pullRecreate() {
   await infraAction(service, 'pull-recreate')
 }
 
+function openLogs(service) {
+  router.push({ name: 'service-logs', params: { service } })
+}
+
 watch(tab, async (next) => {
   if (next !== 'compose') return
   await refreshFiles()
@@ -359,6 +365,14 @@ onMounted(() => {
                       : t('services.restart')
                   }}
                 </button>
+                <button
+                  type="button"
+                  data-tour="services-logs-btn"
+                  :disabled="infraServiceState(service) === 'not_created'"
+                  @click="openLogs(service)"
+                >
+                  {{ t('services.view_logs') }}
+                </button>
               </div>
             </td>
           </tr>
@@ -366,7 +380,7 @@ onMounted(() => {
       </table>
     </div>
 
-    <div v-else class="services-compose" data-tour="services-compose">
+    <div v-else-if="tab === 'compose'" class="services-compose" data-tour="services-compose">
       <div class="panel-body nginx-domain-logs-toolbar">
         <p class="status-line">
           {{ t('services.compose_hint') }}
