@@ -12,12 +12,22 @@ final class PhpControllerDaemon
 {
     public const CONTAINER = 'php_controller_container';
 
-    /** @param (callable(): ?string)|null $stateFor */
-    /** @param (callable(): int)|null $starter */
+    /** @var (callable(): ?string)|null */
+    private mixed $stateFor = null;
+
+    /** @var (callable(): int)|null */
+    private mixed $starter = null;
+
+    /**
+     * @param (callable(): ?string)|null $stateFor
+     * @param (callable(): int)|null $starter
+     */
     public function __construct(
-        private readonly mixed $stateFor = null,
-        private readonly mixed $starter = null,
+        ?callable $stateFor = null,
+        ?callable $starter = null,
     ) {
+        $this->stateFor = $stateFor;
+        $this->starter = $starter;
     }
 
     /**
@@ -67,7 +77,11 @@ final class PhpControllerDaemon
         if ($live === 'running') {
             return [
                 'message_key' => 'php_controller.daemon_already_running',
-                'php_controller_daemon' => $this->status(),
+                'php_controller_daemon' => [
+                    'container' => self::CONTAINER,
+                    'state' => 'running',
+                    'start_available' => false,
+                ],
             ];
         }
         if ($live === 'not_created') {
