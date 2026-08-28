@@ -19,6 +19,8 @@ use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
+use Manager\Models\NginxManagement;
+use Manager\Models\PhpControllerDaemon;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 use Manager\Models\PhpRuntime;
@@ -595,6 +597,98 @@ try {
     assert_true(false, 'scratch rejects missing session');
 } catch (\Manager\Http\HttpException $e) {
     assert_true($e->errorKey() === 'php_controller.session_not_found', 'scratch rejects missing session');
+}
+
+$runningDaemon = new PhpControllerDaemon(static fn (): string => 'running');
+$stoppedDaemon = new PhpControllerDaemon(static fn (): string => 'stopped');
+$missingDaemon = new PhpControllerDaemon(static fn (): string => 'not_created');
+$nullDaemon = new PhpControllerDaemon(static fn (): ?string => null);
+
+$runningStatus = $runningDaemon->status();
+assert_true($runningStatus['container'] === 'php_controller_container', 'daemon container name');
+assert_true($runningStatus['state'] === 'running', 'daemon running state');
+assert_true($runningStatus['start_available'] === false, 'daemon running not startable');
+
+$stoppedStatus = $stoppedDaemon->status();
+assert_true($stoppedStatus['state'] === 'stopped', 'daemon stopped state');
+assert_true($stoppedStatus['start_available'] === true, 'daemon stopped is startable');
+
+$missingStatus = $missingDaemon->status();
+assert_true($missingStatus['state'] === 'not_created', 'daemon missing state');
+assert_true($missingStatus['start_available'] === false, 'daemon missing not startable');
+
+$nullStatus = $nullDaemon->status();
+assert_true($nullStatus['state'] === 'not_created', 'daemon probe-null aliases not_created');
+assert_true($nullStatus['start_available'] === false, 'daemon probe-null not startable');
+
+$runningDaemon->assertRunning();
+
+try {
+    $stoppedDaemon->assertRunning();
+    assert_true(false, 'stopped daemon must fail assertRunning');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'assertRunning key');
+    assert_true($e->status() === 409, 'assertRunning 409');
+}
+
+$already = $runningDaemon->start();
+assert_true($already['message_key'] === 'php_controller.daemon_already_running', 'start no-op when running');
+assert_true($already['php_controller_daemon']['state'] === 'running', 'start no-op status');
+
+try {
+    $missingDaemon->start();
+    assert_true(false, 'start missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'start missing key');
+    assert_true($e->status() === 409, 'start missing 409');
+}
+
+$nullStart = new PhpControllerDaemon(static fn (): ?string => null);
+try {
+    $nullStart->start();
+    assert_true(false, 'start probe-null must 503');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_docker_unavailable', 'start probe-null key');
+    assert_true($e->status() === 503, 'start probe-null 503');
+}
+
+$started = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    static fn (): int => 204,
+);
+$startOk = $started->start();
+assert_true($startOk['message_key'] === 'php_controller.daemon_started', 'start 204 key');
+assert_true($startOk['php_controller_daemon']['state'] === 'running', 'start 204 reports running');
+assert_true($startOk['php_controller_daemon']['start_available'] === false, 'start 204 not startable');
+
+$started304 = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    static fn (): int => 304,
+);
+assert_true($started304->start()['message_key'] === 'php_controller.daemon_started', 'start 304 key');
+
+$started404 = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    static fn (): int => 404,
+);
+try {
+    $started404->start();
+    assert_true(false, 'start 404 must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'start 404 key');
+    assert_true($e->status() === 409, 'start 404 409');
+}
+
+$startedFail = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    static fn (): int => 500,
+);
+try {
+    $startedFail->start();
+    assert_true(false, 'start 500 must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_start_failed', 'start 500 key');
+    assert_true($e->status() === 502, 'start 500 502');
 }
 
 echo "All checks passed\n";
