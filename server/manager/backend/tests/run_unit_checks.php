@@ -151,10 +151,15 @@ assert_true($infraTargets['redis']['container'] === 'redis_container', 'redis co
 assert_true($infraTargets['mysql']['compose_file'] === 'compose/mysql.yml', 'mysql compose file');
 assert_true(str_contains($infraTargets['rabbitmq']['create_command'], '--profile rabbitmq'), 'rabbitmq create cmd');
 
+$runningDaemon = new PhpControllerDaemon(static fn (): string => 'running');
+$stoppedDaemon = new PhpControllerDaemon(static fn (): string => 'stopped');
+$missingDaemon = new PhpControllerDaemon(static fn (): string => 'not_created');
+$nullDaemon = new PhpControllerDaemon(static fn (): ?string => null);
+
 $infraTmp = sys_get_temp_dir() . '/infra-runtime-' . bin2hex(random_bytes(4));
 mkdir($infraTmp . '/requests', 0775, true);
 mkdir($infraTmp . '/status', 0775, true);
-$infra = new InfraRuntime($infraTmp);
+$infra = new InfraRuntime($infraTmp, $runningDaemon);
 $statuses = $infra->statuses();
 $mysqlState = $statuses['mysql']['state'] ?? '';
 assert_true(
@@ -191,9 +196,9 @@ try {
 }
 $compose->deleteFile('custom.yml');
 assert_true(!is_file($composeProj . '/compose/custom.yml'), 'custom compose deleted');
-$pullId = (new InfraRuntime($infraTmp))->request('redis', 'pull-recreate');
+$pullId = (new InfraRuntime($infraTmp, $runningDaemon))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
-assert_true((new InfraRuntime($infraTmp))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
+assert_true((new InfraRuntime($infraTmp, $runningDaemon))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
 
 $frame = pack('C', 1) . "\0\0\0" . pack('N', 5) . 'hello';
 assert_true(\Manager\Support\DockerExec::decodeLogStream($frame) === 'hello', 'decode multiplexed docker logs');
@@ -599,11 +604,6 @@ try {
     assert_true($e->errorKey() === 'php_controller.session_not_found', 'scratch rejects missing session');
 }
 
-$runningDaemon = new PhpControllerDaemon(static fn (): string => 'running');
-$stoppedDaemon = new PhpControllerDaemon(static fn (): string => 'stopped');
-$missingDaemon = new PhpControllerDaemon(static fn (): string => 'not_created');
-$nullDaemon = new PhpControllerDaemon(static fn (): ?string => null);
-
 $runningStatus = $runningDaemon->status();
 assert_true($runningStatus['container'] === 'php_controller_container', 'daemon container name');
 assert_true($runningStatus['state'] === 'running', 'daemon running state');
@@ -690,5 +690,40 @@ try {
     assert_true($e->errorKey() === 'php_controller.daemon_start_failed', 'start 500 key');
     assert_true($e->status() === 502, 'start 500 502');
 }
+
+$phpTmp = sys_get_temp_dir() . '/php-runtime-' . bin2hex(random_bytes(4));
+mkdir($phpTmp . '/requests', 0775, true);
+mkdir($phpTmp . '/status', 0775, true);
+
+$phpStopped = new PhpRuntime($phpTmp, $stoppedDaemon);
+try {
+    $phpStopped->request('php-8.5', 'start');
+    assert_true(false, 'php request must refuse when daemon stopped');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'php request refuse key');
+}
+$phpReqFiles = glob($phpTmp . '/requests/*.json') ?: [];
+assert_true($phpReqFiles === [], 'php request wrote no files');
+
+$infraStopped = new InfraRuntime($infraTmp, $stoppedDaemon);
+try {
+    $infraStopped->request('mysql', 'start');
+    assert_true(false, 'infra request must refuse when daemon stopped');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'infra request refuse key');
+}
+
+$nginxTmp = sys_get_temp_dir() . '/nginx-mgmt-' . bin2hex(random_bytes(4));
+mkdir($nginxTmp . '/requests', 0775, true);
+mkdir($nginxTmp . '/status', 0775, true);
+file_put_contents($nginxTmp . '/requests/aaa__nginx__start.json', "{}\n");
+$nginxBusyDown = new NginxManagement($nginxTmp, '', '', $stoppedDaemon);
+$nginxStatusDown = $nginxBusyDown->status();
+assert_true(($nginxStatusDown['state'] ?? '') !== 'busy', 'nginx not busy overlay when daemon down');
+
+file_put_contents($infraTmp . '/requests/ccc__mysql__start.json', "{}\n");
+$infraBusyDown = new InfraRuntime($infraTmp, $stoppedDaemon);
+$downStatuses = $infraBusyDown->statuses();
+assert_true(($downStatuses['mysql']['state'] ?? '') !== 'busy', 'mysql not busy overlay when daemon down');
 
 echo "All checks passed\n";

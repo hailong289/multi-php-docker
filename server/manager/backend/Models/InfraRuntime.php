@@ -36,9 +36,17 @@ final class InfraRuntime
 
     private readonly string $basePath;
 
-    public function __construct(?string $basePath = null)
+    private ?PhpControllerDaemon $daemon;
+
+    public function __construct(?string $basePath = null, ?PhpControllerDaemon $daemon = null)
     {
         $this->basePath = rtrim($basePath ?? Config::phpControllerPath(), '/');
+        $this->daemon = $daemon;
+    }
+
+    private function daemon(): PhpControllerDaemon
+    {
+        return $this->daemon ??= new PhpControllerDaemon();
     }
 
     public static function targets(): array
@@ -82,7 +90,7 @@ final class InfraRuntime
                     $status = array_merge($status, array_intersect_key($decoded, $status));
                 }
             }
-            if ($this->hasBlockingRequests($service)) {
+            if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
                 $status['message_key'] = 'services.processing';
             } else {
@@ -116,6 +124,8 @@ final class InfraRuntime
         if (!in_array($action, ['start', 'stop', 'restart', 'create', 'pull-recreate'], true)) {
             throw new HttpException('services.invalid_action', 400);
         }
+
+        $this->daemon()->assertRunning();
 
         $requestDir = $this->basePath . '/requests';
         if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {
