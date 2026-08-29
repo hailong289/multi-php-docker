@@ -84,14 +84,20 @@ on handlerPath()
   return scriptsDir & "/hosts/hosts_protocol_macos.sh"
 end handlerPath
 
-on open location theURL
+on launchDetached(theArg)
   set h to handlerPath()
-  do shell script quoted form of h & " " & quoted form of theURL
+  -- Return immediately. Blocking do shell script plus nested
+  -- osascript-with-admin freezes this applet (Not Responding),
+  -- and later multi-php-hosts: opens pile onto the hung instance.
+  do shell script "/usr/bin/nohup " & quoted form of h & " " & quoted form of theArg & " </dev/null >/dev/null 2>&1 &"
+end launchDetached
+
+on open location theURL
+  launchDetached(theURL)
 end open location
 
 on run
-  set h to handlerPath()
-  do shell script quoted form of h & " write"
+  launchDetached("write")
 end run
 APPLESCRIPT
 
@@ -119,6 +125,7 @@ APPLESCRIPT
   plist_set CFBundleIdentifier string local.multi-php-docker-serve.hosts
   plist_set CFBundleName string MultiPhpHosts
   plist_set CFBundleDisplayName string MultiPhpHosts
+  plist_set LSUIElement bool true
 
   # Drop quarantine so browser/Launch Services can open the local app.
   xattr -cr "$MACOS_APP" 2>/dev/null || true
