@@ -5,6 +5,7 @@ import LoginView from '../views/LoginView.vue'
 import PhpVersionsView from '../views/PhpVersionsView.vue'
 import PhpVersionCatalogView from '../views/PhpVersionCatalogView.vue'
 import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
+import PhpRunView from '../views/PhpRunView.vue'
 import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
@@ -70,6 +71,12 @@ const router = createRouter({
       name: 'php-version-supervisor',
       component: SupervisorView,
       meta: { titleKey: 'supervisor.title', manager: true },
+    },
+    {
+      path: '/php-versions/:service/run',
+      name: 'php-version-run',
+      component: PhpRunView,
+      meta: { titleKey: 'php_controller.run_page_title', manager: true },
     },
     {
       path: '/php-versions/:service',

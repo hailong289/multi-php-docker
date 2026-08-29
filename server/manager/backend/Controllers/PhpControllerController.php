@@ -11,6 +11,8 @@ use Manager\Models\PhpDetails;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 use Manager\Models\PhpRuntime;
+use Manager\Models\PhpScratchPad;
+use Manager\Models\PhpSnippetRunner;
 use Manager\Models\DockerHubPhpTags;
 use Manager\Models\PhpVersionInstaller;
 
@@ -121,6 +123,117 @@ final class PhpControllerController extends Controller
         return Response::json([
             'message_key' => 'php_controller.ini_saved',
             'php_details' => (new PhpDetails())->forService($service),
+        ]);
+    }
+
+    public function runSnippet(Request $request, array $params = []): Response
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        $service = (string) ($params['service'] ?? '');
+        $code = $request->json()['code'] ?? null;
+        if (!is_string($code)) {
+            throw new HttpException('php_controller.code_empty', 400);
+        }
+        $result = (new PhpSnippetRunner())->run($service, $code);
+        $sessionId = $request->json()['session_id'] ?? null;
+        $scratch = (new PhpScratchPad())->write(
+            $service,
+            $code,
+            $result,
+            true,
+            is_string($sessionId) && PhpScratchPad::isValidId($sessionId) ? $sessionId : null,
+        );
+
+        return Response::json([
+            'message_key' => $result['timed_out']
+                ? 'php_controller.run_timed_out'
+                : 'php_controller.run_finished',
+            'php_run' => $result,
+            'php_scratch' => $scratch,
+        ]);
+    }
+
+    public function showScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'php_scratch' => (new PhpScratchPad())->read($service),
+        ]);
+    }
+
+    public function createScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $name = $request->json()['name'] ?? '';
+        if (!is_string($name)) {
+            $name = '';
+        }
+        $scratch = (new PhpScratchPad())->create($service, $name);
+
+        return Response::json([
+            'message_key' => 'php_controller.session_created',
+            'php_scratch' => $scratch,
+        ]);
+    }
+
+    public function saveScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $id = (string) ($params['id'] ?? '');
+        $body = $request->json();
+        if ($id === '') {
+            $id = is_string($body['session_id'] ?? null) ? $body['session_id'] : '';
+        }
+        $pad = new PhpScratchPad();
+        if ($id !== '' && !PhpScratchPad::isValidId($id)) {
+            throw new HttpException('php_controller.session_not_found', 404);
+        }
+        $code = $body['code'] ?? null;
+        $name = $body['name'] ?? null;
+        $activate = !empty($body['activate']);
+        $scratch = $pad->read($service);
+        if ($id === '') {
+            $id = (string) $scratch['active_id'];
+        }
+        if (is_string($name)) {
+            $scratch = $pad->rename($service, $id, $name);
+        }
+        if (is_string($code)) {
+            $result = $body['result'] ?? null;
+            $scratch = $pad->write(
+                $service,
+                $code,
+                is_array($result) ? $result : null,
+                true,
+                $id,
+            );
+        } elseif ($activate || $id !== $scratch['active_id']) {
+            $scratch = $pad->activate($service, $id);
+        }
+
+        return Response::json([
+            'message_key' => is_string($name) && !is_string($code)
+                ? 'php_controller.session_renamed'
+                : 'php_controller.scratch_saved',
+            'php_scratch' => $scratch,
+        ]);
+    }
+
+    public function deleteScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $id = (string) ($params['id'] ?? '');
+        if (!PhpScratchPad::isValidId($id)) {
+            throw new HttpException('php_controller.session_not_found', 404);
+        }
+        $scratch = (new PhpScratchPad())->delete($service, $id);
+
+        return Response::json([
+            'message_key' => 'php_controller.session_deleted',
+            'php_scratch' => $scratch,
         ]);
     }
 
