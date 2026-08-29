@@ -192,7 +192,7 @@ watch(() => route.fullPath, updateTitle)
       <RouterLink
         to="/services"
         data-tour="nav-services"
-        :aria-current="route.name === 'services' ? 'page' : undefined"
+        :aria-current="route.name === 'services' || route.name === 'service-logs' ? 'page' : undefined"
       >
         {{ t('nav.services') }}
       </RouterLink>
@@ -203,7 +203,9 @@ watch(() => route.fullPath, updateTitle)
           route.name === 'php-versions' ||
           route.name === 'php-version-detail' ||
           route.name === 'php-version-catalog' ||
-          route.name === 'php-version-supervisor'
+          route.name === 'php-version-supervisor' ||
+          route.name === 'php-version-run' ||
+          route.name === 'php-version-logs'
             ? 'page'
             : undefined
         "

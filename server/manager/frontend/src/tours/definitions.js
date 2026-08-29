@@ -5,7 +5,9 @@ export function tourIdForRoute(routeName) {
     domains: 'domains',
     nginx: 'nginx',
     services: 'services',
+    'service-logs': 'service-logs',
     'php-versions': 'php-versions',
+    'php-version-logs': 'php-version-logs',
     'php-version-detail': 'php-version-detail',
     'php-version-catalog': 'php-version-catalog',
     'php-version-supervisor': 'php-version-supervisor',
@@ -195,6 +197,16 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="services-logs-btn"]',
+        prepareClick: '[data-tour="services-control-tab"]',
+        popover: {
+          title: t('tour.services.logs_title'),
+          description: t('tour.services.logs_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="services-compose-tab"]',
         prepareClick: '[data-tour="services-compose-tab"]',
         popover: {
@@ -221,6 +233,17 @@ export function buildTourSteps(t) {
           title: t('tour.services.compose_editor_title'),
           description: t('tour.services.compose_editor_body'),
           side: 'top',
+          align: 'start',
+        },
+      },
+    ],
+    'service-logs': [
+      {
+        element: '[data-tour="service-logs-panel"]',
+        popover: {
+          title: t('tour.services.logs_title'),
+          description: t('tour.services.logs_body'),
+          side: 'bottom',
           align: 'start',
         },
       },
@@ -254,6 +277,15 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="php-logs-btn"]',
+        popover: {
+          title: t('tour.php.logs_title'),
+          description: t('tour.php.logs_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="php-run"]',
         popover: {
           title: t('tour.php.run_title'),
@@ -268,6 +300,17 @@ export function buildTourSteps(t) {
           title: t('tour.php.supervisor_title'),
           description: t('tour.php.supervisor_body'),
           side: 'left',
+          align: 'start',
+        },
+      },
+    ],
+    'php-version-logs': [
+      {
+        element: '[data-tour="service-logs-panel"]',
+        popover: {
+          title: t('tour.php.logs_title'),
+          description: t('tour.php.logs_body'),
+          side: 'bottom',
           align: 'start',
         },
       },

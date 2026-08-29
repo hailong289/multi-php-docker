@@ -1445,6 +1445,19 @@ select:focus {
   min-height: 240px;
 }
 
+.supervisor-logs .nginx-heading p {
+  margin: 0;
+}
+
+.service-logs-page .supervisor-logs {
+  border-top: none;
+}
+
+.service-logs-page .nginx-log-card pre {
+  min-height: 52vh;
+  max-height: calc(100vh - 280px);
+}
+
 .table-wrap tr.is-selected td {
   background: color-mix(in srgb, var(--accent, #2563eb) 10%, transparent);
 }

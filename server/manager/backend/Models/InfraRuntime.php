@@ -8,6 +8,7 @@ use Manager\Http\HttpException;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
+use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
 
 final class InfraRuntime
@@ -134,5 +135,30 @@ final class InfraRuntime
         }
 
         return $requestId;
+    }
+
+    /**
+     * @return array{service: string, container: string, available: bool, content: string, truncated: bool, updated_at: string}
+     */
+    public function logs(string $service, int $tail = 300): array
+    {
+        $targets = self::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('services.invalid_service', 400);
+        }
+        $container = (string) $targets[$service]['container'];
+        $tail = max(1, min(2000, $tail));
+        $content = DockerExec::containerLogs($container, $tail);
+        $available = $content !== null;
+        $text = $available ? (string) $content : '';
+
+        return [
+            'service' => $service,
+            'container' => $container,
+            'available' => $available,
+            'content' => $text,
+            'truncated' => $available && strlen($text) >= 262144,
+            'updated_at' => date(DATE_ATOM),
+        ];
     }
 }
