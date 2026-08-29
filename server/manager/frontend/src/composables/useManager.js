@@ -3,6 +3,11 @@ import { useI18n } from 'vue-i18n'
 import { apiGet, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
+import {
+  HOSTS_WRITE_POLL_MS,
+  HOSTS_WRITE_TIMEOUT_MS,
+  hostsWritePollState,
+} from '../lib/hostsWriteWait'
 import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 
 const reloadMessageKeys = {
@@ -562,53 +567,48 @@ export function useManager() {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  async function waitForHostsResult(previousUpdatedAt, maxAttempts = 5) {
+  async function waitForHostsResult(previousUpdatedAt, write = {}) {
+    const requestId = write.token || ''
+    const startedAt = Date.now()
+    const maxAttempts = Math.max(1, Math.ceil(HOSTS_WRITE_TIMEOUT_MS / HOSTS_WRITE_POLL_MS))
     let latestBusy = null
     let pendingSync = false
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let attempt = 0
+    while (Date.now() - startedAt < HOSTS_WRITE_TIMEOUT_MS) {
+      attempt += 1
       hostsProgress.value = {
         attempt,
         maxAttempts,
         message_key: 'hosts.progress_checking',
       }
-      await sleep(1000)
+      if (attempt > 1) await sleep(HOSTS_WRITE_POLL_MS)
       try {
         const payload = await apiGet('/api/hosts/status')
         pendingSync = !!payload.pending_sync
         data.pending_sync = pendingSync
         const status = payload.hosts_status
-        if (!status?.updated_at) {
+        const state = hostsWritePollState({
+          status,
+          pendingSync,
+          previousUpdatedAt,
+          requestId,
+        })
+        if (state === 'done') {
+          data.hosts_status = status
           hostsProgress.value = {
             attempt,
             maxAttempts,
-            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
+            message_key: status.message_key || 'hosts.progress_done',
           }
-          continue
+          return { status, pendingSync: false }
         }
-        if (previousUpdatedAt && status.updated_at === previousUpdatedAt) {
-          hostsProgress.value = {
-            attempt,
-            maxAttempts,
-            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
-          }
-          continue
-        }
-        data.hosts_status = status
-        if (status.status === 'busy' || (pendingSync && status.status === 'success')) {
-          latestBusy = status.status === 'busy' ? status : latestBusy
-          hostsProgress.value = {
-            attempt,
-            maxAttempts,
-            message_key: status.message_key || 'hosts.processing',
-          }
-          continue
-        }
+        if (status?.status === 'busy') latestBusy = status
         hostsProgress.value = {
           attempt,
           maxAttempts,
-          message_key: status.message_key || 'hosts.progress_done',
+          message_key:
+            status?.message_key || (pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_checking'),
         }
-        return { status, pendingSync: false }
       } catch (_) {
         hostsProgress.value = {
           attempt,
@@ -635,12 +635,12 @@ export function useManager() {
 
     hostsProgress.value = {
       attempt: 0,
-      maxAttempts: 45,
+      maxAttempts: Math.max(1, Math.ceil(HOSTS_WRITE_TIMEOUT_MS / HOSTS_WRITE_POLL_MS)),
       message_key: launched ? 'hosts.progress_protocol' : 'hosts.progress_starting',
     }
 
     try {
-      const outcome = await waitForHostsResult(previousUpdatedAt, 45)
+      const outcome = await waitForHostsResult(previousUpdatedAt, write)
       const status = outcome?.status || null
       await loadBootstrap({ silent: true })
       data.pending_sync = !!outcome?.pendingSync || !!data.pending_sync
