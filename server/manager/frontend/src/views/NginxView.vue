@@ -41,6 +41,7 @@ const stateLabel = computed(() => t(`nginx.state_${nginx.value.state || 'not_cre
 const dirty = computed(() => draft.value !== original.value)
 
 function enabled(action) {
+  if (data.php_controller_daemon?.state !== 'running') return false
   if (pending.value || nginx.value.state === 'busy') return false
   if (action === 'start') return nginx.value.state === 'stopped'
   return nginx.value.state === 'running'

@@ -499,6 +499,19 @@ export const vi = {
   'php_controller.action_failed': 'Thao tác container gần nhất đã thất bại.',
   'php_controller.status_refreshed': 'Đã làm mới trạng thái container.',
   'php_controller.status_unavailable': 'Chưa có trạng thái từ controller.',
+  'php_controller.daemon_banner':
+    'Container PHP controller đang tắt. Không thể Start/Stop/Create phiên bản PHP, Nginx và dịch vụ cho đến khi bật lại.',
+  'php_controller.daemon_start': 'Bật controller',
+  'php_controller.daemon_not_created_hint':
+    'Container chưa được tạo. Trên máy host chạy: docker compose up -d php-controller',
+  'php_controller.daemon_started': 'Đã bật PHP controller.',
+  'php_controller.daemon_already_running': 'PHP controller đang chạy.',
+  'php_controller.daemon_not_created': 'Container PHP controller chưa được tạo.',
+  'php_controller.daemon_not_running':
+    'PHP controller chưa chạy. Hãy bật trước khi điều khiển container.',
+  'php_controller.daemon_docker_unavailable':
+    'Không kết nối được Docker nên không thể bật PHP controller.',
+  'php_controller.daemon_start_failed': 'Không thể bật container PHP controller.',
   'php_controller.create_hint': 'Tạo container tùy chọn này một lần (hoặc chạy thủ công docker compose --profile <version> create <version>), rồi làm mới trang.',
   'php_controller.details': 'Chi tiết',
   'php_controller.supervisor': 'Supervisor',

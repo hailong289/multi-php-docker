@@ -70,6 +70,7 @@ function showCreate() {
 }
 
 function enabled(action) {
+  if (data.php_controller_daemon?.state !== 'running') return false
   if (pending.value) return false
   const state = currentState.value
   if (action === 'create') return state === 'not_created'

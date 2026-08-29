@@ -165,8 +165,13 @@ final class SupervisorController extends Controller
         $state = $statuses[$service]['state'] ?? 'not_created';
         $requestId = null;
         if (in_array($state, ['running', 'stopped'], true)) {
-            $requestId = $runtime->request($service, 'restart');
-            $statuses = $runtime->statuses();
+            // Saving the config remains successful when the controller daemon is unavailable.
+            try {
+                $requestId = $runtime->request($service, 'restart');
+                $statuses = $runtime->statuses();
+            } catch (HttpException) {
+                $requestId = null;
+            }
         }
 
         return [

@@ -56,6 +56,44 @@ final class DockerExec
     }
 
     /**
+     * Start a container by name via the Engine API.
+     * 0 = socket unreachable; otherwise the HTTP status (204/304/404/5xx).
+     */
+    public static function startNamedContainer(string $name): int
+    {
+        $name = ltrim($name, '/');
+        if ($name === '' || !DockerLiveState::available()) {
+            return 0;
+        }
+
+        $sock = DockerLiveState::socketPath();
+        $fp = @stream_socket_client('unix://' . $sock, $errno, $errstr, 2.0);
+        if ($fp === false) {
+            return 0;
+        }
+
+        stream_set_timeout($fp, 5);
+        $path = '/containers/' . rawurlencode($name) . '/start';
+        $request = "POST {$path} HTTP/1.0\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        if (fwrite($fp, $request) === false) {
+            fclose($fp);
+
+            return 0;
+        }
+
+        $response = stream_get_contents($fp);
+        fclose($fp);
+        if (!is_string($response) || $response === '') {
+            return 0;
+        }
+        if (!preg_match('/^HTTP\/\d\.\d\s+(\d{3})\b/', $response, $m)) {
+            return 0;
+        }
+
+        return (int) $m[1];
+    }
+
+    /**
      * @param list<string> $cmd
      */
     public static function createExec(

@@ -11,6 +11,7 @@ use Manager\Models\HostsSync;
 use Manager\Models\InfraRuntime;
 use Manager\Models\NginxManagement;
 use Manager\Models\NginxReload;
+use Manager\Models\PhpControllerDaemon;
 use Manager\Models\PhpRuntime;
 use Manager\Models\PhpVersionCatalog;
 use Manager\Models\SslCertificates;
@@ -51,6 +52,7 @@ abstract class Controller
                 'targets' => PhpRuntime::targets(),
                 'statuses' => $php->statuses(),
             ],
+            'php_controller_daemon' => (new PhpControllerDaemon())->status(),
             'infra_services' => [
                 'targets' => InfraRuntime::targets(),
                 'statuses' => $infra->statuses(),
