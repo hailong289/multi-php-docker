@@ -222,16 +222,15 @@ watch(() => route.fullPath, updateTitle)
       <RouterLink
         to="/services"
         data-tour="nav-services"
-        :aria-current="route.name === 'services' || route.name === 'service-logs' ? 'page' : undefined"
+        :aria-current="
+          route.name === 'services' ||
+          route.name === 'service-logs' ||
+          route.name === 'compose-yaml'
+            ? 'page'
+            : undefined
+        "
       >
         {{ t('nav.services') }}
-      </RouterLink>
-      <RouterLink
-        to="/compose"
-        data-tour="nav-compose"
-        :aria-current="route.name === 'compose-yaml' ? 'page' : undefined"
-      >
-        {{ t('nav.compose_yaml') }}
       </RouterLink>
       <RouterLink
         to="/php-versions"

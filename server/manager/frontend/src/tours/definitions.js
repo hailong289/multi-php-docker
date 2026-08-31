@@ -179,6 +179,15 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="services-compose-yaml"]',
+        popover: {
+          title: t('tour.services.compose_title'),
+          description: t('tour.services.compose_body'),
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+      {
         element: '[data-tour="services-table"]',
         popover: {
           title: t('tour.services.table_title'),

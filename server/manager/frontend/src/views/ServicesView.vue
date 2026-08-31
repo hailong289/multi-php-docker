@@ -26,6 +26,10 @@ function openLogs(service) {
   router.push({ name: 'service-logs', params: { service } })
 }
 
+function openComposeYaml() {
+  router.push({ name: 'compose-yaml' })
+}
+
 onMounted(() => {
   loadBootstrap()
 })
@@ -38,6 +42,15 @@ onMounted(() => {
         <div>
           <h2>{{ t('services.title') }}</h2>
           <p>{{ t('services.subtitle') }}</p>
+        </div>
+        <div class="panel-heading-actions">
+          <button
+            type="button"
+            data-tour="services-compose-yaml"
+            @click="openComposeYaml"
+          >
+            {{ t('services.manage_compose_yaml') }}
+          </button>
         </div>
       </div>
     </div>

@@ -57,10 +57,10 @@ const router = createRouter({
       meta: { titleKey: 'nav.services', manager: true },
     },
     {
-      path: '/compose',
+      path: '/services/compose',
       name: 'compose-yaml',
       component: ComposeYamlView,
-      meta: { titleKey: 'nav.compose_yaml', manager: true },
+      meta: { titleKey: 'services.manage_compose_yaml', manager: true },
     },
     {
       path: '/services/:service/logs',
@@ -107,6 +107,10 @@ const router = createRouter({
     {
       path: '/supervisor',
       redirect: '/php-versions',
+    },
+    {
+      path: '/compose',
+      redirect: '/services/compose',
     },
     {
       path: '/:pathMatch(.*)*',

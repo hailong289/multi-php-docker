@@ -2147,3 +2147,64 @@ select:focus {
   margin: 0;
   font-size: 14px;
 }
+
+.compose-yaml-dir {
+  padding-top: 12px;
+  padding-bottom: 0;
+}
+
+.compose-yaml-dir .status-line {
+  margin: 0;
+}
+
+.compose-yaml-list tbody tr.is-creating td {
+  border-style: dashed;
+}
+
+.compose-yaml-list tbody tr.is-busy {
+  opacity: 0.82;
+}
+
+.compose-yaml-editor-head .nginx-template-meta {
+  margin: 6px 0 0;
+}
+
+.compose-yaml-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.compose-yaml-tabs-wrap {
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+.compose-yaml-tabs-wrap .php-detail-tabs button {
+  position: relative;
+}
+
+.compose-yaml-tabs-wrap .php-detail-tabs button.has-alert {
+  padding-right: 22px;
+}
+
+.compose-yaml-tab-alert {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger, #dc2626);
+}
+
+.compose-yaml-logs .nginx-log-card pre {
+  min-height: 220px;
+  max-height: min(40vh, 400px);
+}
+
+.compose-yaml-logs .status-line {
+  margin: 6px 0 0;
+}

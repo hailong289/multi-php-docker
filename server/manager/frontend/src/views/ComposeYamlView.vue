@@ -1,11 +1,13 @@
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
+const router = useRouter()
 const { t } = useI18n()
 const {
   stateClass,
@@ -34,6 +36,7 @@ const creating = ref(false)
 const newFileName = ref('')
 const actionLogs = ref(null)
 const actionLogsLoading = ref(false)
+const workspaceTab = ref('editor')
 
 const COMPOSE_STATUS_POLL_MS = 2000
 let composeStatusPollTimer = null
@@ -65,8 +68,19 @@ async function afterComposeAction() {
   await refreshFiles()
   await loadBootstrap({ silent: true })
   await loadActionLogs({ quiet: true })
+  if (actionLogs.value?.state === 'error') {
+    workspaceTab.value = 'logs'
+  }
   if (composeActionBusy.value) {
     startComposeStatusPoll()
+  }
+}
+
+async function refreshAll() {
+  await refreshFiles()
+  await loadBootstrap({ silent: true })
+  if (selectedName.value && !creating.value) {
+    await loadActionLogs({ quiet: true })
   }
 }
 
@@ -161,6 +175,7 @@ async function openFile(name) {
   newFileName.value = ''
   selectedName.value = name
   composeLoading.value = true
+  workspaceTab.value = 'editor'
   try {
     const result = await apiGet(`/api/infra-services/compose-files/${encodeURIComponent(name)}`)
     const compose = result.compose || {}
@@ -188,6 +203,7 @@ function startCreate() {
   draft.value = defaultContent.value
   original.value = draft.value
   composeMeta.value = null
+  workspaceTab.value = 'editor'
 }
 
 watch(newFileName, (name) => {
@@ -280,18 +296,6 @@ async function runComposeAction(action) {
   await afterComposeAction()
 }
 
-async function runComposeActionForItem(item, action) {
-  if (!item?.runtime) return
-  if (item.name === selectedName.value && dirty.value && !confirm(t('services.compose_action_dirty_confirm'))) {
-    return
-  }
-  const result = await composeFileAction(item, action)
-  if (result?.compose && item.name === selectedName.value) {
-    composeMeta.value = { ...composeMeta.value, ...result.compose }
-  }
-  await afterComposeAction()
-}
-
 function composePending(item, action) {
   if (!item?.runtime) return false
   if (item.runtime === 'compose') {
@@ -327,30 +331,57 @@ watch(selectedName, () => {
 </script>
 
 <template>
-  <section class="panel" data-tour="compose-panel">
+  <section class="panel compose-yaml-page" data-tour="compose-panel">
     <div class="panel-heading">
-      <div class="controller-heading panel-heading-row">
+      <div class="php-detail-heading panel-heading-row">
+        <button
+          type="button"
+          class="icon-back"
+          :aria-label="t('services.back_to_services')"
+          :title="t('services.back_to_services')"
+          @click="router.push({ name: 'services' })"
+        >
+          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+            <path
+              d="M12.5 4.5 7 10l5.5 5.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
         <div>
-          <h2>{{ t('nav.compose_yaml') }}</h2>
+          <h2>{{ t('services.manage_compose_yaml') }}</h2>
           <p>{{ t('services.compose_hint') }}</p>
+        </div>
+        <div class="panel-heading-actions">
+          <button
+            type="button"
+            :disabled="saving || filesLoading"
+            @click="refreshAll"
+          >
+            {{ t('nginx.refresh') }}
+          </button>
+          <button
+            type="button"
+            class="primary"
+            data-tour="compose-add"
+            :disabled="saving || filesLoading"
+            @click="startCreate"
+          >
+            {{ t('services.compose_add') }}
+          </button>
         </div>
       </div>
     </div>
 
     <div class="services-compose" data-tour="compose-body">
-      <div class="panel-body nginx-domain-logs-toolbar">
+      <div v-if="composeDir" class="panel-body compose-yaml-dir">
         <p class="status-line">
-          <code v-if="composeDir">{{ composeDir }}/</code>
+          <code>{{ composeDir }}/</code>
         </p>
-        <button
-          type="button"
-          class="primary"
-          data-tour="compose-add"
-          :disabled="saving || filesLoading"
-          @click="startCreate"
-        >
-          {{ t('services.compose_add') }}
-        </button>
       </div>
 
       <div v-if="filesLoading && composeFiles.length === 0 && !creating" class="panel-body">
@@ -359,27 +390,38 @@ watch(selectedName, () => {
       <div v-else-if="composeFiles.length === 0 && !creating" class="panel-body empty">
         {{ t('services.compose_empty') }}
       </div>
-      <div v-else class="nginx-templates-layout">
-        <div class="table-wrap nginx-templates-list">
+      <div v-else class="nginx-templates-layout compose-yaml-layout">
+        <div class="table-wrap nginx-templates-list compose-yaml-list">
           <table>
             <thead>
               <tr>
                 <th>{{ t('services.compose_name') }}</th>
                 <th>{{ t('services.state') }}</th>
-                <th>{{ t('table.actions') }}</th>
               </tr>
             </thead>
             <tbody>
+              <tr v-if="creating" class="is-selected is-creating">
+                <td colspan="2">
+                  <code>{{ newFileName || t('services.compose_create') }}</code>
+                  <span class="status-pill status-off">{{ t('nginx.template_dirty') }}</span>
+                </td>
+              </tr>
               <tr
                 v-for="item in composeFiles"
                 :key="item.name"
-                :class="{ 'is-selected': !creating && item.name === selectedName }"
+                :class="{
+                  'is-selected': !creating && item.name === selectedName,
+                  'is-busy': composeFileState(item) === 'busy',
+                }"
                 @click="openFile(item.name)"
               >
                 <td>
                   <code>{{ item.name }}</code>
                   <div v-if="item.core" class="create-hint">{{ t('services.compose_core') }}</div>
                   <div v-else-if="item.protected" class="create-hint">{{ t('services.compose_managed') }}</div>
+                  <div v-else-if="item.runtime === 'compose' && !item.included" class="create-hint status-line warn">
+                    {{ t('services.compose_not_included') }}
+                  </div>
                 </td>
                 <td>
                   <span
@@ -390,58 +432,8 @@ watch(selectedName, () => {
                     {{ stateLabel(composeFileState(item)) }}
                   </span>
                   <span v-else class="create-hint">—</span>
-                  <div v-if="item.runtime === 'compose' && !item.included" class="create-hint">
-                    {{ t('services.compose_not_included') }}
-                  </div>
-                  <div v-else-if="showComposeCreateHint(item)" class="create-hint">
+                  <div v-if="showComposeCreateHint(item)" class="create-hint">
                     {{ t('services.create_hint') }}
-                  </div>
-                </td>
-                <td>
-                  <div class="controller-actions" @click.stop>
-                    <template v-if="item.runtime">
-                      <button
-                        v-if="showComposeCreateHint(item)"
-                        type="button"
-                        class="primary"
-                        :class="{ 'is-loading': composePending(item, 'create') }"
-                        :disabled="!composeFileActionEnabled(item, 'create')"
-                        @click="runComposeActionForItem(item, 'create')"
-                      >
-                        <span
-                          v-if="composePending(item, 'create')"
-                          class="btn-spinner"
-                          aria-hidden="true"
-                        ></span>
-                        {{
-                          composePending(item, 'create') ? t('action.working') : t('services.create')
-                        }}
-                      </button>
-                      <button
-                        type="button"
-                        :class="{ 'is-loading': composePending(item, 'start') }"
-                        :disabled="!composeFileActionEnabled(item, 'start')"
-                        @click="runComposeActionForItem(item, 'start')"
-                      >
-                        <span
-                          v-if="composePending(item, 'start')"
-                          class="btn-spinner"
-                          aria-hidden="true"
-                        ></span>
-                        {{
-                          composePending(item, 'start') ? t('action.working') : t('services.start')
-                        }}
-                      </button>
-                    </template>
-                    <button
-                      type="button"
-                      class="danger"
-                      :disabled="saving || item.protected || item.core"
-                      :title="item.protected || item.core ? t('services.compose_core_protected') : undefined"
-                      @click="deleteCompose(item.name)"
-                    >
-                      {{ t('action.delete') }}
-                    </button>
                   </div>
                 </td>
               </tr>
@@ -449,11 +441,11 @@ watch(selectedName, () => {
           </table>
         </div>
 
-        <div class="panel-body nginx-template-editor" data-tour="compose-editor">
+        <div class="panel-body nginx-template-editor compose-yaml-editor" data-tour="compose-editor">
           <div v-if="!creating && !selectedName" class="empty">{{ t('services.compose_pick') }}</div>
           <template v-else>
-            <div class="nginx-template-editor-head">
-              <div>
+            <div class="nginx-template-editor-head compose-yaml-editor-head">
+              <div class="compose-yaml-title">
                 <template v-if="creating">
                   <label class="supervisor-log-file">
                     {{ t('services.compose_name') }}
@@ -464,14 +456,19 @@ watch(selectedName, () => {
                   <strong><code>{{ selectedName }}</code></strong>
                   <span v-if="dirty" class="status-pill status-off">{{ t('nginx.template_dirty') }}</span>
                 </template>
+                <p v-if="composeMeta && !creating" class="nginx-template-meta">
+                  <code>{{ composeMeta.relative_path }}</code>
+                  · {{ formatSize(composeMeta.size) }} · {{ formatTime(composeMeta.updated_at) }}
+                </p>
               </div>
-              <div class="actions">
+              <div class="actions controller-actions">
                 <button
                   type="button"
                   class="primary"
                   :disabled="saving || composeLoading || (!creating && !dirty)"
                   @click="saveCompose"
                 >
+                  <span v-if="saving" class="btn-spinner" aria-hidden="true"></span>
                   {{
                     saving
                       ? t('action.working')
@@ -529,42 +526,95 @@ watch(selectedName, () => {
                 </button>
               </div>
             </div>
-            <p v-if="composeMeta && !creating" class="nginx-template-meta">
-              <code>{{ composeMeta.relative_path }}</code>
-              · {{ formatSize(composeMeta.size) }} · {{ formatTime(composeMeta.updated_at) }}
-            </p>
-            <div v-if="composeLoading" class="empty">{{ t('loading') }}</div>
-            <MonacoEditor
-              v-else
-              v-model="draft"
-              language="yaml"
-              min-height="420px"
-              :read-only="saving"
-            />
+
+            <div
+              v-if="!creating && selectedFile?.runtime"
+              class="compose-yaml-status-row"
+            >
+              <span
+                class="state-badge"
+                :class="stateClass(composeFileState(selectedFile))"
+              >
+                {{ stateLabel(composeFileState(selectedFile)) }}
+              </span>
+              <span v-if="showComposeCreateHint(selectedFile)" class="create-hint">
+                {{ t('services.create_hint') }}
+              </span>
+              <span
+                v-else-if="selectedFile.runtime === 'compose' && !selectedFile.included"
+                class="create-hint status-line warn"
+              >
+                {{ t('services.compose_not_included') }}
+              </span>
+            </div>
+
             <div
               v-if="!creating && actionContext?.runtime"
-              class="supervisor-logs compose-action-logs"
-              data-tour="compose-action-logs"
+              class="php-detail-tabs-wrap compose-yaml-tabs-wrap"
+            >
+              <div class="php-detail-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  :aria-selected="workspaceTab === 'editor'"
+                  :class="{ active: workspaceTab === 'editor' }"
+                  @click="workspaceTab = 'editor'"
+                >
+                  {{ t('services.compose_tab_editor') }}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  :aria-selected="workspaceTab === 'logs'"
+                  :class="{ active: workspaceTab === 'logs', 'has-alert': actionLogs?.state === 'error' }"
+                  data-tour="compose-action-logs"
+                  @click="workspaceTab = 'logs'"
+                >
+                  {{ t('services.compose_tab_logs') }}
+                  <span
+                    v-if="actionLogs?.state === 'error'"
+                    class="compose-yaml-tab-alert"
+                    aria-hidden="true"
+                  ></span>
+                </button>
+              </div>
+            </div>
+
+            <div v-show="workspaceTab === 'editor' || creating || !actionContext?.runtime">
+              <div v-if="composeLoading" class="empty">{{ t('loading') }}</div>
+              <MonacoEditor
+                v-else
+                v-model="draft"
+                language="yaml"
+                min-height="420px"
+                :read-only="saving"
+              />
+            </div>
+
+            <div
+              v-if="!creating && actionContext?.runtime && workspaceTab === 'logs'"
+              class="compose-yaml-logs"
             >
               <div class="nginx-domain-logs-toolbar">
-                <h3>{{ t('services.compose_action_logs') }}</h3>
+                <div>
+                  <span
+                    v-if="actionLogs?.state"
+                    class="state-badge"
+                    :class="stateClass(actionLogs.state)"
+                  >
+                    {{ stateLabel(actionLogs.state) }}
+                  </span>
+                  <p v-if="actionLogStatusMessage()" class="status-line">
+                    {{ actionLogStatusMessage() }}
+                  </p>
+                  <p v-if="actionLogs?.updated_at" class="create-hint">
+                    {{ t('services.logs_updated', { at: actionLogs.updated_at }) }}
+                  </p>
+                </div>
                 <button type="button" :disabled="actionLogsLoading" @click="loadActionLogs()">
                   {{ t('services.refresh_logs') }}
                 </button>
               </div>
-              <p v-if="actionLogs?.updated_at" class="create-hint">
-                {{ t('services.logs_updated', { at: actionLogs.updated_at }) }}
-              </p>
-              <p v-if="actionLogStatusMessage()" class="create-hint">
-                <span
-                  v-if="actionLogs?.state"
-                  class="state-badge"
-                  :class="stateClass(actionLogs.state)"
-                >
-                  {{ stateLabel(actionLogs.state) }}
-                </span>
-                {{ actionLogStatusMessage() }}
-              </p>
               <article class="nginx-log-card">
                 <pre v-if="actionLogsLoading && !actionLogs">{{ t('loading') }}</pre>
                 <pre v-else>{{
