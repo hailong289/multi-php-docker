@@ -10,7 +10,7 @@ namespace Manager\Models;
 final class ComposeFileParser
 {
     /**
-     * @return list<array{name: string, profile: ?string, container: ?string, has_build: bool}>
+     * @return list<array{name: string, profile: ?string, container: ?string, image: ?string, has_build: bool}>
      */
     public static function services(string $content): array
     {
@@ -39,6 +39,7 @@ final class ComposeFileParser
                 'name' => $name,
                 'profile' => self::profileFromBlock($block),
                 'container' => self::containerFromBlock($block),
+                'image' => self::imageFromBlock($block),
                 'has_build' => self::needsBuild($block),
             ];
         }
@@ -61,6 +62,15 @@ final class ComposeFileParser
     private static function containerFromBlock(string $block): ?string
     {
         if (preg_match('/^\s{4}container_name:\s*([^\s#]+)/m', $block, $m)) {
+            return trim($m[1], " \t\"'");
+        }
+
+        return null;
+    }
+
+    private static function imageFromBlock(string $block): ?string
+    {
+        if (preg_match('/^\s{4}image:\s*([^\s#]+)/m', $block, $m)) {
             return trim($m[1], " \t\"'");
         }
 

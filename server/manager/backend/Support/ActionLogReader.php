@@ -40,10 +40,11 @@ final class ActionLogReader
 
         $createLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-create.log');
         $startLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-start.log');
-        $content = self::formatSections($createLog, $startLog);
+        $pullLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-pull-recreate.log');
+        $content = self::formatSections($createLog, $startLog, $pullLog);
 
         $updatedAt = (string) ($status['updated_at'] ?? '');
-        foreach (['.last-create.log', '.last-start.log'] as $suffix) {
+        foreach (['.last-create.log', '.last-start.log', '.last-pull-recreate.log'] as $suffix) {
             $path = rtrim($statusDir, '/') . '/' . $key . $suffix;
             if (!is_file($path)) {
                 continue;
@@ -92,9 +93,12 @@ final class ActionLogReader
         return $content;
     }
 
-    private static function formatSections(string $createLog, string $startLog): string
+    private static function formatSections(string $createLog, string $startLog, string $pullLog = ''): string
     {
         $parts = [];
+        if ($pullLog !== '') {
+            $parts[] = "=== pull ===\n" . $pullLog;
+        }
         if ($createLog !== '') {
             $parts[] = "=== create ===\n" . $createLog;
         }

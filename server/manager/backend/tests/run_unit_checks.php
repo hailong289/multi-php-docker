@@ -289,6 +289,24 @@ assert_true(str_contains((string) ($actionLogs['content'] ?? ''), 'create ok'), 
 $pullId = (new InfraRuntime($infraTmp, $runningDaemon))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp, $runningDaemon))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
+try {
+    (new InfraRuntime($infraTmp, $runningDaemon))->request('rabbitmq', 'delete');
+    assert_true(false, 'delete must use deleteContainer');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'services.invalid_action', 'delete not queued');
+}
+try {
+    (new InfraRuntime($infraTmp, $runningDaemon))->request('rabbitmq', 'delete-image');
+    assert_true(false, 'delete-image must use deleteImage');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'services.invalid_action', 'delete-image not queued');
+}
+
+$parsedImage = ComposeFileParser::services("services:\n  mysql:\n    image: mysql:8.4\n");
+assert_true(($parsedImage[0]['image'] ?? '') === 'mysql:8.4', 'compose parser image field');
+$infraTargets = InfraRuntime::targets();
+assert_true(array_key_exists('image', $infraTargets['mysql'] ?? []), 'infra targets image key');
+assert_true(array_key_exists('image_present', $infraTargets['mysql'] ?? []), 'infra targets image_present key');
 
 $frame = pack('C', 1) . "\0\0\0" . pack('N', 5) . 'hello';
 assert_true(\Manager\Support\DockerExec::decodeLogStream($frame) === 'hello', 'decode multiplexed docker logs');

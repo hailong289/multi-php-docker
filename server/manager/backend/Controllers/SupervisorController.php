@@ -55,6 +55,15 @@ final class SupervisorController extends Controller
         ]);
     }
 
+    public function actionLogs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'logs' => (new SupervisorRuntime())->actionLogs($service),
+        ]);
+    }
+
     public function clearLog(Request $request, array $params = []): Response
     {
         $service = (string) ($params['service'] ?? '');

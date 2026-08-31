@@ -420,6 +420,72 @@ final class DockerExec
     }
 
     /**
+     * Force-remove a container by name. Returns true when absent or removed.
+     */
+    public static function removeNamedContainer(string $name): bool
+    {
+        $name = ltrim($name, '/');
+        if ($name === '' || !DockerLiveState::available()) {
+            return false;
+        }
+
+        $id = self::containerIdByName($name);
+        if ($id === null) {
+            return true;
+        }
+
+        $removed = self::httpRequest(
+            'DELETE',
+            '/containers/' . rawurlencode($id) . '?force=1',
+            null,
+            null,
+            [200, 204, 404],
+        ) !== null;
+
+        DockerLiveState::resetCache();
+
+        return $removed || self::containerIdByName($name) === null;
+    }
+
+    public static function imageExists(string $ref): bool
+    {
+        $ref = trim($ref);
+        if ($ref === '' || !DockerLiveState::available()) {
+            return false;
+        }
+
+        return self::httpRequest(
+            'GET',
+            '/images/' . rawurlencode($ref) . '/json',
+            null,
+            null,
+            [200],
+        ) !== null;
+    }
+
+    /** Force-remove an image by name:tag. Returns true when absent or removed. */
+    public static function removeImage(string $ref): bool
+    {
+        $ref = trim($ref);
+        if ($ref === '' || !DockerLiveState::available()) {
+            return false;
+        }
+        if (!self::imageExists($ref)) {
+            return true;
+        }
+
+        $removed = self::httpRequest(
+            'DELETE',
+            '/images/' . rawurlencode($ref) . '?force=1',
+            null,
+            null,
+            [200, 204, 404],
+        ) !== null;
+
+        return $removed && !self::imageExists($ref);
+    }
+
+    /**
      * @param resource $fp
      * @return array{0: string, 1: string, 2: bool, 3: bool} stdout, stderr, timed_out, truncated
      */

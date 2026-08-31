@@ -68,6 +68,11 @@ const domainFieldErrors = ref({})
 const hostsManualOpen = ref(false)
 const hostsManual = ref(null)
 const hostsProgress = ref(null)
+const pullProgress = ref(null)
+let pullProgressTimer = null
+
+const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate'])
+const PULL_PROGRESS_POLL_MS = 2000
 
 export function useManager() {
   const { t } = useI18n()
@@ -476,11 +481,18 @@ export function useManager() {
 
   /** Queue a PHP container lifecycle action; status updates via bootstrap poll. */
   async function phpAction(service, action) {
+    const target = data.php_controllers?.targets?.[service]
     pendingAction.value = { kind: 'php', service, action }
     try {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
+      await waitForPullProgress({
+        runtime: 'php',
+        service,
+        action,
+        label: target?.label || service,
+      })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -504,11 +516,43 @@ export function useManager() {
 
   /** Queue an infra container lifecycle action; status updates via bootstrap poll. */
   async function infraAction(service, action) {
+    const target = data.infra_services?.targets?.[service]
+    if (action === 'delete') {
+      if (
+        !confirm(
+          t('services.delete_confirm', {
+            service: target?.label || service,
+            container: target?.container || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
+    if (action === 'delete-image') {
+      if (
+        !confirm(
+          t('services.delete_image_confirm', {
+            service: target?.label || service,
+            image: target?.image || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
     pendingAction.value = { kind: 'infra', service, action }
     try {
       const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
+      if (action === 'delete' || action === 'delete-image') return
+      await waitForPullProgress({
+        runtime: 'infra',
+        service,
+        action,
+        label: target?.label || service,
+      })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -518,11 +562,18 @@ export function useManager() {
 
   /** Queue a Supervisor container lifecycle action; status updates via bootstrap poll. */
   async function supervisorAction(service, action) {
+    const target = data.supervisor_services?.targets?.[service]
     pendingAction.value = { kind: 'supervisor', service, action }
     try {
       const result = await apiSend('POST', `/api/supervisor/${service}/${action}`, {})
       toastFromResult(result)
       if (result.supervisor_services) data.supervisor_services = result.supervisor_services
+      await waitForPullProgress({
+        runtime: 'supervisor',
+        service,
+        action,
+        label: target?.label || service,
+      })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -575,6 +626,129 @@ export function useManager() {
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  function pullProgressLabel(runtime, service, composeFile) {
+    if (runtime === 'compose') return composeFile || service
+    if (runtime === 'infra') return data.infra_services?.targets?.[service]?.label || service
+    if (runtime === 'php') return data.php_controllers?.targets?.[service]?.label || service
+    if (runtime === 'supervisor') return data.supervisor_services?.targets?.[service]?.label || service
+    return service
+  }
+
+  function pullProgressBootstrapState(job) {
+    if (job.runtime === 'infra') return infraServiceState(job.service)
+    if (job.runtime === 'php') return phpServiceState(job.service)
+    if (job.runtime === 'supervisor') return supervisorServiceState(job.service)
+    return job.state || 'busy'
+  }
+
+  function pullProgressLogsUrl(job) {
+    if (job.runtime === 'compose') {
+      return `/api/infra-services/compose-files/${encodeURIComponent(job.composeFile)}/action-logs`
+    }
+    if (job.runtime === 'infra') {
+      return `/api/infra-services/${job.service}/action-logs`
+    }
+    if (job.runtime === 'php') {
+      return `/api/php-controllers/${job.service}/action-logs`
+    }
+    if (job.runtime === 'supervisor') {
+      return `/api/supervisor/${job.service}/action-logs`
+    }
+    return null
+  }
+
+  function stopPullProgressTimer() {
+    if (pullProgressTimer) {
+      clearInterval(pullProgressTimer)
+      pullProgressTimer = null
+    }
+  }
+
+  function resolvePullProgressState(job, liveState, logState) {
+    if (job.runtime === 'compose') {
+      return logState || liveState || 'busy'
+    }
+    if (liveState && liveState !== 'busy') {
+      return liveState
+    }
+    if (logState && logState !== 'busy') {
+      return logState
+    }
+    return liveState || logState || 'busy'
+  }
+
+  async function pollPullProgress() {
+    const job = pullProgress.value
+    if (!job) return
+
+    let liveState = job.state
+    if (job.runtime !== 'compose') {
+      await loadBootstrap({ silent: true })
+      liveState = pullProgressBootstrapState(job)
+    }
+
+    const url = pullProgressLogsUrl(job)
+    let logState = ''
+    if (url) {
+      try {
+        const result = await apiGet(url)
+        const logs = result.logs || {}
+        job.content = logs.content || logs.create_log || ''
+        logState = logs.state || ''
+      } catch (_) {
+        // keep previous output
+      }
+    }
+
+    job.state = resolvePullProgressState(job, liveState, logState)
+    job.loading = false
+  }
+
+  function startPullProgress({ runtime, service = '', action, label, composeFile = '' }) {
+    stopPullProgressTimer()
+    pullProgress.value = {
+      runtime,
+      service,
+      composeFile,
+      action,
+      label: label || pullProgressLabel(runtime, service, composeFile),
+      dismissed: false,
+      state: 'busy',
+      content: '',
+      loading: true,
+    }
+    pollPullProgress()
+    pullProgressTimer = setInterval(pollPullProgress, PULL_PROGRESS_POLL_MS)
+  }
+
+  function dismissPullProgress() {
+    if (pullProgress.value) pullProgress.value.dismissed = true
+  }
+
+  async function waitForPullProgress(job) {
+    if (!PULL_TRACKED_ACTIONS.has(job.action)) return
+
+    startPullProgress(job)
+
+    const deadline = Date.now() + 120_000
+    while (Date.now() < deadline) {
+      const current = pullProgress.value
+      if (!current) break
+      if (current.state !== 'busy') break
+      await sleep(PULL_PROGRESS_POLL_MS)
+      await pollPullProgress()
+    }
+    await pollPullProgress()
+    stopPullProgressTimer()
+    for (let i = 0; i < 4; i += 1) {
+      if (!pullProgress.value || pullProgress.value.dismissed) break
+      if (pullProgress.value.state !== 'busy') break
+      await sleep(1200)
+      await pollPullProgress()
+    }
+    await pollPullProgress()
   }
 
   async function waitForHostsResult(previousUpdatedAt, maxAttempts = 5) {
@@ -805,7 +979,9 @@ export function useManager() {
 
   function stateClass(state) {
     if (state === 'running') return 'state-running'
+    if (state === 'stopped') return 'state-stopped'
     if (state === 'error' || state === 'busy') return `state-${state}`
+    if (state === 'not_created') return 'state-idle'
     return ''
   }
 
@@ -875,6 +1051,12 @@ export function useManager() {
     if (action === 'pull-recreate') {
       return state === 'running' || state === 'stopped'
     }
+    if (action === 'delete') {
+      return state === 'running' || state === 'stopped'
+    }
+    if (action === 'delete-image') {
+      return state === 'not_created' && !!target?.image_present
+    }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
     if (action === 'stop' || action === 'restart') return state === 'running'
@@ -922,6 +1104,12 @@ export function useManager() {
         {},
       )
       toastFromResult(result)
+      await waitForPullProgress({
+        runtime: 'compose',
+        composeFile: item.name,
+        action,
+        label: item.name,
+      })
       return result
     } catch (error) {
       showToast('failure', translateApiError(error))
@@ -1016,6 +1204,8 @@ export function useManager() {
     hostsManualOpen,
     hostsManual,
     hostsProgress,
+    pullProgress,
+    dismissPullProgress,
     serverEntries,
     domainEntries,
     versionLabel,

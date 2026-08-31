@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
@@ -246,5 +247,35 @@ final class SupervisorRuntime
         if (file_put_contents($path, '') === false) {
             throw new HttpException('supervisor.clear_failed', 500);
         }
+    }
+
+    /**
+     * @return array{
+     *     service: string,
+     *     state: string,
+     *     message_key: string,
+     *     request_id: string,
+     *     available: bool,
+     *     content: string,
+     *     create_log: string,
+     *     start_log: string,
+     *     updated_at: string
+     * }
+     */
+    public function actionLogs(string $service): array
+    {
+        $targets = self::targets($this->projectPath);
+        if (!isset($targets[$service])) {
+            throw new HttpException('supervisor.invalid_service', 400);
+        }
+
+        return array_merge(
+            ['service' => $service],
+            ActionLogReader::bundle(
+                $this->basePath . '/status',
+                $service,
+                static fn (array $decoded): bool => ($decoded['service'] ?? null) === $service,
+            ),
+        );
     }
 }

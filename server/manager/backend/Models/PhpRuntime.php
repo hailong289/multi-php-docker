@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
@@ -252,6 +253,36 @@ final class PhpRuntime
         }
 
         return (time() - $ts) > $maxAgeSeconds;
+    }
+
+    /**
+     * @return array{
+     *     service: string,
+     *     state: string,
+     *     message_key: string,
+     *     request_id: string,
+     *     available: bool,
+     *     content: string,
+     *     create_log: string,
+     *     start_log: string,
+     *     updated_at: string
+     * }
+     */
+    public function actionLogs(string $service): array
+    {
+        $targets = self::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('php_controller.invalid_service', 400);
+        }
+
+        return array_merge(
+            ['service' => $service],
+            ActionLogReader::bundle(
+                $this->basePath . '/status',
+                $service,
+                static fn (array $decoded): bool => ($decoded['service'] ?? null) === $service,
+            ),
+        );
     }
 
     /**

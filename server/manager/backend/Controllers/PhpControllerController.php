@@ -122,6 +122,15 @@ final class PhpControllerController extends Controller
         ]);
     }
 
+    public function actionLogs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'logs' => (new PhpRuntime())->actionLogs($service),
+        ]);
+    }
+
     public function saveIni(Request $request, array $params = []): Response
     {
         $service = (string) ($params['service'] ?? '');

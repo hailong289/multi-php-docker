@@ -860,6 +860,170 @@ button.is-loading:disabled {
   }
 }
 
+.pull-progress-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 75;
+  width: min(400px, calc(100vw - 28px));
+  max-height: min(260px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow:
+    0 16px 40px var(--shadow),
+    0 0 0 1px color-mix(in srgb, var(--panel) 80%, white 20%) inset;
+  animation: pull-progress-in 0.22s ease-out;
+  overflow: hidden;
+}
+
+.pull-progress-panel.is-busy {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--line));
+  box-shadow:
+    0 16px 40px var(--shadow),
+    0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent) inset;
+}
+
+.pull-progress-panel.is-done {
+  border-color: var(--success-line);
+  box-shadow:
+    0 16px 40px var(--shadow),
+    0 0 0 1px color-mix(in srgb, var(--success-line) 35%, transparent) inset;
+}
+
+.pull-progress-panel.is-error {
+  border-color: var(--failure-line);
+  box-shadow:
+    0 16px 40px var(--shadow),
+    0 0 0 1px color-mix(in srgb, var(--failure-line) 35%, transparent) inset;
+}
+
+.pull-progress-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-strong);
+}
+
+.pull-progress-panel.is-busy .pull-progress-header {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 14%, var(--panel-strong)) 0%,
+    var(--panel-strong) 100%
+  );
+}
+
+.pull-progress-panel.is-done .pull-progress-header {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--success-bg) 70%, var(--panel-strong)) 0%,
+    var(--panel-strong) 100%
+  );
+}
+
+.pull-progress-panel.is-error .pull-progress-header {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--failure-bg) 70%, var(--panel-strong)) 0%,
+    var(--panel-strong) 100%
+  );
+}
+
+.pull-progress-title-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pull-progress-title {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.pull-progress-state {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.pull-progress-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  flex-shrink: 0;
+  border-top-color: var(--primary);
+}
+
+.pull-progress-close {
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.85;
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pull-progress-close:hover {
+  opacity: 1;
+  color: var(--text);
+  border-color: transparent;
+}
+
+.pull-progress-log {
+  margin: 0;
+  padding: 10px 12px 12px;
+  flex: 1;
+  min-height: 96px;
+  max-height: 190px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--command-text);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--command) 88%, black 12%), var(--command));
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+
+.pull-progress-panel.is-busy .pull-progress-log {
+  color: color-mix(in srgb, var(--command-text) 88%, var(--blue) 12%);
+}
+
+.state-idle {
+  color: var(--muted);
+  border-color: var(--badge-line);
+  background: var(--badge-bg);
+}
+
+.pull-progress-panel .state-busy {
+  color: var(--warning-text);
+  border-color: var(--warning-line);
+  background: var(--warning-bg);
+}
+
+@keyframes pull-progress-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .modal-fieldset {
   border: 0;
   margin: 0;
@@ -1516,6 +1680,12 @@ select:focus {
   color: var(--success-text);
   border-color: var(--success-line);
   background: var(--success-bg);
+}
+
+.state-stopped {
+  color: var(--warning-text);
+  border-color: var(--warning-line);
+  background: var(--warning-bg);
 }
 
 .state-error,

@@ -174,6 +174,44 @@ onMounted(() => {
                 >
                   {{ t('services.view_logs') }}
                 </button>
+                <button
+                  type="button"
+                  class="danger"
+                  data-tour="services-delete-btn"
+                  :class="{ 'is-loading': isPending('infra', { service, action: 'delete' }) }"
+                  :disabled="!infraActionEnabled(service, 'delete')"
+                  @click="infraAction(service, 'delete')"
+                >
+                  <span
+                    v-if="isPending('infra', { service, action: 'delete' })"
+                    class="btn-spinner"
+                    aria-hidden="true"
+                  ></span>
+                  {{
+                    isPending('infra', { service, action: 'delete' })
+                      ? t('action.working')
+                      : t('services.delete')
+                  }}
+                </button>
+                <button
+                  type="button"
+                  class="danger"
+                  data-tour="services-delete-image-btn"
+                  :class="{ 'is-loading': isPending('infra', { service, action: 'delete-image' }) }"
+                  :disabled="!infraActionEnabled(service, 'delete-image')"
+                  @click="infraAction(service, 'delete-image')"
+                >
+                  <span
+                    v-if="isPending('infra', { service, action: 'delete-image' })"
+                    class="btn-spinner"
+                    aria-hidden="true"
+                  ></span>
+                  {{
+                    isPending('infra', { service, action: 'delete-image' })
+                      ? t('action.working')
+                      : t('services.delete_image')
+                  }}
+                </button>
               </div>
             </td>
           </tr>

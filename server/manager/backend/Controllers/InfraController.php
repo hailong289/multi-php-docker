@@ -27,8 +27,42 @@ final class InfraController extends Controller
         $service = (string) ($params['service'] ?? '');
         $action = (string) ($params['action'] ?? '');
         $runtime = new InfraRuntime();
+        $target = InfraRuntime::targets()[$service] ?? null;
+        if ($target === null) {
+            throw new \Manager\Http\HttpException('services.invalid_service', 400);
+        }
+
+        if ($action === 'delete') {
+            $runtime->deleteContainer($service);
+
+            return Response::json([
+                'message_key' => 'services.deleted',
+                'message_parameters' => [
+                    'service' => $target['label'],
+                ],
+                'infra_services' => [
+                    'targets' => InfraRuntime::targets(),
+                    'statuses' => $runtime->statuses(),
+                ],
+            ]);
+        }
+
+        if ($action === 'delete-image') {
+            $runtime->deleteImage($service);
+
+            return Response::json([
+                'message_key' => 'services.image_deleted',
+                'message_parameters' => [
+                    'service' => $target['label'],
+                ],
+                'infra_services' => [
+                    'targets' => InfraRuntime::targets(),
+                    'statuses' => $runtime->statuses(),
+                ],
+            ]);
+        }
+
         $requestId = $runtime->request($service, $action);
-        $target = InfraRuntime::targets()[$service];
 
         return Response::json([
             'request_id' => $requestId,
@@ -175,6 +209,15 @@ final class InfraController extends Controller
 
         return Response::json([
             'logs' => (new InfraRuntime())->logs($service, $tail),
+        ]);
+    }
+
+    public function actionLogs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'logs' => (new InfraRuntime())->actionLogs($service),
         ]);
     }
 }

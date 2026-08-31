@@ -248,6 +248,20 @@ run_compose_pull_recreate() {
     run_compose_recreate_start "$project_name" "$compose_file" "$profile" "$service"
 }
 
+run_compose_rm() {
+    project_name="$1"
+    compose_file="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" rm -sf "$service"
+    "$@"
+}
+
 run_compose_file_pull() {
     project_name="$1"
     compose_yml="$2"
@@ -616,12 +630,15 @@ parse_request_fields() {
         *) return 1 ;;
     esac
     case "$action" in
-        start|stop|restart|create|install-version|pull-recreate)
+        start|stop|restart|create|install-version|pull-recreate|delete)
             [ -z "$extension" ] || return 1
             if [ "$action" = "install-version" ] && { is_infra_service "$service" || is_supervisor_service "$service"; }; then
                 return 1
             fi
             if [ "$action" = "pull-recreate" ] && ! is_infra_service "$service"; then
+                return 1
+            fi
+            if [ "$action" = "delete" ] && ! is_infra_service "$service"; then
                 return 1
             fi
             ;;
@@ -789,19 +806,50 @@ while true; do
                     cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
                 fi
             elif is_supervisor_service "$service"; then
+                log_file="$STATUS_DIR/$service.last-create.log"
+                : >"$log_file"
                 if run_compose_create_or_pull "$project_name" "$tmp_dir/docker-compose.yml" \
-                    "$profile" "$service" >"/tmp/${service}-create.log" 2>&1; then
+                    "$profile" "$service" >>"$log_file" 2>&1; then
                     ok=1
                 else
-                    cp "/tmp/${service}-create.log" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+                    cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
                 fi
-            elif run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
-                "$profile" "$service" >/tmp/php-create.log 2>&1; then
-                ok=1
             else
-                cp /tmp/php-create.log "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+                log_file="$STATUS_DIR/$service.last-create.log"
+                : >"$log_file"
+                if run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
+                    "$profile" "$service" >>"$log_file" 2>&1; then
+                    ok=1
+                else
+                    cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+                fi
             fi
             rm -rf "$tmp_dir"
+        elif [ "$action" = "delete" ]; then
+            delete_log_file="$STATUS_DIR/$service.last-delete.log"
+            : >"$delete_log_file"
+            if is_infra_service "$service"; then
+                profile=$(profile_for_service "$service") || true
+                host_project=$(resolve_host_project) || true
+                if [ -n "$profile" ] && [ -n "$host_project" ]; then
+                    project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
+                    if [ -z "$project_name" ]; then
+                        project_name=$(basename "$host_project")
+                    fi
+                    tmp_dir="/tmp/compose-delete.$$"
+                    prepare_compose_tmp "$host_project" "$tmp_dir"
+                    run_compose_rm "$project_name" "$tmp_dir/docker-compose.yml" \
+                        "$profile" "$service" >>"$delete_log_file" 2>&1 || true
+                    rm -rf "$tmp_dir"
+                fi
+                if docker inspect "$container" >/dev/null 2>&1; then
+                    if docker rm -f "$container" >>"$delete_log_file" 2>&1; then
+                        ok=1
+                    fi
+                else
+                    ok=1
+                fi
+            fi
         elif [ "$action" = "start" ]; then
             start_log_file="$STATUS_DIR/$service.last-start.log"
             : >"$start_log_file"
@@ -836,6 +884,9 @@ while true; do
         fi
 
         state=$(container_state "$container")
+        if [ "$action" = "delete" ] && [ "$ok" -eq 1 ]; then
+            state="not_created"
+        fi
         if [ "$ok" -eq 1 ]; then
             write_status "$service" "$state" "php_controller.action_success" "$request_id"
         else
