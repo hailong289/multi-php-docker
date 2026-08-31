@@ -2318,13 +2318,33 @@ select:focus {
   font-size: 14px;
 }
 
+.compose-yaml-page .php-detail-heading p {
+  margin: 0;
+  max-width: 52rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
 .compose-yaml-dir {
-  padding-top: 12px;
-  padding-bottom: 0;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
 }
 
 .compose-yaml-dir .status-line {
   margin: 0;
+}
+
+.compose-yaml-list {
+  border-top: none;
+}
+
+.compose-yaml-list tbody tr {
+  cursor: pointer;
+}
+
+.compose-yaml-list tbody tr.is-selected td {
+  background: color-mix(in srgb, var(--primary) 8%, var(--panel));
 }
 
 .compose-yaml-list tbody tr.is-creating td {
@@ -2333,6 +2353,30 @@ select:focus {
 
 .compose-yaml-list tbody tr.is-busy {
   opacity: 0.82;
+}
+
+.compose-yaml-editor-row {
+  cursor: default;
+}
+
+.compose-yaml-editor-row:hover td {
+  background: transparent;
+}
+
+.compose-yaml-editor-row td {
+  padding: 0;
+  border-top: none;
+  background: var(--panel-strong);
+}
+
+.compose-yaml-editor-panel {
+  padding: 14px 16px 18px;
+  border-top: 2px solid var(--primary-line, var(--line));
+}
+
+.compose-yaml-pick {
+  margin: 0;
+  border-top: 1px solid var(--line);
 }
 
 .compose-yaml-editor-head .nginx-template-meta {

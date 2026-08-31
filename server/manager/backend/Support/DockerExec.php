@@ -447,6 +447,60 @@ final class DockerExec
         return $removed || self::containerIdByName($name) === null;
     }
 
+    public static function stopNamedContainer(string $name): bool
+    {
+        $name = ltrim($name, '/');
+        if ($name === '' || !DockerLiveState::available()) {
+            return false;
+        }
+
+        $id = self::containerIdByName($name);
+        if ($id === null) {
+            return true;
+        }
+
+        $stopped = self::httpRequest(
+            'POST',
+            '/containers/' . rawurlencode($id) . '/stop',
+            null,
+            null,
+            [204, 304, 404],
+        ) !== null;
+        DockerLiveState::resetCache();
+
+        if (!$stopped) {
+            return false;
+        }
+
+        $state = DockerLiveState::stateFor($name);
+
+        return $state === null || $state === 'stopped' || $state === 'not_created';
+    }
+
+    public static function restartNamedContainer(string $name): bool
+    {
+        $name = ltrim($name, '/');
+        if ($name === '' || !DockerLiveState::available()) {
+            return false;
+        }
+
+        $id = self::containerIdByName($name);
+        if ($id === null) {
+            return false;
+        }
+
+        $restarted = self::httpRequest(
+            'POST',
+            '/containers/' . rawurlencode($id) . '/restart',
+            null,
+            null,
+            [204, 404],
+        ) !== null;
+        DockerLiveState::resetCache();
+
+        return $restarted && DockerLiveState::stateFor($name) === 'running';
+    }
+
     public static function imageExists(string $ref): bool
     {
         $ref = trim($ref);

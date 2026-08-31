@@ -12,14 +12,24 @@ use Manager\Models\InfraRuntime;
 
 final class InfraController extends Controller
 {
+    /** @return array{targets: array<string, array<string, mixed>>, statuses: array<string, array<string, mixed>>, compose_files: list<array<string, mixed>>} */
+    private function infraServicesPayload(InfraRuntime $runtime): array
+    {
+        return [
+            'targets' => InfraRuntime::targets(),
+            'statuses' => $runtime->statuses(),
+            'compose_files' => array_values(array_filter(
+                (new InfraCompose())->list(),
+                static fn (array $file): bool => ($file['runtime'] ?? '') === 'compose',
+            )),
+        ];
+    }
+
     public function index(Request $request, array $params = []): Response
     {
         $runtime = new InfraRuntime();
 
-        return Response::json([
-            'targets' => InfraRuntime::targets(),
-            'statuses' => $runtime->statuses(),
-        ]);
+        return Response::json($this->infraServicesPayload($runtime));
     }
 
     public function action(Request $request, array $params = []): Response
@@ -40,10 +50,7 @@ final class InfraController extends Controller
                 'message_parameters' => [
                     'service' => $target['label'],
                 ],
-                'infra_services' => [
-                    'targets' => InfraRuntime::targets(),
-                    'statuses' => $runtime->statuses(),
-                ],
+                'infra_services' => $this->infraServicesPayload($runtime),
             ]);
         }
 
@@ -55,10 +62,7 @@ final class InfraController extends Controller
                 'message_parameters' => [
                     'service' => $target['label'],
                 ],
-                'infra_services' => [
-                    'targets' => InfraRuntime::targets(),
-                    'statuses' => $runtime->statuses(),
-                ],
+                'infra_services' => $this->infraServicesPayload($runtime),
             ]);
         }
 
@@ -71,10 +75,7 @@ final class InfraController extends Controller
                 'action' => 'services.' . $action,
                 'service' => $target['label'],
             ],
-            'infra_services' => [
-                'targets' => InfraRuntime::targets(),
-                'statuses' => $runtime->statuses(),
-            ],
+            'infra_services' => $this->infraServicesPayload($runtime),
         ]);
     }
 
@@ -143,8 +144,63 @@ final class InfraController extends Controller
         $name = (string) ($params['name'] ?? '');
         $action = (string) ($params['action'] ?? '');
         $runtime = new ComposeFileRuntime();
-        $requestId = $runtime->request($name, $action);
         $compose = (new InfraCompose())->readFile($name);
+
+        if ($action === 'delete') {
+            $runtime->deleteContainer($name);
+
+            return Response::json([
+                'message_key' => 'services.deleted',
+                'message_parameters' => [
+                    'service' => $compose['name'],
+                ],
+                'compose' => $compose,
+                'infra_services' => $this->infraServicesPayload(new InfraRuntime()),
+            ]);
+        }
+
+        if ($action === 'delete-image') {
+            $runtime->deleteImage($name);
+
+            return Response::json([
+                'message_key' => 'services.image_deleted',
+                'message_parameters' => [
+                    'service' => $compose['name'],
+                ],
+                'compose' => $compose,
+                'infra_services' => $this->infraServicesPayload(new InfraRuntime()),
+            ]);
+        }
+
+        if ($action === 'stop') {
+            $runtime->stopContainer($name);
+
+            return Response::json([
+                'message_key' => 'services.requested',
+                'message_parameters' => [
+                    'action' => 'services.stop',
+                    'service' => $compose['name'],
+                ],
+                'compose' => $compose,
+                'infra_services' => $this->infraServicesPayload(new InfraRuntime()),
+            ]);
+        }
+
+        if ($action === 'restart') {
+            $runtime->restartContainer($name);
+
+            return Response::json([
+                'message_key' => 'services.requested',
+                'message_parameters' => [
+                    'action' => 'services.restart',
+                    'service' => $compose['name'],
+                ],
+                'compose' => $compose,
+                'infra_services' => $this->infraServicesPayload(new InfraRuntime()),
+            ]);
+        }
+
+        $requestId = $runtime->request($name, $action);
 
         return Response::json([
             'request_id' => $requestId,
@@ -154,6 +210,16 @@ final class InfraController extends Controller
                 'name' => $compose['name'],
             ],
             'compose' => $compose,
+        ]);
+    }
+
+    public function composeFileLogs(Request $request, array $params = []): Response
+    {
+        $name = (string) ($params['name'] ?? '');
+        $tail = (int) ($request->queryParam('tail') ?? 300);
+
+        return Response::json([
+            'logs' => (new ComposeFileRuntime())->logs($name, $tail),
         ]);
     }
 

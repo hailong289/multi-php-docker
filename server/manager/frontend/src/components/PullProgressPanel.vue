@@ -16,6 +16,9 @@ const title = computed(() => {
   if (job.action === 'pull-recreate') {
     return t('progress.pull_recreate_title', { service: job.label })
   }
+  if (job.action === 'recreate') {
+    return t('progress.recreate_title', { service: job.label })
+  }
   return t('progress.pull_create_title', { service: job.label })
 })
 

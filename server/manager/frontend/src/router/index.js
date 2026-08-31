@@ -63,6 +63,12 @@ const router = createRouter({
       meta: { titleKey: 'services.manage_compose_yaml', manager: true },
     },
     {
+      path: '/services/compose-files/:name/logs',
+      name: 'compose-file-logs',
+      component: ServiceLogsView,
+      meta: { titleKey: 'services.logs_page_title', manager: true, logsKind: 'compose' },
+    },
+    {
       path: '/services/:service/logs',
       name: 'service-logs',
       component: ServiceLogsView,

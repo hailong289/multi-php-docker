@@ -9,12 +9,13 @@ use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
+use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
 
 /** Queue build/pull/create for arbitrary compose/*.yml fragments (postgres, kafka, …). */
 final class ComposeFileRuntime
 {
-    private const ACTIONS = ['create', 'start'];
+    private const ACTIONS = ['create', 'start', 'recreate'];
 
     private readonly string $basePath;
 
@@ -76,6 +77,141 @@ final class ComposeFileRuntime
         }
 
         return $requestId;
+    }
+
+    /**
+     * @return list<array{name: string, profile: ?string, container: ?string, image: ?string, has_build: bool}>
+     */
+    public function servicesFromFile(string $filename): array
+    {
+        $name = $this->safeFilename($filename);
+        $path = $this->projectPath . '/compose/' . $name;
+        if (!is_file($path)) {
+            throw new HttpException('services.compose_missing', 404);
+        }
+
+        return ComposeFileParser::services((string) file_get_contents($path));
+    }
+
+    public function primaryContainer(string $filename): string
+    {
+        $services = $this->servicesFromFile($filename);
+        if ($services === []) {
+            throw new HttpException('services.compose_no_services', 422);
+        }
+        $container = (string) ($services[0]['container'] ?? '');
+        if ($container === '') {
+            throw new HttpException('services.compose_no_container', 422);
+        }
+
+        return $container;
+    }
+
+    public function primaryImage(string $filename): ?string
+    {
+        $services = $this->servicesFromFile($filename);
+        if ($services === []) {
+            return null;
+        }
+        $image = $services[0]['image'] ?? null;
+
+        return is_string($image) && $image !== '' ? $image : null;
+    }
+
+    public function deleteContainer(string $filename): void
+    {
+        $name = $this->safeFilename($filename);
+        $container = $this->primaryContainer($name);
+        DockerLiveState::resetCache();
+        if (!DockerExec::removeNamedContainer($container)) {
+            throw new HttpException('services.delete_failed', 500);
+        }
+        DockerLiveState::resetCache();
+        $this->persistFileStatus($name, 'not_created', 'services.deleted', '');
+    }
+
+    public function deleteImage(string $filename): void
+    {
+        $name = $this->safeFilename($filename);
+        $container = $this->primaryContainer($name);
+        DockerLiveState::resetCache();
+        if (DockerExec::containerIdByName($container) !== null) {
+            throw new HttpException('services.delete_image_container_exists', 400);
+        }
+        $image = $this->primaryImage($name);
+        if ($image === null) {
+            throw new HttpException('services.no_image', 400);
+        }
+        if (!DockerExec::removeImage($image)) {
+            throw new HttpException('services.delete_image_failed', 500);
+        }
+    }
+
+    public function stopContainer(string $filename): void
+    {
+        $name = $this->safeFilename($filename);
+        $container = $this->primaryContainer($name);
+        DockerLiveState::resetCache();
+        if (!DockerExec::stopNamedContainer($container)) {
+            throw new HttpException('services.request_failed', 500);
+        }
+        $this->persistFileStatus($name, 'stopped', 'php_controller.action_success', '');
+    }
+
+    public function restartContainer(string $filename): void
+    {
+        $name = $this->safeFilename($filename);
+        $container = $this->primaryContainer($name);
+        DockerLiveState::resetCache();
+        if (!DockerExec::restartNamedContainer($container)) {
+            throw new HttpException('services.request_failed', 500);
+        }
+        $this->persistFileStatus($name, 'running', 'php_controller.action_success', '');
+    }
+
+    /**
+     * @return array{compose_file: string, container: string, available: bool, content: string, truncated: bool, updated_at: string}
+     */
+    public function logs(string $filename, int $tail = 300): array
+    {
+        $name = $this->safeFilename($filename);
+        $container = $this->primaryContainer($name);
+        $tail = max(1, min(2000, $tail));
+        $content = DockerExec::containerLogs($container, $tail);
+        $available = $content !== null;
+        $text = $available ? (string) $content : '';
+
+        return [
+            'compose_file' => $name,
+            'container' => $container,
+            'available' => $available,
+            'content' => $text,
+            'truncated' => $available && strlen($text) >= 262144,
+            'updated_at' => date(DATE_ATOM),
+        ];
+    }
+
+    private function persistFileStatus(string $filename, string $state, string $messageKey, string $requestId): void
+    {
+        $name = $this->safeFilename($filename);
+        $queueKey = self::queueKey($name);
+        $statusDir = $this->basePath . '/status';
+        if (!is_dir($statusDir) && !mkdir($statusDir, 0775, true) && !is_dir($statusDir)) {
+            throw new HttpException('services.request_failed', 500);
+        }
+
+        $payload = json_encode([
+            'compose_file' => $name,
+            'queue_key' => $queueKey,
+            'state' => $state,
+            'message_key' => $messageKey,
+            'request_id' => $requestId,
+            'updated_at' => gmdate('Y-m-d\TH:i:s\Z'),
+        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
+
+        if (!AtomicFile::write($statusDir . '/' . $queueKey . '.json', $payload)) {
+            throw new HttpException('services.request_failed', 500);
+        }
     }
 
     /**

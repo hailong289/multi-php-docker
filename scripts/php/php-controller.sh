@@ -262,6 +262,24 @@ run_compose_rm() {
     "$@"
 }
 
+run_compose_file_rm() {
+    project_name="$1"
+    compose_yml="$2"
+    profile="$3"
+    service="$4"
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_yml"
+    if [ -n "$profile" ]; then
+        set -- "$@" --profile "$profile"
+    fi
+    set -- "$@" rm -sf "$service"
+    "$@"
+}
+
 run_compose_file_pull() {
     project_name="$1"
     compose_yml="$2"
@@ -349,7 +367,7 @@ parse_compose_file_request() {
     compose_file=$(compose_file_safe_name "$compose_file") || return 1
     printf '%s' "$request_id" | grep -Eq '^[0-9a-f]{32}$' || return 1
     case "$action" in
-        create|start) ;;
+        create|start|stop|restart|recreate) ;;
         *) return 1 ;;
     esac
     printf '%s' "$queue_key" | grep -Eq '^compose-file__[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(yml|yaml)$' || return 1
@@ -396,8 +414,35 @@ handle_compose_file_request() {
                         fi
                     fi
                     ;;
+                recreate)
+                    run_compose_file_rm "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 || true
+                    if [ "$has_build" = "1" ]; then
+                        if run_compose_file_build "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 \
+                            && run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
+                            ok=1
+                        fi
+                    elif run_compose_file_pull "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 \
+                        && run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
+                        ok=1
+                    fi
+                    ;;
                 start)
                     if [ -n "$container" ] && docker start "$container" >>"$log_file" 2>&1; then
+                        sleep 2
+                        if container_running "$container"; then
+                            ok=1
+                        else
+                            docker logs --tail 40 "$container" >>"$log_file" 2>&1 || true
+                        fi
+                    fi
+                    ;;
+                stop)
+                    if [ -n "$container" ] && docker stop "$container" >>"$log_file" 2>&1; then
+                        ok=1
+                    fi
+                    ;;
+                restart)
+                    if [ -n "$container" ] && docker restart "$container" >>"$log_file" 2>&1; then
                         sleep 2
                         if container_running "$container"; then
                             ok=1

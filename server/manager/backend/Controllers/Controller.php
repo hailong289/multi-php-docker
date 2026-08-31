@@ -8,6 +8,7 @@ use Manager\Http\Request;
 use Manager\Http\Response;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
+use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\NginxManagement;
 use Manager\Models\NginxReload;
@@ -30,6 +31,10 @@ abstract class Controller
         $infra = new InfraRuntime();
         $supervisor = new SupervisorRuntime();
         $hosts = new HostsSync();
+        $composeFiles = array_values(array_filter(
+            (new InfraCompose())->list(),
+            static fn (array $file): bool => ($file['runtime'] ?? '') === 'compose',
+        ));
 
         $ssl = new SslCertificates(Config::projectPath());
         $serversOut = [];
@@ -56,6 +61,7 @@ abstract class Controller
             'infra_services' => [
                 'targets' => InfraRuntime::targets(),
                 'statuses' => $infra->statuses(),
+                'compose_files' => $composeFiles,
             ],
             'supervisor_services' => [
                 'targets' => SupervisorRuntime::targets(),

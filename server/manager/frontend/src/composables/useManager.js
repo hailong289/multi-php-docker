@@ -36,7 +36,7 @@ const data = reactive({
   hosts_write_enabled: true,
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
-  infra_services: { targets: {}, statuses: {} },
+  infra_services: { targets: {}, statuses: {}, compose_files: [] },
   supervisor_services: { targets: {}, statuses: {} },
   php_controller_daemon: {
     container: 'php_controller_container',
@@ -71,7 +71,7 @@ const hostsProgress = ref(null)
 const pullProgress = ref(null)
 let pullProgressTimer = null
 
-const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate'])
+const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate', 'recreate'])
 const PULL_PROGRESS_POLL_MS = 2000
 
 export function useManager() {
@@ -180,7 +180,7 @@ export function useManager() {
     data.hosts_write_enabled = payload.hosts_write_enabled !== false
     data.pending_sync = !!payload.pending_sync
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
-    data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
+    data.infra_services = payload.infra_services || { targets: {}, statuses: {}, compose_files: [] }
     data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
     data.php_controller_daemon = payload.php_controller_daemon || {
       container: 'php_controller_container',
@@ -637,6 +637,10 @@ export function useManager() {
   }
 
   function pullProgressBootstrapState(job) {
+    if (job.runtime === 'compose') {
+      const row = data.infra_services?.compose_files?.find((file) => file.name === job.composeFile)
+      return row?.state || 'busy'
+    }
     if (job.runtime === 'infra') return infraServiceState(job.service)
     if (job.runtime === 'php') return phpServiceState(job.service)
     if (job.runtime === 'supervisor') return supervisorServiceState(job.service)
@@ -668,6 +672,15 @@ export function useManager() {
 
   function resolvePullProgressState(job, liveState, logState) {
     if (job.runtime === 'compose') {
+      if (liveState === 'busy' || logState === 'busy') {
+        job.sawBusy = true
+        return 'busy'
+      }
+      if (liveState === 'error' || logState === 'error') return 'error'
+      const pending =
+        pendingAction.value?.kind === 'compose-file' &&
+        pendingAction.value?.name === job.composeFile
+      if (pending && !job.sawBusy) return 'busy'
       return logState || liveState || 'busy'
     }
     if (liveState && liveState !== 'busy') {
@@ -683,11 +696,8 @@ export function useManager() {
     const job = pullProgress.value
     if (!job) return
 
-    let liveState = job.state
-    if (job.runtime !== 'compose') {
-      await loadBootstrap({ silent: true })
-      liveState = pullProgressBootstrapState(job)
-    }
+    await loadBootstrap({ silent: true })
+    const liveState = pullProgressBootstrapState(job)
 
     const url = pullProgressLogsUrl(job)
     let logState = ''
@@ -695,7 +705,7 @@ export function useManager() {
       try {
         const result = await apiGet(url)
         const logs = result.logs || {}
-        job.content = logs.content || logs.create_log || ''
+        job.content = logs.content || logs.recreate_log || logs.create_log || ''
         logState = logs.state || ''
       } catch (_) {
         // keep previous output
@@ -718,6 +728,7 @@ export function useManager() {
       state: 'busy',
       content: '',
       loading: true,
+      sawBusy: false,
     }
     pollPullProgress()
     pullProgressTimer = setInterval(pollPullProgress, PULL_PROGRESS_POLL_MS)
@@ -1005,6 +1016,9 @@ export function useManager() {
         if (row?.state === 'busy') return true
       }
     }
+    for (const file of data.infra_services?.compose_files || []) {
+      if (file.state === 'busy') return true
+    }
     const nginx = data.nginx_management
     if (nginx?.state === 'busy') return true
     return false
@@ -1087,15 +1101,44 @@ export function useManager() {
     if (isPending('compose-file', { name: item.name, action })) return false
     if (!phpControllerDaemonRunning.value) return false
     const state = item.state || 'not_created'
-    if (state === 'busy') return false
     if (action === 'create') return state === 'not_created'
-    if (state === 'error' || state === 'not_created') return false
+    if (action === 'recreate') return state === 'running' || state === 'stopped' || state === 'error'
+    if (action === 'delete') return state === 'running' || state === 'stopped'
+    if (action === 'delete-image') return state === 'not_created' && !!item.image_present
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
     return false
   }
 
   async function composeYamlAction(item, action) {
     if (item?.runtime !== 'compose') return
+    const label = item.compose_services?.[0]?.name || item.name.replace(/\.ya?ml$/i, '')
+    const container = item.container || item.compose_services?.[0]?.container || label
+    if (action === 'delete') {
+      if (
+        !confirm(
+          t('services.delete_confirm', {
+            service: label,
+            container,
+          }),
+        )
+      ) {
+        return
+      }
+    }
+    if (action === 'delete-image') {
+      if (
+        !confirm(
+          t('services.delete_image_confirm', {
+            service: label,
+            image: item.image || label,
+          }),
+        )
+      ) {
+        return
+      }
+    }
     pendingAction.value = { kind: 'compose-file', name: item.name, action }
     try {
       const result = await apiSend(
@@ -1104,12 +1147,25 @@ export function useManager() {
         {},
       )
       toastFromResult(result)
+      if (result.infra_services) data.infra_services = result.infra_services
+      if (action === 'delete' || action === 'delete-image' || action === 'stop' || action === 'restart') {
+        await loadBootstrap({ silent: true })
+        return result
+      }
       await waitForPullProgress({
         runtime: 'compose',
         composeFile: item.name,
         action,
         label: item.name,
       })
+      const deadline = Date.now() + 90_000
+      while (Date.now() < deadline) {
+        await loadBootstrap({ silent: true })
+        const row = data.infra_services?.compose_files?.find((file) => file.name === item.name)
+        if ((row?.state || 'busy') !== 'busy') break
+        await sleep(1500)
+      }
+      await loadBootstrap({ silent: true })
       return result
     } catch (error) {
       showToast('failure', translateApiError(error))
@@ -1120,7 +1176,10 @@ export function useManager() {
 
   function composeTabActionEnabled(item, action) {
     if (!item?.runtime) return false
-    if (item.runtime === 'compose') return composeYamlActionEnabled(item, action)
+    if (item.runtime === 'compose') {
+      if (action === 'recreate') return composeYamlActionEnabled(item, 'recreate')
+      return composeYamlActionEnabled(item, action)
+    }
     if (!item.service) return false
     if (action === 'create') {
       if (item.runtime === 'infra') return infraActionEnabled(item.service, 'create')
@@ -1129,6 +1188,9 @@ export function useManager() {
     if (action === 'start') {
       if (item.runtime === 'infra') return infraActionEnabled(item.service, 'start')
       if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'start')
+    }
+    if (action === 'pull-recreate' && item.runtime === 'infra' && item.pull_recreate) {
+      return infraActionEnabled(item.service, 'pull-recreate')
     }
     return false
   }
@@ -1251,6 +1313,8 @@ export function useManager() {
     composeFileActionEnabled,
     composeFileAction,
     composeYamlAction,
+    composeYamlActionEnabled,
+    composeYamlActionEnabled,
     composeTabAction,
     composeTabActionEnabled,
     showComposeCreateHint,

@@ -6,6 +6,8 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\DockerExec;
+use Manager\Support\DockerLiveState;
 
 /**
  * List/read/write/delete *.yml|*.yaml under compose/.
@@ -273,6 +275,9 @@ YAML;
             $action = $this->actionContextForFile($name, $content);
             $meta = $this->fileActionMeta($action ?? []);
             $state = $this->stateForActionMeta($name, $meta);
+            $primary = $meta['compose_services'][0] ?? [];
+            $image = $primary['image'] ?? null;
+            $imagePresent = is_string($image) && $image !== '' && DockerLiveState::available() && DockerExec::imageExists($image);
             $files[] = [
                 'name' => $name,
                 'relative_path' => 'compose/' . $name,
@@ -287,6 +292,9 @@ YAML;
                 'has_build' => $meta['has_build'],
                 'included' => $meta['included'],
                 'state' => $state,
+                'container' => $primary['container'] ?? null,
+                'image' => is_string($image) && $image !== '' ? $image : null,
+                'image_present' => $imagePresent,
             ];
         }
         usort($files, static function (array $a, array $b): int {
