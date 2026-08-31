@@ -436,6 +436,15 @@ export function useManager() {
     }
   }
 
+  async function removeDomainEntry(item) {
+    if (!item?.key) return
+    if (item.source === 'hosts') {
+      await deleteDomain(item.key)
+      return
+    }
+    await deleteServer(item.key, 'domains.confirm_delete_server')
+  }
+
   async function reloadNginx() {
     busy.value = true
     pendingAction.value = { kind: 'reload' }
@@ -1283,6 +1292,7 @@ export function useManager() {
     toggleServerEnabled,
     isServerEnabled,
     deleteDomain,
+    removeDomainEntry,
     reloadNginx,
     phpAction,
     startPhpControllerDaemon,

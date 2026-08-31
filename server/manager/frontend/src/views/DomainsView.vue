@@ -23,6 +23,7 @@ const {
   closeDomainModal,
   saveDomain,
   deleteDomain,
+  removeDomainEntry,
   writeDomainHostsAdmin,
   closeHostsManual,
   hostsStateLabel,
@@ -178,12 +179,16 @@ async function copyManualLines() {
                   {{ $t('action.edit') }}
                 </button>
                 <button
-                  v-if="item.source === 'hosts'"
                   type="button"
                   class="danger"
                   :class="{ 'is-loading': isPending('delete', { key: item.key }) }"
                   :disabled="busy"
-                  @click="deleteDomain(item.key)"
+                  :title="
+                    item.source === 'hosts'
+                      ? $t('domains.delete_hosts_hint')
+                      : $t('domains.delete_server_hint')
+                  "
+                  @click="removeDomainEntry(item)"
                 >
                   <span
                     v-if="isPending('delete', { key: item.key })"
