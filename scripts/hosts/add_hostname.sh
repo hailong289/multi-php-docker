@@ -23,6 +23,7 @@ STATUS_FILE="$RUNTIME_DIR/hosts.status.json"
 
 WATCH=0
 FORCE_ADMIN=0
+REQUEST_ID=""
 for arg in "$@"; do
   case "$arg" in
     --watch) WATCH=1 ;;
@@ -70,6 +71,38 @@ case "$OS_TYPE" in
 esac
 
 mkdir -p "$RUNTIME_DIR"
+
+LOCK_DIR="$RUNTIME_DIR/hosts.write.lock"
+
+release_write_lock() {
+  if [ ! -d "$LOCK_DIR" ]; then
+    return 0
+  fi
+  owner="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [ "$owner" = "$$" ]; then
+    rm -rf "$LOCK_DIR"
+  fi
+}
+
+acquire_write_lock() {
+  i=0
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    oldpid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+    if [ -n "$oldpid" ] && ! kill -0 "$oldpid" 2>/dev/null; then
+      rm -rf "$LOCK_DIR"
+      continue
+    fi
+    sleep 0.2
+    i=$((i + 1))
+    # ~90s: another write may be waiting on the admin password dialog.
+    if [ "$i" -ge 450 ]; then
+      echo "Timed out waiting for hosts write lock" >&2
+      return 1
+    fi
+  done
+  printf '%s\n' "$$" > "$LOCK_DIR/pid"
+  trap release_write_lock EXIT INT TERM
+}
 
 read_domains() {
   {
@@ -120,6 +153,14 @@ manual_json() {
   printf '{"hosts_path":"%s","lines":%s}' "$HOSTS_FILE" "$lines_json"
 }
 
+sync_request_id() {
+  if [ ! -f "$SYNC_FILE" ]; then
+    printf ''
+    return 0
+  fi
+  jq -r '.request_id // empty' "$SYNC_FILE" 2>/dev/null || true
+}
+
 write_status() {
   status="$1"
   message_key="$2"
@@ -127,12 +168,16 @@ write_status() {
   manual_json_payload="${4:-}"
   updated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   tmp="$STATUS_FILE.tmp"
+  req_json=""
+  if printf '%s' "$REQUEST_ID" | grep -Eq '^[a-f0-9]{8,64}$'; then
+    req_json="$(printf ',"request_id":"%s"' "$REQUEST_ID")"
+  fi
   if [ -n "$manual_json_payload" ]; then
-    printf '{"status":"%s","message_key":"%s","updated_at":"%s","domains":%s,"manual":%s}\n' \
-      "$status" "$message_key" "$updated_at" "$domains_json" "$manual_json_payload" > "$tmp"
+    printf '{"status":"%s","message_key":"%s","updated_at":"%s"%s,"domains":%s,"manual":%s}\n' \
+      "$status" "$message_key" "$updated_at" "$req_json" "$domains_json" "$manual_json_payload" > "$tmp"
   else
-    printf '{"status":"%s","message_key":"%s","updated_at":"%s","domains":%s}\n' \
-      "$status" "$message_key" "$updated_at" "$domains_json" > "$tmp"
+    printf '{"status":"%s","message_key":"%s","updated_at":"%s"%s,"domains":%s}\n' \
+      "$status" "$message_key" "$updated_at" "$req_json" "$domains_json" > "$tmp"
   fi
   mv "$tmp" "$STATUS_FILE"
 }
@@ -212,6 +257,11 @@ apply_hosts() {
 
 apply_and_status() {
   local force_from_sync="${1:-0}"
+  local rc=1
+  if ! acquire_write_lock; then
+    return 1
+  fi
+  REQUEST_ID="$(sync_request_id)"
   if [ "$force_from_sync" = "1" ]; then
     FORCE_ADMIN=1
   fi
@@ -226,12 +276,15 @@ apply_and_status() {
     write_status success hosts.sync_success "$(domains_map_json synced "${domains[@]:-}")"
     rm -f "$SYNC_FILE"
     echo "Hosts updated successfully."
-    return 0
+    rc=0
+  else
+    write_status error hosts.manual_required "$(domains_map_json unknown "${domains[@]:-}")" "$(manual_json "${domains[@]:-}")"
+    rm -f "$SYNC_FILE"
+    echo "Hosts update failed. Add entries manually if needed."
+    rc=1
   fi
-  write_status error hosts.manual_required "$(domains_map_json unknown "${domains[@]:-}")" "$(manual_json "${domains[@]:-}")"
-  rm -f "$SYNC_FILE"
-  echo "Hosts update failed. Add entries manually if needed."
-  return 1
+  release_write_lock
+  return "$rc"
 }
 
 if [ "$WATCH" -eq 1 ]; then
