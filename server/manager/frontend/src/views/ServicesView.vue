@@ -1,217 +1,191 @@
 <script setup>
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import ActionMenu from '../components/ActionMenu.vue'
 import TableSkeleton from '../components/TableSkeleton.vue'
-import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
-
-const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
 const router = useRouter()
 const { t } = useI18n()
 const {
   loading,
   data,
-  infraAction,
   stateClass,
   stateLabel,
   infraServiceState,
   infraActionEnabled,
+  infraAction,
   showInfraCreateHint,
+  composeYamlAction,
+  composeYamlActionEnabled,
+  composeFileState,
+  showComposeCreateHint,
   isPending,
   loadBootstrap,
-  showToast,
-  translateApiError,
 } = useManager()
 
-const tab = ref('control')
-const composeFiles = ref([])
-const composeDir = ref('compose')
-const defaultContent = ref('')
-const filesLoading = ref(false)
-const selectedName = ref('')
-const draft = ref('')
-const original = ref('')
-const composeMeta = ref(null)
-const composeLoading = ref(false)
-const saving = ref(false)
-const creating = ref(false)
-const newFileName = ref('')
-
 const targets = computed(() => data.infra_services?.targets || {})
-const dirty = computed(() => draft.value !== original.value)
-const selectedFile = computed(
-  () => composeFiles.value.find((item) => item.name === selectedName.value) || null,
-)
-const managedService = computed(() => {
-  if (creating.value) return ''
-  return selectedFile.value?.service || composeMeta.value?.service || ''
+
+function infraMenuItems(service, target) {
+  return [
+    {
+      id: 'create',
+      label: t('services.create'),
+      primary: true,
+      disabled: !infraActionEnabled(service, 'create'),
+      loading: isPending('infra', { service, action: 'create' }),
+      run: () => infraAction(service, 'create'),
+    },
+    {
+      id: 'start',
+      label: t('services.start'),
+      disabled: !infraActionEnabled(service, 'start'),
+      loading: isPending('infra', { service, action: 'start' }),
+      run: () => infraAction(service, 'start'),
+    },
+    {
+      id: 'stop',
+      label: t('services.stop'),
+      disabled: !infraActionEnabled(service, 'stop'),
+      loading: isPending('infra', { service, action: 'stop' }),
+      run: () => infraAction(service, 'stop'),
+    },
+    {
+      id: 'restart',
+      label: t('services.restart'),
+      disabled: !infraActionEnabled(service, 'restart'),
+      loading: isPending('infra', { service, action: 'restart' }),
+      run: () => infraAction(service, 'restart'),
+    },
+    {
+      id: 'logs',
+      label: t('services.view_logs'),
+      disabled: infraServiceState(service) === 'not_created',
+      run: () => router.push({ name: 'service-logs', params: { service } }),
+    },
+    {
+      id: 'delete',
+      label: t('services.delete_container'),
+      danger: true,
+      disabled: !infraActionEnabled(service, 'delete'),
+      loading: isPending('infra', { service, action: 'delete' }),
+      run: () => infraAction(service, 'delete'),
+    },
+    {
+      id: 'delete-image',
+      label: t('services.delete_image'),
+      danger: true,
+      disabled: !infraActionEnabled(service, 'delete-image'),
+      loading: isPending('infra', { service, action: 'delete-image' }),
+      run: () => infraAction(service, 'delete-image'),
+    },
+  ]
+}
+
+function composeMenuItems(item) {
+  return [
+    {
+      id: 'create',
+      label: t('services.create'),
+      primary: true,
+      disabled: !composeYamlActionEnabled(item, 'create'),
+      loading: isPending('compose-file', { name: item.name, action: 'create' }),
+      run: () => composeYamlAction(item, 'create'),
+    },
+    {
+      id: 'start',
+      label: t('services.start'),
+      disabled: !composeYamlActionEnabled(item, 'start'),
+      loading: isPending('compose-file', { name: item.name, action: 'start' }),
+      run: () => composeYamlAction(item, 'start'),
+    },
+    {
+      id: 'stop',
+      label: t('services.stop'),
+      disabled: !composeYamlActionEnabled(item, 'stop'),
+      loading: isPending('compose-file', { name: item.name, action: 'stop' }),
+      run: () => composeYamlAction(item, 'stop'),
+    },
+    {
+      id: 'restart',
+      label: t('services.restart'),
+      disabled: !composeYamlActionEnabled(item, 'restart'),
+      loading: isPending('compose-file', { name: item.name, action: 'restart' }),
+      run: () => composeYamlAction(item, 'restart'),
+    },
+    {
+      id: 'logs',
+      label: t('services.view_logs'),
+      disabled: composeFileState(item) === 'not_created',
+      run: () => router.push({ name: 'compose-file-logs', params: { name: item.name } }),
+    },
+    {
+      id: 'delete',
+      label: t('services.delete_container'),
+      danger: true,
+      disabled: !composeYamlActionEnabled(item, 'delete'),
+      loading: isPending('compose-file', { name: item.name, action: 'delete' }),
+      run: () => composeYamlAction(item, 'delete'),
+    },
+    {
+      id: 'delete-image',
+      label: t('services.delete_image'),
+      danger: true,
+      disabled: !composeYamlActionEnabled(item, 'delete-image'),
+      loading: isPending('compose-file', { name: item.name, action: 'delete-image' }),
+      run: () => composeYamlAction(item, 'delete-image'),
+    },
+  ]
+}
+
+const serviceRows = computed(() => {
+  const rows = Object.entries(targets.value).map(([service, target]) => ({
+    kind: 'infra',
+    key: `infra:${service}`,
+    service,
+    target,
+    label: target.label,
+    container: target.container,
+    profile: target.profile,
+    ports: target.ports,
+  }))
+
+  for (const item of data.infra_services?.compose_files || []) {
+    if (item.runtime !== 'compose') continue
+    const svc = item.compose_services?.[0]
+    rows.push({
+      kind: 'compose',
+      key: `compose:${item.name}`,
+      item,
+      label: svc?.name || item.name.replace(/\.ya?ml$/i, ''),
+      container: svc?.container || '—',
+      profile: svc?.profile || '—',
+      ports: item.name,
+    })
+  }
+
+  return rows
 })
 
-function formatSize(bytes) {
-  const n = Number(bytes) || 0
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+function rowMenuItems(row) {
+  if (row.kind === 'infra') return infraMenuItems(row.service, row.target)
+  return composeMenuItems(row.item)
 }
 
-function formatTime(iso) {
-  if (!iso) return ''
-  try {
-    return new Date(iso).toLocaleString()
-  } catch (_) {
-    return iso
-  }
+function openComposeYaml() {
+  router.push({ name: 'compose-yaml' })
 }
 
-function normalizeName(raw) {
-  let name = String(raw || '').trim()
-  if (!name) return ''
-  if (!/\.(ya?ml)$/i.test(name)) name += '.yml'
-  return name
+function rowState(row) {
+  if (row.kind === 'infra') return infraServiceState(row.service)
+  return composeFileState(row.item)
 }
 
-async function refreshFiles() {
-  filesLoading.value = true
-  try {
-    const result = await apiGet('/api/infra-services/compose-files')
-    composeFiles.value = result.files || []
-    composeDir.value = result.compose_dir || 'compose'
-    defaultContent.value = result.default_content || ''
-  } catch (error) {
-    showToast('failure', translateApiError(error))
-  } finally {
-    filesLoading.value = false
-  }
+function showCreateHint(row) {
+  if (row.kind === 'infra') return showInfraCreateHint(row.service, row.target)
+  return showComposeCreateHint(row.item)
 }
-
-async function openFile(name) {
-  if (!name) return
-  if ((dirty.value || creating.value) && selectedName.value !== name) {
-    if (!confirm(t('services.compose_discard_confirm'))) return
-  }
-  creating.value = false
-  newFileName.value = ''
-  selectedName.value = name
-  composeLoading.value = true
-  try {
-    const result = await apiGet(`/api/infra-services/compose-files/${encodeURIComponent(name)}`)
-    const compose = result.compose || {}
-    draft.value = compose.content || ''
-    original.value = draft.value
-    composeMeta.value = compose
-  } catch (error) {
-    showToast('failure', translateApiError(error))
-    draft.value = ''
-    original.value = ''
-    composeMeta.value = null
-  } finally {
-    composeLoading.value = false
-  }
-}
-
-function startCreate() {
-  if (dirty.value || creating.value) {
-    if (!confirm(t('services.compose_discard_confirm'))) return
-  }
-  creating.value = true
-  selectedName.value = ''
-  newFileName.value = ''
-  draft.value = defaultContent.value
-  original.value = draft.value
-  composeMeta.value = null
-}
-
-async function saveCompose() {
-  if (saving.value) return
-  saving.value = true
-  try {
-    let result
-    if (creating.value) {
-      const name = normalizeName(newFileName.value)
-      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}\.(yml|yaml)$/.test(name)) {
-        showToast('failure', t('services.compose_invalid_name'))
-        return
-      }
-      result = await apiSend('POST', '/api/infra-services/compose-files', {
-        name,
-        content: draft.value,
-      })
-      creating.value = false
-      selectedName.value = result.compose?.name || name
-    } else if (selectedName.value) {
-      result = await apiSend(
-        'PUT',
-        `/api/infra-services/compose-files/${encodeURIComponent(selectedName.value)}`,
-        { content: draft.value },
-      )
-    } else {
-      return
-    }
-    original.value = draft.value
-    if (result.compose) {
-      composeMeta.value = { ...composeMeta.value, ...result.compose }
-      selectedName.value = result.compose.name || selectedName.value
-    }
-    showToast('success', t(result.message_key || 'services.compose_saved'))
-    await refreshFiles()
-  } catch (error) {
-    showToast('failure', translateApiError(error))
-  } finally {
-    saving.value = false
-  }
-}
-
-async function deleteCompose(name) {
-  const targetName = name || selectedName.value
-  if (!targetName || creating.value) return
-  const item = composeFiles.value.find((f) => f.name === targetName)
-  if (item?.protected || item?.core) {
-    showToast('failure', t('services.compose_core_protected'))
-    return
-  }
-  if (!confirm(t('services.compose_delete_confirm', { name: targetName }))) return
-  saving.value = true
-  try {
-    const result = await apiSend(
-      'DELETE',
-      `/api/infra-services/compose-files/${encodeURIComponent(targetName)}`,
-      {},
-    )
-    showToast('success', t(result.message_key || 'services.compose_deleted'))
-    if (selectedName.value === targetName) {
-      selectedName.value = ''
-      draft.value = ''
-      original.value = ''
-      composeMeta.value = null
-    }
-    await refreshFiles()
-  } catch (error) {
-    showToast('failure', translateApiError(error))
-  } finally {
-    saving.value = false
-  }
-}
-
-async function pullRecreate() {
-  const service = managedService.value
-  if (!service) return
-  if (dirty.value && !confirm(t('services.compose_pull_dirty_confirm'))) return
-  await infraAction(service, 'pull-recreate')
-}
-
-function openLogs(service) {
-  router.push({ name: 'service-logs', params: { service } })
-}
-
-watch(tab, async (next) => {
-  if (next !== 'compose') return
-  await refreshFiles()
-  if (!selectedName.value && !creating.value && composeFiles.value.length > 0) {
-    await openFile(composeFiles.value[0].name)
-  }
-})
 
 onMounted(() => {
   loadBootstrap()
@@ -226,38 +200,22 @@ onMounted(() => {
           <h2>{{ t('services.title') }}</h2>
           <p>{{ t('services.subtitle') }}</p>
         </div>
-      </div>
-    </div>
-
-    <div class="panel-body php-detail-tabs-wrap" data-tour="services-tabs">
-      <div class="php-detail-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="tab === 'control'"
-          :class="{ active: tab === 'control' }"
-          data-tour="services-control-tab"
-          @click="tab = 'control'"
-        >
-          {{ t('services.tab_control') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="tab === 'compose'"
-          :class="{ active: tab === 'compose' }"
-          data-tour="services-compose-tab"
-          @click="tab = 'compose'"
-        >
-          {{ t('services.tab_compose') }}
-        </button>
+        <div class="panel-heading-actions">
+          <button
+            type="button"
+            data-tour="services-compose-yaml"
+            @click="openComposeYaml"
+          >
+            {{ t('services.manage_compose_yaml') }}
+          </button>
+        </div>
       </div>
     </div>
 
     <TableSkeleton
-      v-if="tab === 'control' && loading"
+      v-if="loading"
       :columns="5"
-      :rows="3"
+      :rows="4"
       :headers="[
         t('services.service'),
         t('services.container'),
@@ -266,7 +224,7 @@ onMounted(() => {
         t('services.actions'),
       ]"
     />
-    <div v-else-if="tab === 'control'" class="table-wrap" data-tour="services-table">
+    <div v-else class="table-wrap" data-tour="services-table">
       <table>
         <thead>
           <tr>
@@ -278,255 +236,35 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(target, service) in targets" :key="service">
+          <tr v-for="row in serviceRows" :key="row.key">
             <td>
-              <div>{{ target.label }}</div>
-              <div class="create-hint">{{ t('services.ports') }}: {{ target.ports }}</div>
+              <div>{{ row.label }}</div>
+              <div v-if="row.kind === 'infra'" class="create-hint">
+                {{ t('services.ports') }}: {{ row.ports }}
+              </div>
+              <div v-else class="create-hint">
+                <code>{{ row.ports }}</code>
+                <span v-if="!row.item.included" class="status-line warn">
+                  · {{ t('services.compose_not_included') }}
+                </span>
+              </div>
             </td>
-            <td><code>{{ target.container }}</code></td>
-            <td><code>{{ target.profile }}</code></td>
+            <td><code>{{ row.container }}</code></td>
+            <td><code>{{ row.profile }}</code></td>
             <td>
-              <span class="state-badge" :class="stateClass(infraServiceState(service))">
-                {{ stateLabel(infraServiceState(service)) }}
+              <span class="state-badge" :class="stateClass(rowState(row))">
+                {{ stateLabel(rowState(row)) }}
               </span>
-              <div v-if="showInfraCreateHint(service, target)" class="create-hint">
+              <div v-if="showCreateHint(row)" class="create-hint">
                 {{ t('services.create_hint') }}
               </div>
             </td>
             <td>
-              <div class="controller-actions">
-                <button
-                  v-if="showInfraCreateHint(service, target)"
-                  type="button"
-                  class="primary"
-                  :class="{ 'is-loading': isPending('infra', { service, action: 'create' }) }"
-                  :disabled="!infraActionEnabled(service, 'create')"
-                  @click="infraAction(service, 'create')"
-                >
-                  <span
-                    v-if="isPending('infra', { service, action: 'create' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service, action: 'create' })
-                      ? t('action.working')
-                      : t('services.create')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('infra', { service, action: 'start' }) }"
-                  :disabled="!infraActionEnabled(service, 'start')"
-                  @click="infraAction(service, 'start')"
-                >
-                  <span
-                    v-if="isPending('infra', { service, action: 'start' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service, action: 'start' })
-                      ? t('action.working')
-                      : t('services.start')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('infra', { service, action: 'stop' }) }"
-                  :disabled="!infraActionEnabled(service, 'stop')"
-                  @click="infraAction(service, 'stop')"
-                >
-                  <span
-                    v-if="isPending('infra', { service, action: 'stop' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service, action: 'stop' })
-                      ? t('action.working')
-                      : t('services.stop')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('infra', { service, action: 'restart' }) }"
-                  :disabled="!infraActionEnabled(service, 'restart')"
-                  @click="infraAction(service, 'restart')"
-                >
-                  <span
-                    v-if="isPending('infra', { service, action: 'restart' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service, action: 'restart' })
-                      ? t('action.working')
-                      : t('services.restart')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  data-tour="services-logs-btn"
-                  :disabled="infraServiceState(service) === 'not_created'"
-                  @click="openLogs(service)"
-                >
-                  {{ t('services.view_logs') }}
-                </button>
-              </div>
+              <ActionMenu :items="rowMenuItems(row)" />
             </td>
           </tr>
         </tbody>
       </table>
-    </div>
-
-    <div v-else-if="tab === 'compose'" class="services-compose" data-tour="services-compose">
-      <div class="panel-body nginx-domain-logs-toolbar">
-        <p class="status-line">
-          {{ t('services.compose_hint') }}
-          <code v-if="composeDir">{{ composeDir }}/</code>
-        </p>
-        <button type="button" class="primary" data-tour="services-compose-add" :disabled="saving || filesLoading" @click="startCreate">
-          {{ t('services.compose_add') }}
-        </button>
-      </div>
-
-      <div v-if="filesLoading && composeFiles.length === 0 && !creating" class="panel-body">
-        {{ t('loading') }}
-      </div>
-      <div v-else-if="composeFiles.length === 0 && !creating" class="panel-body empty">
-        {{ t('services.compose_empty') }}
-      </div>
-      <div v-else class="nginx-templates-layout">
-        <div class="table-wrap nginx-templates-list">
-          <table>
-            <thead>
-              <tr>
-                <th>{{ t('services.compose_name') }}</th>
-                <th>{{ t('services.state') }}</th>
-                <th>{{ t('table.actions') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="item in composeFiles"
-                :key="item.name"
-                :class="{ 'is-selected': !creating && item.name === selectedName }"
-                @click="openFile(item.name)"
-              >
-                <td>
-                  <code>{{ item.name }}</code>
-                  <div v-if="item.core" class="create-hint">{{ t('services.compose_core') }}</div>
-                  <div v-else-if="item.protected" class="create-hint">{{ t('services.compose_managed') }}</div>
-                </td>
-                <td>
-                  <span
-                    v-if="item.service"
-                    class="state-badge"
-                    :class="stateClass(infraServiceState(item.service))"
-                  >
-                    {{ stateLabel(infraServiceState(item.service)) }}
-                  </span>
-                  <span v-else class="create-hint">—</span>
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    class="danger"
-                    :disabled="saving || item.protected"
-                    :title="item.protected ? t('services.compose_core_protected') : undefined"
-                    @click.stop="deleteCompose(item.name)"
-                  >
-                    {{ t('action.delete') }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="panel-body nginx-template-editor">
-          <div v-if="!creating && !selectedName" class="empty">{{ t('services.compose_pick') }}</div>
-          <template v-else>
-            <div class="nginx-template-editor-head">
-              <div>
-                <template v-if="creating">
-                  <label class="supervisor-log-file">
-                    {{ t('services.compose_name') }}
-                    <input v-model="newFileName" type="text" placeholder="custom.yml" />
-                  </label>
-                </template>
-                <template v-else>
-                  <strong><code>{{ selectedName }}</code></strong>
-                  <span v-if="dirty" class="status-pill status-off">{{ t('nginx.template_dirty') }}</span>
-                </template>
-              </div>
-              <div class="actions">
-                <button
-                  type="button"
-                  class="primary"
-                  :disabled="saving || composeLoading || (!creating && !dirty)"
-                  @click="saveCompose"
-                >
-                  {{
-                    saving
-                      ? t('action.working')
-                      : creating
-                        ? t('services.compose_create')
-                        : t('services.compose_save')
-                  }}
-                </button>
-                <button
-                  v-if="managedService"
-                  type="button"
-                  :class="{
-                    'is-loading': isPending('infra', {
-                      service: managedService,
-                      action: 'pull-recreate',
-                    }),
-                  }"
-                  :disabled="!infraActionEnabled(managedService, 'pull-recreate') || saving"
-                  @click="pullRecreate"
-                >
-                  <span
-                    v-if="
-                      isPending('infra', { service: managedService, action: 'pull-recreate' })
-                    "
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service: managedService, action: 'pull-recreate' })
-                      ? t('action.working')
-                      : t('services.pull_recreate')
-                  }}
-                </button>
-                <button
-                  v-if="!creating && selectedName && !(selectedFile?.protected || selectedFile?.core)"
-                  type="button"
-                  class="danger"
-                  :disabled="saving"
-                  @click="deleteCompose()"
-                >
-                  {{ t('action.delete') }}
-                </button>
-              </div>
-            </div>
-            <p v-if="composeMeta && !creating" class="nginx-template-meta">
-              <code>{{ composeMeta.relative_path }}</code>
-              · {{ formatSize(composeMeta.size) }} · {{ formatTime(composeMeta.updated_at) }}
-            </p>
-            <div v-if="composeLoading" class="empty">{{ t('loading') }}</div>
-            <MonacoEditor
-              v-else
-              v-model="draft"
-              language="yaml"
-              min-height="420px"
-              :read-only="saving"
-            />
-          </template>
-        </div>
-      </div>
     </div>
   </section>
 </template>

@@ -8,6 +8,8 @@ import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import PhpRunView from '../views/PhpRunView.vue'
 import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
+import ComposeYamlView from '../views/ComposeYamlView.vue'
+import PhpComposeYamlView from '../views/PhpComposeYamlView.vue'
 import ServiceLogsView from '../views/ServiceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
 import TerminalView from '../views/TerminalView.vue'
@@ -56,6 +58,18 @@ const router = createRouter({
       meta: { titleKey: 'nav.services', manager: true },
     },
     {
+      path: '/services/compose',
+      name: 'compose-yaml',
+      component: ComposeYamlView,
+      meta: { titleKey: 'services.manage_compose_yaml', manager: true },
+    },
+    {
+      path: '/services/compose-files/:name/logs',
+      name: 'compose-file-logs',
+      component: ServiceLogsView,
+      meta: { titleKey: 'services.logs_page_title', manager: true, logsKind: 'compose' },
+    },
+    {
       path: '/services/:service/logs',
       name: 'service-logs',
       component: ServiceLogsView,
@@ -66,6 +80,12 @@ const router = createRouter({
       name: 'php-versions',
       component: PhpVersionsView,
       meta: { titleKey: 'nav.php_versions', manager: true },
+    },
+    {
+      path: '/php-versions/compose',
+      name: 'php-compose-yaml',
+      component: PhpComposeYamlView,
+      meta: { titleKey: 'php_controller.manage_yaml', manager: true },
     },
     {
       path: '/php-versions/catalog',
@@ -100,6 +120,10 @@ const router = createRouter({
     {
       path: '/supervisor',
       redirect: '/php-versions',
+    },
+    {
+      path: '/compose',
+      redirect: '/services/compose',
     },
     {
       path: '/:pathMatch(.*)*',

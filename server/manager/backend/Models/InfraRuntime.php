@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
@@ -51,8 +52,11 @@ final class InfraRuntime
 
     public static function targets(): array
     {
+        $projectPath = rtrim(Config::projectPath(), '/');
         $targets = [];
         foreach (self::SERVICES as $service => $config) {
+            $image = self::imageFromCompose($projectPath, $service);
+            $imagePresent = $image !== null && DockerLiveState::available() && DockerExec::imageExists($image);
             $targets[$service] = [
                 'label' => $config['label'],
                 'container' => $config['container'],
@@ -60,10 +64,30 @@ final class InfraRuntime
                 'ports' => $config['ports'],
                 'compose_file' => 'compose/' . $service . '.yml',
                 'create_command' => 'docker compose --profile ' . $config['profile'] . ' create ' . $service,
+                'image' => $image,
+                'image_present' => $imagePresent,
             ];
         }
 
         return $targets;
+    }
+
+    private static function imageFromCompose(string $projectPath, string $service): ?string
+    {
+        $path = $projectPath . '/compose/' . $service . '.yml';
+        if (!is_readable($path)) {
+            return null;
+        }
+        $parsed = ComposeFileParser::services((string) file_get_contents($path));
+        foreach ($parsed as $entry) {
+            if (($entry['name'] ?? '') === $service) {
+                $image = $entry['image'] ?? null;
+
+                return is_string($image) && $image !== '' ? $image : null;
+            }
+        }
+
+        return null;
     }
 
     public function statuses(): array
@@ -111,7 +135,7 @@ final class InfraRuntime
         return ControllerRequests::hasBlocking(
             $this->basePath . '/requests',
             $service,
-            ['start', 'stop', 'restart', 'create', 'pull-recreate'],
+            ['start', 'stop', 'restart', 'create', 'pull-recreate', 'delete'],
         );
     }
 
@@ -145,6 +169,106 @@ final class InfraRuntime
         }
 
         return $requestId;
+    }
+
+    public function deleteContainer(string $service): void
+    {
+        $targets = self::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('services.invalid_service', 400);
+        }
+
+        $container = (string) $targets[$service]['container'];
+        DockerLiveState::resetCache();
+        if (!DockerExec::removeNamedContainer($container)) {
+            throw new HttpException('services.delete_failed', 500);
+        }
+        DockerLiveState::resetCache();
+        $this->persistStatus($service, 'not_created', 'services.deleted', '');
+    }
+
+    public function deleteImage(string $service): void
+    {
+        $targets = self::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('services.invalid_service', 400);
+        }
+
+        $container = (string) $targets[$service]['container'];
+        DockerLiveState::resetCache();
+        if (DockerExec::containerIdByName($container) !== null) {
+            throw new HttpException('services.delete_image_container_exists', 400);
+        }
+
+        $image = $targets[$service]['image'] ?? null;
+        if (!is_string($image) || $image === '') {
+            throw new HttpException('services.no_image', 400);
+        }
+        if (!DockerExec::removeImage($image)) {
+            throw new HttpException('services.delete_image_failed', 500);
+        }
+    }
+
+    private function persistStatus(string $service, string $state, string $messageKey, string $requestId): void
+    {
+        $statusDir = $this->basePath . '/status';
+        if (!is_dir($statusDir) && !mkdir($statusDir, 0775, true) && !is_dir($statusDir)) {
+            throw new HttpException('services.request_failed', 500);
+        }
+
+        $payload = json_encode([
+            'service' => $service,
+            'state' => $state,
+            'message_key' => $messageKey,
+            'request_id' => $requestId,
+            'updated_at' => gmdate('Y-m-d\TH:i:s\Z'),
+        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
+
+        if (!AtomicFile::write($statusDir . '/' . $service . '.json', $payload)) {
+            throw new HttpException('services.request_failed', 500);
+        }
+    }
+
+    /**
+     * @return array{
+     *     service: string,
+     *     state: string,
+     *     message_key: string,
+     *     request_id: string,
+     *     available: bool,
+     *     content: string,
+     *     create_log: string,
+     *     start_log: string,
+     *     docker_log: string,
+     *     updated_at: string
+     * }
+     */
+    public function actionLogs(string $service, int $dockerTail = 120): array
+    {
+        $targets = self::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('services.invalid_service', 400);
+        }
+
+        $bundle = ActionLogReader::bundle(
+            $this->basePath . '/status',
+            $service,
+            static fn (array $decoded): bool => ($decoded['service'] ?? null) === $service,
+        );
+
+        $docker = $this->logs($service, $dockerTail);
+        $dockerLog = $docker['available'] ? (string) ($docker['content'] ?? '') : '';
+        $content = $bundle['content'];
+        if ($dockerLog !== '') {
+            $content = $content !== '' ? $content . "\n\n=== container ===\n" . $dockerLog : "=== container ===\n" . $dockerLog;
+        }
+
+        return array_merge($bundle, [
+            'service' => $service,
+            'docker_log' => $dockerLog,
+            'available' => $bundle['available'] || $dockerLog !== '',
+            'content' => $content,
+        ]);
     }
 
     /**

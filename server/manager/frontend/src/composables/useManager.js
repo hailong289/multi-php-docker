@@ -3,11 +3,6 @@ import { useI18n } from 'vue-i18n'
 import { apiGet, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
-import {
-  HOSTS_WRITE_POLL_MS,
-  HOSTS_WRITE_TIMEOUT_MS,
-  hostsWritePollState,
-} from '../lib/hostsWriteWait'
 import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 
 const reloadMessageKeys = {
@@ -41,7 +36,7 @@ const data = reactive({
   hosts_write_enabled: true,
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
-  infra_services: { targets: {}, statuses: {} },
+  infra_services: { targets: {}, statuses: {}, compose_files: [] },
   supervisor_services: { targets: {}, statuses: {} },
   php_controller_daemon: {
     container: 'php_controller_container',
@@ -73,6 +68,11 @@ const domainFieldErrors = ref({})
 const hostsManualOpen = ref(false)
 const hostsManual = ref(null)
 const hostsProgress = ref(null)
+const pullProgress = ref(null)
+let pullProgressTimer = null
+
+const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate', 'recreate'])
+const PULL_PROGRESS_POLL_MS = 2000
 
 export function useManager() {
   const { t } = useI18n()
@@ -160,6 +160,7 @@ export function useManager() {
     if (meta.service != null && current.service !== meta.service) return false
     if (meta.action != null && current.action !== meta.action) return false
     if (meta.domain != null && current.domain !== meta.domain) return false
+    if (meta.name != null && current.name !== meta.name) return false
     return true
   }
 
@@ -179,7 +180,7 @@ export function useManager() {
     data.hosts_write_enabled = payload.hosts_write_enabled !== false
     data.pending_sync = !!payload.pending_sync
     data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
-    data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
+    data.infra_services = payload.infra_services || { targets: {}, statuses: {}, compose_files: [] }
     data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
     data.php_controller_daemon = payload.php_controller_daemon || {
       container: 'php_controller_container',
@@ -435,6 +436,15 @@ export function useManager() {
     }
   }
 
+  async function removeDomainEntry(item) {
+    if (!item?.key) return
+    if (item.source === 'hosts') {
+      await deleteDomain(item.key)
+      return
+    }
+    await deleteServer(item.key, 'domains.confirm_delete_server')
+  }
+
   async function reloadNginx() {
     busy.value = true
     pendingAction.value = { kind: 'reload' }
@@ -480,11 +490,46 @@ export function useManager() {
 
   /** Queue a PHP container lifecycle action; status updates via bootstrap poll. */
   async function phpAction(service, action) {
+    const target = data.php_controllers?.targets?.[service]
+    if (action === 'delete') {
+      if (
+        !confirm(
+          t('services.delete_confirm', {
+            service: target?.label || service,
+            container: target?.container || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
+    if (action === 'delete-image') {
+      if (
+        !confirm(
+          t('services.delete_image_confirm', {
+            service: target?.label || service,
+            image: target?.image || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
     pendingAction.value = { kind: 'php', service, action }
     try {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
+      if (action === 'delete' || action === 'delete-image') {
+        await loadBootstrap({ silent: true })
+        return
+      }
+      await waitForPullProgress({
+        runtime: 'php',
+        service,
+        action,
+        label: target?.label || service,
+      })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -508,11 +553,64 @@ export function useManager() {
 
   /** Queue an infra container lifecycle action; status updates via bootstrap poll. */
   async function infraAction(service, action) {
+    const target = data.infra_services?.targets?.[service]
+    if (action === 'delete') {
+      if (
+        !confirm(
+          t('services.delete_confirm', {
+            service: target?.label || service,
+            container: target?.container || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
+    if (action === 'delete-image') {
+      if (
+        !confirm(
+          t('services.delete_image_confirm', {
+            service: target?.label || service,
+            image: target?.image || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
     pendingAction.value = { kind: 'infra', service, action }
     try {
       const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
+      if (action === 'delete' || action === 'delete-image') return
+      await waitForPullProgress({
+        runtime: 'infra',
+        service,
+        action,
+        label: target?.label || service,
+      })
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  /** Queue a Supervisor container lifecycle action; status updates via bootstrap poll. */
+  async function supervisorAction(service, action) {
+    const target = data.supervisor_services?.targets?.[service]
+    pendingAction.value = { kind: 'supervisor', service, action }
+    try {
+      const result = await apiSend('POST', `/api/supervisor/${service}/${action}`, {})
+      toastFromResult(result)
+      if (result.supervisor_services) data.supervisor_services = result.supervisor_services
+      await waitForPullProgress({
+        runtime: 'supervisor',
+        service,
+        action,
+        label: target?.label || service,
+      })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -567,48 +665,187 @@ export function useManager() {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  async function waitForHostsResult(previousUpdatedAt, write = {}) {
-    const requestId = write.token || ''
-    const startedAt = Date.now()
-    const maxAttempts = Math.max(1, Math.ceil(HOSTS_WRITE_TIMEOUT_MS / HOSTS_WRITE_POLL_MS))
+  function pullProgressLabel(runtime, service, composeFile) {
+    if (runtime === 'compose') return composeFile || service
+    if (runtime === 'infra') return data.infra_services?.targets?.[service]?.label || service
+    if (runtime === 'php') return data.php_controllers?.targets?.[service]?.label || service
+    if (runtime === 'supervisor') return data.supervisor_services?.targets?.[service]?.label || service
+    return service
+  }
+
+  function pullProgressBootstrapState(job) {
+    if (job.runtime === 'compose') {
+      const row = data.infra_services?.compose_files?.find((file) => file.name === job.composeFile)
+      return row?.state || 'busy'
+    }
+    if (job.runtime === 'infra') return infraServiceState(job.service)
+    if (job.runtime === 'php') return phpServiceState(job.service)
+    if (job.runtime === 'supervisor') return supervisorServiceState(job.service)
+    return job.state || 'busy'
+  }
+
+  function pullProgressLogsUrl(job) {
+    if (job.runtime === 'compose') {
+      return `/api/infra-services/compose-files/${encodeURIComponent(job.composeFile)}/action-logs`
+    }
+    if (job.runtime === 'infra') {
+      return `/api/infra-services/${job.service}/action-logs`
+    }
+    if (job.runtime === 'php') {
+      return `/api/php-controllers/${job.service}/action-logs`
+    }
+    if (job.runtime === 'supervisor') {
+      return `/api/supervisor/${job.service}/action-logs`
+    }
+    return null
+  }
+
+  function stopPullProgressTimer() {
+    if (pullProgressTimer) {
+      clearInterval(pullProgressTimer)
+      pullProgressTimer = null
+    }
+  }
+
+  function resolvePullProgressState(job, liveState, logState) {
+    if (job.runtime === 'compose') {
+      if (liveState === 'busy' || logState === 'busy') {
+        job.sawBusy = true
+        return 'busy'
+      }
+      if (liveState === 'error' || logState === 'error') return 'error'
+      const pending =
+        pendingAction.value?.kind === 'compose-file' &&
+        pendingAction.value?.name === job.composeFile
+      if (pending && !job.sawBusy) return 'busy'
+      return logState || liveState || 'busy'
+    }
+    if (liveState && liveState !== 'busy') {
+      return liveState
+    }
+    if (logState && logState !== 'busy') {
+      return logState
+    }
+    return liveState || logState || 'busy'
+  }
+
+  async function pollPullProgress() {
+    const job = pullProgress.value
+    if (!job) return
+
+    await loadBootstrap({ silent: true })
+    const liveState = pullProgressBootstrapState(job)
+
+    const url = pullProgressLogsUrl(job)
+    let logState = ''
+    if (url) {
+      try {
+        const result = await apiGet(url)
+        const logs = result.logs || {}
+        job.content = logs.content || logs.recreate_log || logs.create_log || ''
+        logState = logs.state || ''
+      } catch (_) {
+        // keep previous output
+      }
+    }
+
+    job.state = resolvePullProgressState(job, liveState, logState)
+    job.loading = false
+  }
+
+  function startPullProgress({ runtime, service = '', action, label, composeFile = '' }) {
+    stopPullProgressTimer()
+    pullProgress.value = {
+      runtime,
+      service,
+      composeFile,
+      action,
+      label: label || pullProgressLabel(runtime, service, composeFile),
+      dismissed: false,
+      state: 'busy',
+      content: '',
+      loading: true,
+      sawBusy: false,
+    }
+    pollPullProgress()
+    pullProgressTimer = setInterval(pollPullProgress, PULL_PROGRESS_POLL_MS)
+  }
+
+  function dismissPullProgress() {
+    if (pullProgress.value) pullProgress.value.dismissed = true
+  }
+
+  async function waitForPullProgress(job) {
+    if (!PULL_TRACKED_ACTIONS.has(job.action)) return
+
+    startPullProgress(job)
+
+    const deadline = Date.now() + 120_000
+    while (Date.now() < deadline) {
+      const current = pullProgress.value
+      if (!current) break
+      if (current.state !== 'busy') break
+      await sleep(PULL_PROGRESS_POLL_MS)
+      await pollPullProgress()
+    }
+    await pollPullProgress()
+    stopPullProgressTimer()
+    for (let i = 0; i < 4; i += 1) {
+      if (!pullProgress.value || pullProgress.value.dismissed) break
+      if (pullProgress.value.state !== 'busy') break
+      await sleep(1200)
+      await pollPullProgress()
+    }
+    await pollPullProgress()
+  }
+
+  async function waitForHostsResult(previousUpdatedAt, maxAttempts = 5) {
     let latestBusy = null
     let pendingSync = false
-    let attempt = 0
-    while (Date.now() - startedAt < HOSTS_WRITE_TIMEOUT_MS) {
-      attempt += 1
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       hostsProgress.value = {
         attempt,
         maxAttempts,
         message_key: 'hosts.progress_checking',
       }
-      if (attempt > 1) await sleep(HOSTS_WRITE_POLL_MS)
+      await sleep(1000)
       try {
         const payload = await apiGet('/api/hosts/status')
         pendingSync = !!payload.pending_sync
         data.pending_sync = pendingSync
         const status = payload.hosts_status
-        const state = hostsWritePollState({
-          status,
-          pendingSync,
-          previousUpdatedAt,
-          requestId,
-        })
-        if (state === 'done') {
-          data.hosts_status = status
+        if (!status?.updated_at) {
           hostsProgress.value = {
             attempt,
             maxAttempts,
-            message_key: status.message_key || 'hosts.progress_done',
+            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
           }
-          return { status, pendingSync: false }
+          continue
         }
-        if (status?.status === 'busy') latestBusy = status
+        if (previousUpdatedAt && status.updated_at === previousUpdatedAt) {
+          hostsProgress.value = {
+            attempt,
+            maxAttempts,
+            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
+          }
+          continue
+        }
+        data.hosts_status = status
+        if (status.status === 'busy' || (pendingSync && status.status === 'success')) {
+          latestBusy = status.status === 'busy' ? status : latestBusy
+          hostsProgress.value = {
+            attempt,
+            maxAttempts,
+            message_key: status.message_key || 'hosts.processing',
+          }
+          continue
+        }
         hostsProgress.value = {
           attempt,
           maxAttempts,
-          message_key:
-            status?.message_key || (pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_checking'),
+          message_key: status.message_key || 'hosts.progress_done',
         }
+        return { status, pendingSync: false }
       } catch (_) {
         hostsProgress.value = {
           attempt,
@@ -635,12 +872,12 @@ export function useManager() {
 
     hostsProgress.value = {
       attempt: 0,
-      maxAttempts: Math.max(1, Math.ceil(HOSTS_WRITE_TIMEOUT_MS / HOSTS_WRITE_POLL_MS)),
+      maxAttempts: 45,
       message_key: launched ? 'hosts.progress_protocol' : 'hosts.progress_starting',
     }
 
     try {
-      const outcome = await waitForHostsResult(previousUpdatedAt, write)
+      const outcome = await waitForHostsResult(previousUpdatedAt, 45)
       const status = outcome?.status || null
       await loadBootstrap({ silent: true })
       data.pending_sync = !!outcome?.pendingSync || !!data.pending_sync
@@ -790,7 +1027,9 @@ export function useManager() {
 
   function stateClass(state) {
     if (state === 'running') return 'state-running'
+    if (state === 'stopped') return 'state-stopped'
     if (state === 'error' || state === 'busy') return `state-${state}`
+    if (state === 'not_created') return 'state-idle'
     return ''
   }
 
@@ -814,6 +1053,9 @@ export function useManager() {
         if (row?.state === 'busy') return true
       }
     }
+    for (const file of data.infra_services?.compose_files || []) {
+      if (file.state === 'busy') return true
+    }
     const nginx = data.nginx_management
     if (nginx?.state === 'busy') return true
     return false
@@ -834,6 +1076,15 @@ export function useManager() {
     const target = data.php_controllers.targets[service]
     if (action === 'create') {
       return state === 'not_created' && target?.profile != null
+    }
+    if (action === 'recreate') {
+      return (state === 'running' || state === 'stopped' || state === 'error') && target?.profile != null
+    }
+    if (action === 'delete') {
+      return state === 'running' || state === 'stopped'
+    }
+    if (action === 'delete-image') {
+      return state === 'not_created' && !!target?.image_present
     }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
@@ -860,6 +1111,12 @@ export function useManager() {
     if (action === 'pull-recreate') {
       return state === 'running' || state === 'stopped'
     }
+    if (action === 'delete') {
+      return state === 'running' || state === 'stopped'
+    }
+    if (action === 'delete-image') {
+      return state === 'not_created' && !!target?.image_present
+    }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
     if (action === 'stop' || action === 'restart') return state === 'running'
@@ -868,6 +1125,166 @@ export function useManager() {
 
   function showInfraCreateHint(service, target) {
     return infraServiceState(service) === 'not_created' && target.profile !== null
+  }
+
+  function supervisorServiceState(service) {
+    return data.supervisor_services.statuses[service]?.state || 'not_created'
+  }
+
+  function supervisorActionEnabled(service, action) {
+    if (isPending('supervisor', { service })) return false
+    if (!phpControllerDaemonRunning.value) return false
+    const state = supervisorServiceState(service)
+    if (action === 'create') return state === 'not_created'
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
+    return false
+  }
+
+  function composeYamlActionEnabled(item, action) {
+    if (item?.runtime !== 'compose') return false
+    if (isPending('compose-file', { name: item.name, action })) return false
+    if (!phpControllerDaemonRunning.value) return false
+    const state = item.state || 'not_created'
+    if (action === 'create') return state === 'not_created'
+    if (action === 'recreate') return state === 'running' || state === 'stopped' || state === 'error'
+    if (action === 'delete') return state === 'running' || state === 'stopped'
+    if (action === 'delete-image') return state === 'not_created' && !!item.image_present
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
+    return false
+  }
+
+  async function composeYamlAction(item, action) {
+    if (item?.runtime !== 'compose') return
+    const label = item.compose_services?.[0]?.name || item.name.replace(/\.ya?ml$/i, '')
+    const container = item.container || item.compose_services?.[0]?.container || label
+    if (action === 'delete') {
+      if (
+        !confirm(
+          t('services.delete_confirm', {
+            service: label,
+            container,
+          }),
+        )
+      ) {
+        return
+      }
+    }
+    if (action === 'delete-image') {
+      if (
+        !confirm(
+          t('services.delete_image_confirm', {
+            service: label,
+            image: item.image || label,
+          }),
+        )
+      ) {
+        return
+      }
+    }
+    pendingAction.value = { kind: 'compose-file', name: item.name, action }
+    try {
+      const result = await apiSend(
+        'POST',
+        `/api/infra-services/compose-files/${encodeURIComponent(item.name)}/${action}`,
+        {},
+      )
+      toastFromResult(result)
+      if (result.infra_services) data.infra_services = result.infra_services
+      if (action === 'delete' || action === 'delete-image' || action === 'stop' || action === 'restart') {
+        await loadBootstrap({ silent: true })
+        return result
+      }
+      await waitForPullProgress({
+        runtime: 'compose',
+        composeFile: item.name,
+        action,
+        label: item.name,
+      })
+      const deadline = Date.now() + 90_000
+      while (Date.now() < deadline) {
+        await loadBootstrap({ silent: true })
+        const row = data.infra_services?.compose_files?.find((file) => file.name === item.name)
+        if ((row?.state || 'busy') !== 'busy') break
+        await sleep(1500)
+      }
+      await loadBootstrap({ silent: true })
+      return result
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  function composeTabActionEnabled(item, action) {
+    if (!item?.runtime) return false
+    if (item.runtime === 'compose') {
+      if (action === 'recreate') return composeYamlActionEnabled(item, 'recreate')
+      return composeYamlActionEnabled(item, action)
+    }
+    if (!item.service) return false
+    if (action === 'create') {
+      if (item.runtime === 'infra') return infraActionEnabled(item.service, 'create')
+      if (item.runtime === 'php') return phpActionEnabled(item.service, 'create')
+      if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'create')
+    }
+    if (action === 'recreate') {
+      if (item.runtime === 'php') return phpActionEnabled(item.service, 'recreate')
+    }
+    if (action === 'delete' || action === 'delete-image') {
+      if (item.runtime === 'php') return phpActionEnabled(item.service, action)
+    }
+    if (action === 'start') {
+      if (item.runtime === 'infra') return infraActionEnabled(item.service, 'start')
+      if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'start')
+    }
+    if (action === 'pull-recreate' && item.runtime === 'infra' && item.pull_recreate) {
+      return infraActionEnabled(item.service, 'pull-recreate')
+    }
+    return false
+  }
+
+  async function composeTabAction(item, action) {
+    if (item.runtime === 'compose') return composeYamlAction(item, action)
+    if (!item?.runtime || !item.service) return
+    if (item.runtime === 'infra') return infraAction(item.service, action)
+    if (item.runtime === 'php') return phpAction(item.service, action)
+    if (item.runtime === 'supervisor') return supervisorAction(item.service, action)
+  }
+
+  function composeFileState(itemOrRuntime, service) {
+    if (itemOrRuntime && typeof itemOrRuntime === 'object') {
+      const item = itemOrRuntime
+      if (item.runtime === 'compose') return item.state || 'not_created'
+      if (!item.runtime || !item.service) return 'not_created'
+      return composeFileState(item.runtime, item.service)
+    }
+    const runtime = itemOrRuntime
+    if (runtime === 'infra') return infraServiceState(service)
+    if (runtime === 'php') return phpServiceState(service)
+    if (runtime === 'supervisor') return supervisorServiceState(service)
+    return 'not_created'
+  }
+
+  function composeFileActionEnabled(item, action) {
+    return composeTabActionEnabled(item, action)
+  }
+
+  async function composeFileAction(item, action) {
+    return composeTabAction(item, action)
+  }
+
+  function showComposeCreateHint(item) {
+    if (!item?.runtime) return false
+    if (item.runtime === 'compose') {
+      return (item.state || 'not_created') === 'not_created'
+    }
+    if (!item.service) return false
+    return composeFileState(item) === 'not_created'
   }
 
   watch(
@@ -903,6 +1320,8 @@ export function useManager() {
     hostsManualOpen,
     hostsManual,
     hostsProgress,
+    pullProgress,
+    dismissPullProgress,
     serverEntries,
     domainEntries,
     versionLabel,
@@ -918,10 +1337,12 @@ export function useManager() {
     toggleServerEnabled,
     isServerEnabled,
     deleteDomain,
+    removeDomainEntry,
     reloadNginx,
     phpAction,
     startPhpControllerDaemon,
     infraAction,
+    supervisorAction,
     openDomainEdit,
     closeDomainModal,
     saveDomain,
@@ -941,6 +1362,17 @@ export function useManager() {
     infraServiceState,
     infraActionEnabled,
     showInfraCreateHint,
+    supervisorServiceState,
+    supervisorActionEnabled,
+    composeFileState,
+    composeFileActionEnabled,
+    composeFileAction,
+    composeYamlAction,
+    composeYamlActionEnabled,
+    composeYamlActionEnabled,
+    composeTabAction,
+    composeTabActionEnabled,
+    showComposeCreateHint,
     isPending,
     showToast,
     dismissToast,
