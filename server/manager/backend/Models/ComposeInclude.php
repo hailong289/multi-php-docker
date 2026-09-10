@@ -53,6 +53,13 @@ final class ComposeInclude
                 $content,
                 1,
             );
+        } elseif (preg_match('/^  - path: compose\/kafka\.yml\s*$/m', $content)) {
+            $content = preg_replace(
+                '/^  - path: compose\/kafka\.yml\s*$/m',
+                rtrim($entry) . "\n  - path: compose/kafka.yml",
+                $content,
+                1,
+            );
         } elseif (preg_match('/^  - path: compose\/rabbitmq\.yml\s*$/m', $content)) {
             $content = preg_replace(
                 '/^  - path: compose\/rabbitmq\.yml\s*$/m',

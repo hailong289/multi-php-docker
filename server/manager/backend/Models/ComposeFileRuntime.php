@@ -12,7 +12,7 @@ use Manager\Support\ControllerRequests;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
 
-/** Queue build/pull/create for arbitrary compose/*.yml fragments (postgres, kafka, …). */
+/** Queue build/pull/create for arbitrary compose/*.yml fragments (minio, …). */
 final class ComposeFileRuntime
 {
     private const ACTIONS = ['create', 'start', 'recreate'];

@@ -73,7 +73,7 @@ function enabled(action) {
   if (data.php_controller_daemon?.state !== 'running') return false
   if (pending.value) return false
   const state = currentState.value
-  if (action === 'create') return state === 'not_created'
+  if (action === 'create') return state === 'not_created' || state === 'error'
   if (state === 'busy' || state === 'error' || state === 'not_created') return false
   if (action === 'start') return state === 'stopped'
   if (action === 'stop' || action === 'restart') return state === 'running'
