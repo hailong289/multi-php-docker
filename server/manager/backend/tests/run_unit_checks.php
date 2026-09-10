@@ -90,6 +90,7 @@ assert_true($editor->extensionLineStatus($removed, 'imagick') === 'absent', 'rem
 assert_true(str_contains($removed, 'extension=foo.so'), 'keep redis line');
 
 assert_true(PhpExtensionCatalog::isCurated('redis'), 'curated redis');
+assert_true(PhpExtensionCatalog::isCurated('pdo_pgsql'), 'curated pdo_pgsql');
 assert_true(!PhpExtensionCatalog::isCurated('foobar'), 'not curated foobar');
 assert_true(PhpExtensionCatalog::isValidName('gd'), 'valid gd');
 assert_true(PhpExtensionCatalog::isValidName('pdo_mysql'), 'valid pdo_mysql');
@@ -149,8 +150,11 @@ assert_true(
 @rmdir($staleDir);
 
 $infraTargets = InfraRuntime::targets();
-assert_true(isset($infraTargets['mysql'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
+assert_true(isset($infraTargets['mysql'], $infraTargets['postgres'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
 assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
+assert_true($infraTargets['postgres']['profile'] === 'postgres', 'postgres profile');
+assert_true($infraTargets['postgres']['container'] === 'postgres_container', 'postgres container');
+assert_true($infraTargets['postgres']['compose_file'] === 'compose/postgres.yml', 'postgres compose file');
 assert_true($infraTargets['redis']['container'] === 'redis_container', 'redis container');
 assert_true($infraTargets['mysql']['compose_file'] === 'compose/mysql.yml', 'mysql compose file');
 assert_true(str_contains($infraTargets['rabbitmq']['create_command'], '--profile rabbitmq'), 'rabbitmq create cmd');
@@ -199,6 +203,7 @@ $phpListedNames = array_column($phpList, 'name');
 assert_true(in_array('php-8.5.yml', $phpListedNames, true), 'php compose listed with scope=php');
 assert_true(!in_array('mysql.yml', $phpListedNames, true), 'mysql hidden from php scope list');
 assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
+assert_true($compose->isCoreFile('postgres.yml'), 'postgres is core');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {
     $compose->deleteFile('mysql.yml');
@@ -212,21 +217,25 @@ $mysqlCtx = $compose->actionContextForFile('mysql.yml');
 assert_true(($mysqlCtx['runtime'] ?? '') === 'infra', 'mysql compose runtime');
 assert_true(($mysqlCtx['service'] ?? '') === 'mysql', 'mysql compose service');
 assert_true(($mysqlCtx['pull_recreate'] ?? false) === true, 'mysql compose pull recreate');
+$postgresInfraCtx = $compose->actionContextForFile('postgres.yml');
+assert_true(($postgresInfraCtx['runtime'] ?? '') === 'infra', 'postgres compose runtime');
+assert_true(($postgresInfraCtx['service'] ?? '') === 'postgres', 'postgres compose service');
+assert_true(($postgresInfraCtx['pull_recreate'] ?? false) === true, 'postgres compose pull recreate');
 file_put_contents($composeProj . '/compose/php-8.5.yml', "services:\n  php-8.5: {}\n");
 $phpCtx = $compose->actionContextForFile('php-8.5.yml');
 assert_true(($phpCtx['runtime'] ?? '') === 'php', 'php compose runtime');
 assert_true(($phpCtx['service'] ?? '') === 'php-8.5', 'php compose service');
 assert_true(($phpCtx['pull_recreate'] ?? true) === false, 'php compose no pull recreate');
 assert_true($compose->actionContextForFile('custom.yml') === null, 'custom compose no runtime');
-$postgresYaml = <<<'YAML'
+$kafkaYaml = <<<'YAML'
 services:
-  postgres:
-    profiles: ["postgres"]
-    image: postgres:16
-    container_name: postgres_container
+  kafka:
+    profiles: ["kafka"]
+    image: apache/kafka:latest
+    container_name: kafka_container
 YAML;
-$parsed = ComposeFileParser::services($postgresYaml);
-assert_true(($parsed[0]['name'] ?? '') === 'postgres', 'parser service name');
+$parsed = ComposeFileParser::services($kafkaYaml);
+assert_true(($parsed[0]['name'] ?? '') === 'kafka', 'parser service name');
 assert_true(($parsed[0]['has_build'] ?? true) === false, 'image-only service has no build');
 $buildYaml = <<<'YAML'
 services:
@@ -247,14 +256,14 @@ services:
 YAML;
 $both = ComposeFileParser::services($bothYaml);
 assert_true(($both[0]['has_build'] ?? true) === false, 'image plus build uses pull not build button');
-assert_true(($parsed[0]['profile'] ?? '') === 'postgres', 'parser profile');
-assert_true(($parsed[0]['container'] ?? '') === 'postgres_container', 'parser container');
+assert_true(($parsed[0]['profile'] ?? '') === 'kafka', 'parser profile');
+assert_true(($parsed[0]['container'] ?? '') === 'kafka_container', 'parser container');
 $withNetworks = <<<'YAML'
 services:
-  postgres:
-    profiles: ["postgres"]
-    image: postgres:16
-    container_name: postgres_container
+  kafka:
+    profiles: ["kafka"]
+    image: apache/kafka:latest
+    container_name: kafka_container
 
 networks:
   app-network:
@@ -262,11 +271,11 @@ networks:
 YAML;
 $parsedNetworks = ComposeFileParser::services($withNetworks);
 assert_true(count($parsedNetworks) === 1, 'parser ignores networks section');
-assert_true(($parsedNetworks[0]['name'] ?? '') === 'postgres', 'parser networks section service name');
-$customCtx = (new InfraCompose($composeProj))->actionContextForFile('postgres.yml', $postgresYaml);
+assert_true(($parsedNetworks[0]['name'] ?? '') === 'kafka', 'parser networks section service name');
+$customCtx = (new InfraCompose($composeProj))->actionContextForFile('kafka.yml', $kafkaYaml);
 assert_true(($customCtx['runtime'] ?? '') === 'compose', 'custom compose runtime');
 assert_true(($customCtx['has_build'] ?? true) === false, 'custom compose no build');
-file_put_contents($composeProj . '/compose/postgres.yml', $postgresYaml);
+file_put_contents($composeProj . '/compose/kafka.yml', $kafkaYaml);
 $composeProjDocker = sys_get_temp_dir() . '/compose-include-' . bin2hex(random_bytes(4));
 mkdir($composeProjDocker . '/compose', 0775, true);
 file_put_contents(
@@ -274,20 +283,20 @@ file_put_contents(
     "include:\n  - path: compose/redis.yml\n    project_directory: .\n\nservices: {}\n",
 );
 $composeInclude = new ComposeInclude($composeProjDocker);
-$composeInclude->ensureIncluded('postgres.yml');
-assert_true($composeInclude->isIncluded('postgres.yml'), 'postgres included in docker-compose');
+$composeInclude->ensureIncluded('kafka.yml');
+assert_true($composeInclude->isIncluded('kafka.yml'), 'kafka included in docker-compose');
 $composeFileRuntime = new ComposeFileRuntime($infraTmp, $composeProj, $runningDaemon);
-$composeReq = $composeFileRuntime->request('postgres.yml', 'create');
+$composeReq = $composeFileRuntime->request('kafka.yml', 'create');
 assert_true(strlen($composeReq) === 32, 'compose file create request id');
-assert_true($composeFileRuntime->hasBlockingRequests('postgres.yml'), 'compose file blocking create');
+assert_true($composeFileRuntime->hasBlockingRequests('kafka.yml'), 'compose file blocking create');
 
 $logDir = $infraTmp . '/status';
-file_put_contents($logDir . '/compose-file__postgres.yml.last-create.log', "create ok\n");
+file_put_contents($logDir . '/compose-file__kafka.yml.last-create.log', "create ok\n");
 file_put_contents(
-    $logDir . '/compose-file__postgres.yml.json',
-    '{"compose_file":"postgres.yml","queue_key":"compose-file__postgres.yml","state":"error","message_key":"php_controller.action_failed","request_id":"a","updated_at":"2026-08-28T10:00:00Z"}' . "\n",
+    $logDir . '/compose-file__kafka.yml.json',
+    '{"compose_file":"kafka.yml","queue_key":"compose-file__kafka.yml","state":"error","message_key":"php_controller.action_failed","request_id":"a","updated_at":"2026-08-28T10:00:00Z"}' . "\n",
 );
-$actionLogs = $composeFileRuntime->actionLogs('postgres.yml');
+$actionLogs = $composeFileRuntime->actionLogs('kafka.yml');
 assert_true(($actionLogs['state'] ?? '') === 'error', 'compose action logs state');
 assert_true(str_contains((string) ($actionLogs['content'] ?? ''), 'create ok'), 'compose action logs content');
 $pullId = (new InfraRuntime($infraTmp, $runningDaemon))->request('redis', 'pull-recreate');

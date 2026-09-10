@@ -19,6 +19,8 @@ include:
     project_directory: .
   - path: compose/mysql.yml
     project_directory: .
+  - path: compose/postgres.yml
+    project_directory: .
 
 services:
   env-init:

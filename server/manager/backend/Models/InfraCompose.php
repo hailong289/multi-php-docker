@@ -11,14 +11,14 @@ use Manager\Support\DockerLiveState;
 
 /**
  * List/read/write/delete *.yml|*.yaml under compose/.
- * Core service files (mysql|redis|rabbitmq).yml cannot be deleted.
+ * Core service files (mysql|postgres|redis|rabbitmq).yml cannot be deleted.
  */
 final class InfraCompose
 {
     private const MAX_BYTES = 524288;
 
     /** @var list<string> */
-    public const CORE_FILES = ['mysql.yml', 'redis.yml', 'rabbitmq.yml'];
+    public const CORE_FILES = ['mysql.yml', 'postgres.yml', 'redis.yml', 'rabbitmq.yml'];
 
     private readonly string $projectPath;
 
@@ -87,7 +87,7 @@ final class InfraCompose
         }
         $service = $m[1];
 
-        if (preg_match('/^(mysql|redis|rabbitmq)$/i', $service)) {
+        if (preg_match('/^(mysql|postgres|redis|rabbitmq)$/i', $service)) {
             return $this->enrichWithComposeServices([
                 'runtime' => 'infra',
                 'service' => strtolower($service),
@@ -203,17 +203,13 @@ final class InfraCompose
     public function defaultContent(): string
     {
         return <<<'YAML'
-# Custom Compose fragment — rename "example" to match your service (e.g. postgres, kafka).
+# Custom Compose fragment — rename "example" to match your service (e.g. kafka, minio).
 # After saving, use Create then Start in the manager UI.
 services:
   example:
     profiles: ["example"]
-    image: postgres:16
+    image: apache/kafka:latest
     container_name: example_container
-    environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
     networks:
       - app-network
 

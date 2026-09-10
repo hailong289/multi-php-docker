@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { apiGet } from '../api'
 import { useManager } from '../composables/useManager'
 
-const INFRA_ALLOWED = ['mysql', 'redis', 'rabbitmq']
+const INFRA_ALLOWED = ['mysql', 'postgres', 'redis', 'rabbitmq']
 
 const route = useRoute()
 const router = useRouter()
