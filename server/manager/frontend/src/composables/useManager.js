@@ -1369,7 +1369,6 @@ export function useManager() {
     composeFileAction,
     composeYamlAction,
     composeYamlActionEnabled,
-    composeYamlActionEnabled,
     composeTabAction,
     composeTabActionEnabled,
     showComposeCreateHint,
