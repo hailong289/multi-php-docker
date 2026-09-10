@@ -708,25 +708,20 @@ export function useManager() {
   }
 
   function resolvePullProgressState(job, liveState, logState) {
-    if (job.runtime === 'compose') {
-      if (liveState === 'busy' || logState === 'busy') {
-        job.sawBusy = true
-        return 'busy'
-      }
-      if (liveState === 'error' || logState === 'error') return 'error'
-      const pending =
+    if (liveState === 'busy' || logState === 'busy') {
+      job.sawBusy = true
+      return 'busy'
+    }
+    if (liveState === 'error' || logState === 'error') return 'error'
+    const pending =
+      (job.runtime === 'compose' &&
         pendingAction.value?.kind === 'compose-file' &&
-        pendingAction.value?.name === job.composeFile
-      if (pending && !job.sawBusy) return 'busy'
-      return logState || liveState || 'busy'
-    }
-    if (liveState && liveState !== 'busy') {
-      return liveState
-    }
-    if (logState && logState !== 'busy') {
-      return logState
-    }
-    return liveState || logState || 'busy'
+        pendingAction.value?.name === job.composeFile) ||
+      (job.runtime !== 'compose' &&
+        pendingAction.value?.kind === job.runtime &&
+        pendingAction.value?.service === job.service)
+    if (pending && !job.sawBusy) return 'busy'
+    return logState || liveState || 'busy'
   }
 
   async function pollPullProgress() {
@@ -1075,7 +1070,7 @@ export function useManager() {
     const state = phpServiceState(service)
     const target = data.php_controllers.targets[service]
     if (action === 'create') {
-      return state === 'not_created' && target?.profile != null
+      return (state === 'not_created' || state === 'error') && target?.profile != null
     }
     if (action === 'recreate') {
       return (state === 'running' || state === 'stopped' || state === 'error') && target?.profile != null
@@ -1084,7 +1079,7 @@ export function useManager() {
       return state === 'running' || state === 'stopped'
     }
     if (action === 'delete-image') {
-      return state === 'not_created' && !!target?.image_present
+      return (state === 'not_created' || state === 'error') && !!target?.image_present
     }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
@@ -1093,7 +1088,8 @@ export function useManager() {
   }
 
   function showCreateHint(service, target) {
-    return phpServiceState(service) === 'not_created' && target.profile !== null
+    const state = phpServiceState(service)
+    return (state === 'not_created' || state === 'error') && target.profile !== null
   }
 
   function infraServiceState(service) {
@@ -1106,7 +1102,7 @@ export function useManager() {
     const state = infraServiceState(service)
     const target = data.infra_services.targets[service]
     if (action === 'create') {
-      return state === 'not_created' && target?.profile != null
+      return (state === 'not_created' || state === 'error') && target?.profile != null
     }
     if (action === 'pull-recreate') {
       return state === 'running' || state === 'stopped'
@@ -1115,7 +1111,7 @@ export function useManager() {
       return state === 'running' || state === 'stopped'
     }
     if (action === 'delete-image') {
-      return state === 'not_created' && !!target?.image_present
+      return (state === 'not_created' || state === 'error') && !!target?.image_present
     }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
@@ -1124,7 +1120,8 @@ export function useManager() {
   }
 
   function showInfraCreateHint(service, target) {
-    return infraServiceState(service) === 'not_created' && target.profile !== null
+    const state = infraServiceState(service)
+    return (state === 'not_created' || state === 'error') && target.profile !== null
   }
 
   function supervisorServiceState(service) {
@@ -1135,7 +1132,7 @@ export function useManager() {
     if (isPending('supervisor', { service })) return false
     if (!phpControllerDaemonRunning.value) return false
     const state = supervisorServiceState(service)
-    if (action === 'create') return state === 'not_created'
+    if (action === 'create') return state === 'not_created' || state === 'error'
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
     if (action === 'stop' || action === 'restart') return state === 'running'
@@ -1147,10 +1144,12 @@ export function useManager() {
     if (isPending('compose-file', { name: item.name, action })) return false
     if (!phpControllerDaemonRunning.value) return false
     const state = item.state || 'not_created'
-    if (action === 'create') return state === 'not_created'
+    if (action === 'create') return state === 'not_created' || state === 'error'
     if (action === 'recreate') return state === 'running' || state === 'stopped' || state === 'error'
     if (action === 'delete') return state === 'running' || state === 'stopped'
-    if (action === 'delete-image') return state === 'not_created' && !!item.image_present
+    if (action === 'delete-image') {
+      return (state === 'not_created' || state === 'error') && !!item.image_present
+    }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
     if (action === 'stop' || action === 'restart') return state === 'running'
@@ -1281,10 +1280,12 @@ export function useManager() {
   function showComposeCreateHint(item) {
     if (!item?.runtime) return false
     if (item.runtime === 'compose') {
-      return (item.state || 'not_created') === 'not_created'
+      const state = item.state || 'not_created'
+      return state === 'not_created' || state === 'error'
     }
     if (!item.service) return false
-    return composeFileState(item) === 'not_created'
+    const state = composeFileState(item)
+    return state === 'not_created' || state === 'error'
   }
 
   watch(

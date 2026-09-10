@@ -957,6 +957,12 @@ while true; do
         if [ "$ok" -eq 1 ]; then
             write_status "$service" "$state" "php_controller.action_success" "$request_id"
         else
+            # Failed create/install with no container → error so UI can retry Create.
+            if [ "$state" = "not_created" ] && {
+                [ "$action" = "create" ] || [ "$action" = "install-version" ] || [ "$action" = "pull-recreate" ] || [ "$action" = "recreate" ]
+            }; then
+                state="error"
+            fi
             write_status "$service" "$state" "php_controller.action_failed" "$request_id"
         fi
         rm -f "$request_file"
