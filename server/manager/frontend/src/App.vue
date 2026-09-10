@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ToastHost from './components/ToastHost.vue'
+import PullProgressPanel from './components/PullProgressPanel.vue'
 import { useManager } from './composables/useManager'
 import { useTour } from './composables/useTour'
 import { authState } from './lib/authState'
@@ -33,6 +34,7 @@ const showChrome = computed(() => {
 const PHP_CONTROLLER_BANNER_ROUTES = new Set([
   'nginx',
   'services',
+  'compose-yaml',
   'service-logs',
   'php-versions',
   'php-version-catalog',
@@ -221,7 +223,13 @@ watch(() => route.fullPath, updateTitle)
       <RouterLink
         to="/services"
         data-tour="nav-services"
-        :aria-current="route.name === 'services' || route.name === 'service-logs' ? 'page' : undefined"
+        :aria-current="
+          route.name === 'services' ||
+          route.name === 'service-logs' ||
+          route.name === 'compose-yaml'
+            ? 'page'
+            : undefined
+        "
       >
         {{ t('nav.services') }}
       </RouterLink>
@@ -286,5 +294,6 @@ watch(() => route.fullPath, updateTitle)
     <div v-if="showChrome && fatalError" class="notice failure">{{ fatalError }}</div>
     <RouterView v-if="!showChrome || !fatalError" />
     <ToastHost />
+    <PullProgressPanel />
   </main>
 </template>
