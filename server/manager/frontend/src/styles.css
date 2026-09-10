@@ -540,7 +540,7 @@ button.action-menu-item.is-accent:focus-visible:not(:disabled),
   font-size: 0.85rem;
 }
 
-.table-wrap table th:last-child,
+.table-wrap table:has(.action-menu) th:last-child,
 .table-wrap table td:last-child:has(.action-menu) {
   width: 1%;
   white-space: nowrap;
