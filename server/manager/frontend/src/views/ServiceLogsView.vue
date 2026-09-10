@@ -2,6 +2,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import Checkbox from 'primevue/checkbox'
+import Tag from 'primevue/tag'
 import { apiGet } from '../api'
 import { useManager } from '../composables/useManager'
 
@@ -15,7 +18,6 @@ const {
   loadBootstrap,
   showToast,
   translateApiError,
-  stateClass,
   stateLabel,
   infraServiceState,
   phpServiceState,
@@ -68,6 +70,14 @@ const state = computed(() => {
 
 const backLabel = computed(() => t('services.back_to_list'))
 
+function stateSeverity(value) {
+  if (value === 'running') return 'success'
+  if (value === 'stopped') return 'secondary'
+  if (value === 'error') return 'danger'
+  if (value === 'busy') return 'warn'
+  return 'contrast'
+}
+
 function isAllowed() {
   if (isPhp.value) {
     if (Object.keys(targets.value).length > 0) {
@@ -116,8 +126,8 @@ async function loadLogs({ quiet = false } = {}) {
   }
 }
 
-function onFollowChange(event) {
-  followLogs.value = !!event.target.checked
+function onFollowChange(value) {
+  followLogs.value = !!value
   stopFollow()
   if (!followLogs.value) return
   followTimer = setInterval(() => {
@@ -164,41 +174,46 @@ onUnmounted(() => {
   <section class="panel service-logs-page" data-tour="service-logs-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
-        <button
+        <Button
           type="button"
           class="icon-back"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
           :aria-label="backLabel"
           :title="backLabel"
           @click="goBack"
-        >
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-            <path
-              d="M12.5 4.5 7 10l5.5 5.5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
+        />
         <div>
           <h2>{{ title }}</h2>
           <p>
             <code>{{ container || service || composeName }}</code>
             ·
-            <span class="state-badge" :class="stateClass(state)">{{ stateLabel(state) }}</span>
+            <Tag :value="stateLabel(state)" :severity="stateSeverity(state)" rounded />
           </p>
         </div>
       </div>
       <div class="controller-actions">
-        <label class="follow-toggle">
-          <input type="checkbox" :checked="followLogs" @change="onFollowChange" />
-          <span>{{ t('services.follow_logs') }}</span>
-        </label>
-        <button type="button" :disabled="logsLoading" @click="loadLogs()">
-          {{ t('services.refresh_logs') }}
-        </button>
+        <div class="follow-toggle">
+          <Checkbox
+            :model-value="followLogs"
+            binary
+            input-id="service-follow-logs"
+            @update:model-value="onFollowChange"
+          />
+          <label for="service-follow-logs">{{ t('services.follow_logs') }}</label>
+        </div>
+        <Button
+          type="button"
+          severity="secondary"
+          outlined
+          size="small"
+          :label="t('services.refresh_logs')"
+          :loading="logsLoading"
+          :disabled="logsLoading"
+          @click="loadLogs()"
+        />
       </div>
     </div>
 

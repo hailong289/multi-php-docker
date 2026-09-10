@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import Tag from 'primevue/tag'
 import { useManager } from '../composables/useManager'
 
 const { t } = useI18n()
-const { pullProgress, dismissPullProgress, stateClass, stateLabel } = useManager()
+const { pullProgress, dismissPullProgress, stateLabel } = useManager()
 
 const logEl = ref(null)
 
@@ -38,6 +40,14 @@ const bodyText = computed(() => {
   return t('progress.empty')
 })
 
+function stateSeverity(state) {
+  if (state === 'running') return 'success'
+  if (state === 'stopped') return 'secondary'
+  if (state === 'error') return 'danger'
+  if (state === 'busy') return 'warn'
+  return 'contrast'
+}
+
 watch(
   () => pullProgress.value?.content,
   async () => {
@@ -65,22 +75,24 @@ watch(
           aria-hidden="true"
         ></span>
         <strong class="pull-progress-title">{{ title }}</strong>
-        <span
+        <Tag
           v-if="pullProgress.state"
-          class="state-badge pull-progress-state"
-          :class="stateClass(pullProgress.state)"
-        >
-          {{ stateLabel(pullProgress.state) }}
-        </span>
+          class="pull-progress-state"
+          :value="stateLabel(pullProgress.state)"
+          :severity="stateSeverity(pullProgress.state)"
+          rounded
+        />
       </div>
-      <button
+      <Button
         type="button"
         class="pull-progress-close"
+        icon="pi pi-times"
+        severity="secondary"
+        text
+        rounded
         :aria-label="t('progress.dismiss')"
         @click="dismissPullProgress()"
-      >
-        ×
-      </button>
+      />
     </div>
     <pre ref="logEl" class="pull-progress-log">{{ bodyText }}</pre>
   </div>

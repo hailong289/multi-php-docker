@@ -2,8 +2,20 @@
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import Column from 'primevue/column'
+import DataTable from 'primevue/datatable'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Tab from 'primevue/tab'
+import TabList from 'primevue/tablist'
+import TabPanel from 'primevue/tabpanel'
+import TabPanels from 'primevue/tabpanels'
+import Tabs from 'primevue/tabs'
+import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+import { confirmDialog } from '../lib/confirm'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
@@ -13,7 +25,6 @@ const { t } = useI18n()
 const {
   showToast,
   translateApiError,
-  stateClass,
   phpAction,
   phpActionEnabled,
   phpServiceState,
@@ -49,8 +60,19 @@ function statusLabel(status) {
   return t(`php_controller.ext_status_${status}`)
 }
 
-function extStatusClass(status) {
-  return `ext-status ext-status--${status}`
+function stateSeverity(value) {
+  if (value === 'running') return 'success'
+  if (value === 'stopped') return 'secondary'
+  if (value === 'error') return 'danger'
+  if (value === 'busy') return 'warn'
+  return 'contrast'
+}
+
+function extSeverity(status) {
+  if (status === 'loaded' || status === 'enabled_in_ini') return 'success'
+  if (status === 'available_to_install') return 'info'
+  if (status === 'disabled_in_ini') return 'warn'
+  return 'secondary'
 }
 
 function rowPending(name) {
@@ -99,7 +121,7 @@ async function saveIni() {
     })
     showToast('success', t(result.message_key || 'php_controller.ini_saved'))
     details.value = result.php_details
-    if (window.confirm(t('php_controller.ini_restart_confirm'))) {
+    if (await confirmDialog(t('php_controller.ini_restart_confirm'), { acceptLabel: t('action.ok'), rejectLabel: t('action.cancel'), acceptSeverity: 'primary' })) {
       await phpAction(service.value, 'restart')
     }
   } catch (error) {
@@ -111,7 +133,7 @@ async function saveIni() {
 
 async function extAction(name, action) {
   if (action === 'uninstall') {
-    if (!window.confirm(t('php_controller.ext_uninstall_confirm', { extension: name }))) {
+    if (!(await confirmDialog(t('php_controller.ext_uninstall_confirm', { extension: name }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) {
       return
     }
   }
@@ -190,270 +212,280 @@ onUnmounted(() => {
   <section class="panel" data-tour="php-detail-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
-        <button
+        <Button
           type="button"
           class="icon-back"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
           :aria-label="t('php_controller.back')"
           :title="t('php_controller.back')"
           @click="router.push({ name: 'php-versions' })"
-        >
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-            <path
-              d="M12.5 4.5 7 10l5.5 5.5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
+        />
         <div>
           <h2>{{ t('php_controller.details_title', { version: label }) }}</h2>
           <p>{{ t('php_controller.details_subtitle') }}</p>
         </div>
       </div>
-      <button type="button" :disabled="loading || !!pending" @click="load">
-        {{ t('php_controller.refresh') }}
-      </button>
+      <Button
+        type="button"
+        severity="secondary"
+        outlined
+        :label="t('php_controller.refresh')"
+        :disabled="loading || !!pending"
+        @click="load"
+      />
     </div>
 
     <div v-if="loading && !details" class="panel-body">{{ t('loading') }}</div>
     <template v-else-if="details">
       <div class="panel-body nginx-overview">
         <div>
-          <span class="state-badge" :class="stateClass(state)">
-            {{ t(`php_controller.state_${state}`) }}
-          </span>
-          <code>{{ target.container }}</code>
+          <Tag
+            :value="t(`php_controller.state_${state}`)"
+            :severity="stateSeverity(state)"
+            rounded
+          />
+          <code class="php-detail-container">{{ target.container }}</code>
         </div>
         <div class="controller-actions" data-tour="php-detail-actions">
-          <button
+          <Button
             v-if="showCreateHint(service, target)"
             type="button"
-            class="primary"
+            size="small"
+            :label="
+              isPending('php', { service, action: 'create' })
+                ? t('action.working')
+                : t('php_controller.create')
+            "
+            :loading="isPending('php', { service, action: 'create' })"
             :disabled="!phpActionEnabled(service, 'create') || !!pending"
             @click="runLifecycle('create')"
-          >
-            {{ isPending('php', { service, action: 'create' }) ? t('action.working') : t('php_controller.create') }}
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            size="small"
+            severity="secondary"
+            outlined
+            :label="
+              isPending('php', { service, action: 'start' })
+                ? t('action.working')
+                : t('php_controller.start')
+            "
+            :loading="isPending('php', { service, action: 'start' })"
             :disabled="!phpActionEnabled(service, 'start') || !!pending"
             @click="runLifecycle('start')"
-          >
-            {{ isPending('php', { service, action: 'start' }) ? t('action.working') : t('php_controller.start') }}
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            size="small"
+            severity="secondary"
+            outlined
+            :label="
+              isPending('php', { service, action: 'stop' })
+                ? t('action.working')
+                : t('php_controller.stop')
+            "
+            :loading="isPending('php', { service, action: 'stop' })"
             :disabled="!phpActionEnabled(service, 'stop') || !!pending"
             @click="runLifecycle('stop')"
-          >
-            {{ isPending('php', { service, action: 'stop' }) ? t('action.working') : t('php_controller.stop') }}
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            size="small"
+            severity="secondary"
+            outlined
+            :label="
+              isPending('php', { service, action: 'restart' })
+                ? t('action.working')
+                : t('php_controller.restart')
+            "
+            :loading="isPending('php', { service, action: 'restart' })"
             :disabled="!phpActionEnabled(service, 'restart') || !!pending"
             @click="runLifecycle('restart')"
-          >
-            {{ isPending('php', { service, action: 'restart' }) ? t('action.working') : t('php_controller.restart') }}
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            size="small"
+            severity="secondary"
+            outlined
             data-tour="php-logs-btn"
+            :label="t('php_controller.view_logs')"
             :disabled="phpServiceState(service) === 'not_created'"
             @click="router.push({ name: 'php-version-logs', params: { service: service } })"
-          >
-            {{ t('php_controller.view_logs') }}
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            size="small"
+            severity="secondary"
+            outlined
             data-tour="php-run"
+            :label="t('php_controller.run')"
             @click="router.push({ name: 'php-version-run', params: { service: service } })"
-          >
-            {{ t('php_controller.run') }}
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            size="small"
+            severity="secondary"
+            outlined
+            :label="t('php_controller.supervisor')"
             :disabled="!!pending"
             @click="router.push({ name: 'php-version-supervisor', params: { service: service } })"
-          >
-            {{ t('php_controller.supervisor') }}
-          </button>
+          />
         </div>
       </div>
 
       <div class="panel-body php-detail-tabs-wrap" data-tour="php-detail-tabs">
-        <div class="php-detail-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            :aria-selected="tab === 'extensions'"
-            :class="{ active: tab === 'extensions' }"
-            @click="tab = 'extensions'"
-          >
-            {{ t('php_controller.tab_extensions') }}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            :aria-selected="tab === 'ini'"
-            :class="{ active: tab === 'ini' }"
-            data-tour="php-detail-ini-tab"
-            @click="tab = 'ini'"
-          >
-            {{ t('php_controller.tab_ini') }}
-          </button>
-        </div>
-      </div>
+        <Tabs v-model:value="tab">
+          <TabList>
+            <Tab value="extensions">{{ t('php_controller.tab_extensions') }}</Tab>
+            <Tab value="ini" data-tour="php-detail-ini-tab">{{ t('php_controller.tab_ini') }}</Tab>
+          </TabList>
+          <TabPanels>
+            <TabPanel value="extensions">
+              <div class="php-ext-panel">
+                <p class="php-ext-banner">{{ t('php_controller.extensions_banner') }}</p>
+                <Message
+                  v-if="state !== 'running'"
+                  severity="warn"
+                  :closable="false"
+                  class="php-ext-warn-msg"
+                >
+                  {{ t('php_controller.extensions_need_running') }}
+                </Message>
 
-      <div v-if="tab === 'extensions'" class="panel-body php-ext-panel">
-        <p class="php-ext-banner">{{ t('php_controller.extensions_banner') }}</p>
-        <p v-if="state !== 'running'" class="php-ext-warn">
-          {{ t('php_controller.extensions_need_running') }}
-        </p>
-
-        <div class="php-ext-add">
-          <div class="php-ext-add-copy">
-            <h3>{{ t('php_controller.ext_custom_label') }}</h3>
-            <p>{{ t('php_controller.ext_custom_hint') }}</p>
-          </div>
-          <form class="php-ext-add-form" @submit.prevent="installCustomExt">
-            <input
-              :id="datalistId + '-input'"
-              v-model="customExt"
-              type="text"
-              autocomplete="off"
-              spellcheck="false"
-              :list="datalistId"
-              :disabled="state !== 'running' || !!pending"
-              :placeholder="t('php_controller.ext_custom_placeholder')"
-              :aria-label="t('php_controller.ext_custom_label')"
-            />
-            <datalist :id="datalistId">
-              <option v-for="name in availableExtensions" :key="name" :value="name" />
-            </datalist>
-            <button
-              type="submit"
-              class="primary"
-              :disabled="state !== 'running' || !!pending || !normalizeExtName(customExt)"
-            >
-              <span
-                v-if="pending.startsWith('install:')"
-                class="btn-spinner"
-                aria-hidden="true"
-              ></span>
-              {{
-                pending.startsWith('install:')
-                  ? t('action.working')
-                  : t('php_controller.ext_custom_install')
-              }}
-            </button>
-          </form>
-        </div>
-
-        <div v-if="loadedCount" class="php-ext-loaded">
-          <span class="php-ext-loaded-count">
-            {{ t('php_controller.loaded_count', { count: loadedCount }) }}
-          </span>
-          <span class="php-ext-loaded-preview" :title="(details.modules?.modules || []).join(', ')">
-            {{ loadedModulePreview }}
-          </span>
-        </div>
-
-        <div class="table-wrap php-ext-table-wrap">
-          <table class="php-ext-table">
-            <thead>
-              <tr>
-                <th>{{ t('php_controller.extension') }}</th>
-                <th>{{ t('php_controller.state') }}</th>
-                <th class="php-ext-actions-col">{{ t('php_controller.actions') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="ext in details.extensions"
-                :key="ext.name"
-                :class="{ 'is-pending': rowPending(ext.name) }"
-              >
-                <td>
-                  <code class="php-ext-name">{{ ext.name }}</code>
-                </td>
-                <td>
-                  <span class="state-badge" :class="extStatusClass(ext.status)">
-                    {{ statusLabel(ext.status) }}
-                  </span>
-                </td>
-                <td class="php-ext-actions-col">
-                  <div class="php-ext-row-actions">
-                    <button
-                      v-if="ext.status === 'available_to_install'"
-                      type="button"
-                      class="primary"
-                      :disabled="state !== 'running' || !!pending"
-                      @click="extAction(ext.name, 'install')"
-                    >
-                      <span
-                        v-if="pending === `install:${ext.name}`"
-                        class="btn-spinner"
-                        aria-hidden="true"
-                      ></span>
-                      {{
-                        pending === `install:${ext.name}`
-                          ? t('action.working')
-                          : t('php_controller.ext_install')
-                      }}
-                    </button>
-                    <button
-                      v-if="
-                        ext.status === 'loaded' ||
-                        ext.status === 'enabled_in_ini' ||
-                        ext.status === 'disabled_in_ini'
-                      "
-                      type="button"
-                      class="danger"
-                      :disabled="state !== 'running' || !!pending"
-                      @click="extAction(ext.name, 'uninstall')"
-                    >
-                      <span
-                        v-if="pending === `uninstall:${ext.name}`"
-                        class="btn-spinner"
-                        aria-hidden="true"
-                      ></span>
-                      {{
-                        pending === `uninstall:${ext.name}`
-                          ? t('action.working')
-                          : t('php_controller.ext_uninstall')
-                      }}
-                    </button>
+                <div class="php-ext-add">
+                  <div class="php-ext-add-copy">
+                    <h3>{{ t('php_controller.ext_custom_label') }}</h3>
+                    <p>{{ t('php_controller.ext_custom_hint') }}</p>
                   </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  <form class="php-ext-add-form" @submit.prevent="installCustomExt">
+                    <InputText
+                      :id="datalistId + '-input'"
+                      v-model="customExt"
+                      type="text"
+                      autocomplete="off"
+                      spellcheck="false"
+                      :list="datalistId"
+                      :disabled="state !== 'running' || !!pending"
+                      :placeholder="t('php_controller.ext_custom_placeholder')"
+                      :aria-label="t('php_controller.ext_custom_label')"
+                      fluid
+                    />
+                    <datalist :id="datalistId">
+                      <option v-for="name in availableExtensions" :key="name" :value="name" />
+                    </datalist>
+                    <Button
+                      type="submit"
+                      :label="
+                        pending.startsWith('install:')
+                          ? t('action.working')
+                          : t('php_controller.ext_custom_install')
+                      "
+                      :loading="pending.startsWith('install:')"
+                      :disabled="state !== 'running' || !!pending || !normalizeExtName(customExt)"
+                    />
+                  </form>
+                </div>
 
-      <div v-else class="panel-body php-ini-panel">
-        <p v-if="details.ini.relative_path" class="php-ini-path">
-          <code>{{ details.ini.relative_path }}</code>
-        </p>
-        <MonacoEditor
-          v-model="iniDraft"
-          language="ini"
-          min-height="360px"
-          :read-only="!!pending || !details.ini.readable"
-        />
-        <div class="controller-actions php-ini-actions">
-          <button
-            type="button"
-            class="primary"
-            :disabled="!!pending || !details.ini.readable"
-            @click="saveIni"
-          >
-            {{ pending === 'ini' ? t('action.working') : t('php_controller.ini_save') }}
-          </button>
-        </div>
+                <div v-if="loadedCount" class="php-ext-loaded">
+                  <span class="php-ext-loaded-count">
+                    {{ t('php_controller.loaded_count', { count: loadedCount }) }}
+                  </span>
+                  <span
+                    class="php-ext-loaded-preview"
+                    :title="(details.modules?.modules || []).join(', ')"
+                  >
+                    {{ loadedModulePreview }}
+                  </span>
+                </div>
+
+                <DataTable
+                  :value="details.extensions || []"
+                  data-key="name"
+                  striped-rows
+                  :row-class="(ext) => (rowPending(ext.name) ? 'is-pending' : '')"
+                >
+                  <Column :header="t('php_controller.extension')">
+                    <template #body="{ data: ext }">
+                      <code class="php-ext-name">{{ ext.name }}</code>
+                    </template>
+                  </Column>
+                  <Column :header="t('php_controller.state')">
+                    <template #body="{ data: ext }">
+                      <Tag
+                        :value="statusLabel(ext.status)"
+                        :severity="extSeverity(ext.status)"
+                        rounded
+                      />
+                    </template>
+                  </Column>
+                  <Column :header="t('php_controller.actions')">
+                    <template #body="{ data: ext }">
+                      <div class="php-ext-row-actions">
+                        <Button
+                          v-if="ext.status === 'available_to_install'"
+                          type="button"
+                          size="small"
+                          :label="
+                            pending === `install:${ext.name}`
+                              ? t('action.working')
+                              : t('php_controller.ext_install')
+                          "
+                          :loading="pending === `install:${ext.name}`"
+                          :disabled="state !== 'running' || !!pending"
+                          @click="extAction(ext.name, 'install')"
+                        />
+                        <Button
+                          v-if="
+                            ext.status === 'loaded' ||
+                            ext.status === 'enabled_in_ini' ||
+                            ext.status === 'disabled_in_ini'
+                          "
+                          type="button"
+                          size="small"
+                          severity="danger"
+                          outlined
+                          :label="
+                            pending === `uninstall:${ext.name}`
+                              ? t('action.working')
+                              : t('php_controller.ext_uninstall')
+                          "
+                          :loading="pending === `uninstall:${ext.name}`"
+                          :disabled="state !== 'running' || !!pending"
+                          @click="extAction(ext.name, 'uninstall')"
+                        />
+                      </div>
+                    </template>
+                  </Column>
+                </DataTable>
+              </div>
+            </TabPanel>
+            <TabPanel value="ini">
+              <div class="php-ini-panel">
+                <p v-if="details.ini.relative_path" class="php-ini-path">
+                  <code>{{ details.ini.relative_path }}</code>
+                </p>
+                <MonacoEditor
+                  v-model="iniDraft"
+                  language="ini"
+                  min-height="360px"
+                  :read-only="!!pending || !details.ini.readable"
+                />
+                <div class="controller-actions php-ini-actions">
+                  <Button
+                    type="button"
+                    :label="pending === 'ini' ? t('action.working') : t('php_controller.ini_save')"
+                    :loading="pending === 'ini'"
+                    :disabled="!!pending || !details.ini.readable"
+                    @click="saveIni"
+                  />
+                </div>
+              </div>
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
       </div>
     </template>
   </section>

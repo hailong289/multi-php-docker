@@ -2,8 +2,12 @@
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import Message from 'primevue/message'
+import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+import { confirmDialog } from '../lib/confirm'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
@@ -286,7 +290,7 @@ async function renameSession(item) {
 async function deleteSession(item) {
   const current = item || { id: sessionId.value, name: sessionName.value }
   if (!current.id) return
-  if (!confirm(t('php_controller.session_delete_confirm', { name: current.name }))) return
+  if (!(await confirmDialog(t('php_controller.session_delete_confirm', { name: current.name }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
   if (current.id === sessionId.value) {
     await flushDraft()
   }
@@ -391,24 +395,17 @@ onUnmounted(() => {
   <section class="panel php-run-page" data-tour="php-run-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
-        <button
+                <Button
           type="button"
           class="icon-back"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
           :aria-label="t('php_controller.back')"
           :title="t('php_controller.back')"
           @click="goBack"
-        >
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-            <path
-              d="M12.5 4.5 7 10l5.5 5.5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
+        />
         <div>
           <h2>{{ title }}</h2>
           <p>{{ t('php_controller.run_subtitle') }}</p>
@@ -418,15 +415,14 @@ onUnmounted(() => {
 
     <div class="panel-body nginx-domain-logs-toolbar">
       <p class="status-line">{{ t('php_controller.session_hint') }}</p>
-      <button
+      <Button
         type="button"
-        class="primary"
         data-tour="php-run-session-add"
+        :label="mutating === 'create' ? t('action.working') : t('php_controller.session_add')"
+        :loading="mutating === 'create'"
         :disabled="!!mutating || loading"
         @click="createSession"
-      >
-        {{ mutating === 'create' ? t('action.working') : t('php_controller.session_add') }}
-      </button>
+      />
     </div>
 
     <p v-if="loading" class="panel-body">{{ t('loading') }}</p>
@@ -447,41 +443,23 @@ onUnmounted(() => {
               }}</span>
             </div>
             <div class="php-run-session-actions">
-              <button type="button" :disabled="!!mutating" @click.stop="renameSession(item)">
-                {{ t('php_controller.session_rename') }}
-              </button>
-              <button
-                type="button"
-                class="danger"
-                :disabled="!!mutating"
-                @click.stop="deleteSession(item)"
-              >
-                {{ t('action.delete') }}
-              </button>
+              <Button type="button" size="small" severity="secondary" text :label="t('php_controller.session_rename')" :disabled="!!mutating" @click.stop="renameSession(item)" />
+              <Button type="button" size="small" severity="danger" text :label="t('action.delete')" :disabled="!!mutating" @click.stop="deleteSession(item)" />
             </div>
           </li>
         </ul>
       </aside>
 
       <div class="panel-body php-run-editor-pane">
-        <p v-if="!running" class="php-ext-warn">{{ t('php_controller.run_need_running') }}</p>
+        <Message v-if="!running" severity="warn" :closable="false">{{ t('php_controller.run_need_running') }}</Message>
         <div class="nginx-template-editor-head">
           <div>
             <strong>{{ sessionName }}</strong>
-            <span v-if="dirty" class="status-pill status-off">{{ t('php_controller.run_unsaved') }}</span>
+            <Tag v-if="dirty" class="home-inline-tag" :value="t('php_controller.run_unsaved')" severity="secondary" rounded />
           </div>
           <div class="actions">
-            <button type="button" :disabled="!!mutating || !sessionId" @click="renameSession()">
-              {{ t('php_controller.session_rename') }}
-            </button>
-            <button
-              type="button"
-              class="danger"
-              :disabled="!!mutating || !sessionId"
-              @click="deleteSession()"
-            >
-              {{ mutating === 'delete' ? t('action.working') : t('action.delete') }}
-            </button>
+            <Button type="button" size="small" severity="secondary" outlined :label="t('php_controller.session_rename')" :disabled="!!mutating || !sessionId" @click="renameSession()" />
+            <Button type="button" size="small" severity="danger" outlined :label="mutating === 'delete' ? t('action.working') : t('action.delete')" :loading="mutating === 'delete'" :disabled="!!mutating || !sessionId" @click="deleteSession()" />
           </div>
         </div>
         <div class="php-run-editor" data-tour="php-run-editor">
@@ -494,16 +472,13 @@ onUnmounted(() => {
           />
         </div>
         <div class="form-actions php-run-actions" data-tour="php-run-actions">
-          <button
+          <Button
             type="button"
-            class="primary"
-            :class="{ 'is-loading': pending }"
+            :label="pending ? t('php_controller.run_running') : t('php_controller.run')"
+            :loading="pending"
             :disabled="!canRun"
             @click="runCode"
-          >
-            <span v-if="pending" class="btn-spinner" aria-hidden="true"></span>
-            {{ pending ? t('php_controller.run_running') : t('php_controller.run') }}
-          </button>
+          />
           <span class="php-run-hint">{{ t('php_controller.run_shortcut') }}</span>
           <span class="php-run-save-status" :class="{ 'is-dirty': dirty }">{{ savedLabel }}</span>
         </div>

@@ -2,8 +2,14 @@
 import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import Message from 'primevue/message'
+import Select from 'primevue/select'
+import SelectButton from 'primevue/selectbutton'
+import Tag from 'primevue/tag'
 import ToastHost from './components/ToastHost.vue'
 import PullProgressPanel from './components/PullProgressPanel.vue'
+import ConfirmDialog from 'primevue/confirmdialog'
 import { useManager } from './composables/useManager'
 import { useTour } from './composables/useTour'
 import { authState } from './lib/authState'
@@ -17,7 +23,6 @@ const {
   logout,
   dockerStatusBusy,
   data,
-  stateClass,
   stateLabel,
   startPhpControllerDaemon,
   isPending,
@@ -57,6 +62,60 @@ const accessBadge = computed(() => {
 })
 
 const themeMode = ref(document.documentElement.dataset.themeMode || 'system')
+const localeOptions = [
+  { label: 'VI', value: 'vi' },
+  { label: 'EN', value: 'en' },
+]
+const themeOptions = computed(() => [
+  { label: t('theme.system'), value: 'system' },
+  { label: t('theme.light'), value: 'light' },
+  { label: t('theme.dark'), value: 'dark' },
+])
+
+const navItems = computed(() => [
+  {
+    label: t('nav.home'),
+    route: '/',
+    tour: 'nav-home',
+    active: route.name === 'home',
+  },
+  {
+    label: t('nav.domains'),
+    route: '/domains',
+    tour: 'nav-domains',
+    active: route.name === 'domains',
+  },
+  {
+    label: t('nav.nginx'),
+    route: '/nginx',
+    tour: 'nav-nginx',
+    active: route.name === 'nginx',
+  },
+  {
+    label: t('nav.services'),
+    route: '/services',
+    tour: 'nav-services',
+    active:
+      route.name === 'services' ||
+      route.name === 'service-logs' ||
+      route.name === 'compose-yaml' ||
+      route.name === 'compose-file-logs',
+  },
+  {
+    label: t('nav.php_versions'),
+    route: '/php-versions',
+    tour: 'nav-php',
+    active:
+      route.name === 'php-versions' ||
+      route.name === 'php-version-detail' ||
+      route.name === 'php-version-catalog' ||
+      route.name === 'php-version-supervisor' ||
+      route.name === 'php-version-run' ||
+      route.name === 'php-version-logs' ||
+      route.name === 'php-compose-yaml',
+  },
+])
+
 let statusPollTimer = null
 
 const STATUS_POLL_IDLE_MS = 5000
@@ -82,6 +141,7 @@ function onSystemThemeChange() {
 }
 
 function setLocale(next) {
+  if (!next) return
   locale.value = next
   try {
     localStorage.setItem('manager-locale', next)
@@ -158,142 +218,119 @@ watch(() => route.fullPath, updateTitle)
 
 <template>
   <main class="shell" :class="{ 'shell-login': !showChrome }">
-    <header v-if="showChrome" data-tour="app-header">
+    <header v-if="showChrome" class="app-header" data-tour="app-header">
       <div>
         <h1>{{ t('header.title') }}</h1>
         <p>{{ t('header.subtitle') }}</p>
       </div>
       <div class="header-actions">
-        <span class="badge">{{ accessBadge }}</span>
-        <button
+        <Tag :value="accessBadge" severity="info" rounded />
+        <Button
           v-if="authState.remote"
           type="button"
+          :label="t('login.logout')"
+          severity="secondary"
+          outlined
+          size="small"
           @click="logout"
-        >
-          {{ t('login.logout') }}
-        </button>
-        <button
+        />
+        <Button
           type="button"
           data-tour="tour-replay"
-          class="tour-replay-btn"
+          :label="t('tour.button')"
+          severity="secondary"
+          outlined
+          size="small"
           @click="startCurrentTour({ force: true })"
-        >
-          {{ t('tour.button') }}
-        </button>
+        />
         <div class="switcher">
           <span class="switcher-label">{{ t('language.label') }}</span>
-          <div class="locale-form" role="group" :aria-label="t('language.label')">
-            <button type="button" :aria-current="locale === 'vi'" @click="setLocale('vi')">VI</button>
-            <button type="button" :aria-current="locale === 'en'" @click="setLocale('en')">EN</button>
-          </div>
+          <SelectButton
+            :model-value="locale"
+            :options="localeOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            :aria-label="t('language.label')"
+            @update:model-value="setLocale"
+          />
         </div>
         <div class="switcher">
           <span class="switcher-label">{{ t('theme.label') }}</span>
-          <select :value="themeMode" @change="applyTheme($event.target.value)">
-            <option value="system">{{ t('theme.system') }}</option>
-            <option value="light">{{ t('theme.light') }}</option>
-            <option value="dark">{{ t('theme.dark') }}</option>
-          </select>
+          <Select
+            :model-value="themeMode"
+            :options="themeOptions"
+            option-label="label"
+            option-value="value"
+            size="small"
+            class="theme-select"
+            @update:model-value="applyTheme"
+          />
         </div>
       </div>
     </header>
 
-    <nav v-if="showChrome" class="nav-menu" aria-label="Main" data-tour="app-nav">
-      <RouterLink
-        to="/"
-        data-tour="nav-home"
-        :aria-current="route.name === 'home' ? 'page' : undefined"
-      >
-        {{ t('nav.home') }}
-      </RouterLink>
-      <RouterLink
-        to="/domains"
-        data-tour="nav-domains"
-        :aria-current="route.name === 'domains' ? 'page' : undefined"
-      >
-        {{ t('nav.domains') }}
-      </RouterLink>
-      <RouterLink
-        to="/nginx"
-        data-tour="nav-nginx"
-        :aria-current="route.name === 'nginx' ? 'page' : undefined"
-      >
-        {{ t('nav.nginx') }}
-      </RouterLink>
-      <RouterLink
-        to="/services"
-        data-tour="nav-services"
-        :aria-current="
-          route.name === 'services' ||
-          route.name === 'service-logs' ||
-          route.name === 'compose-yaml'
-            ? 'page'
-            : undefined
-        "
-      >
-        {{ t('nav.services') }}
-      </RouterLink>
-      <RouterLink
-        to="/php-versions"
-        data-tour="nav-php"
-        :aria-current="
-          route.name === 'php-versions' ||
-          route.name === 'php-version-detail' ||
-          route.name === 'php-version-catalog' ||
-          route.name === 'php-version-supervisor' ||
-          route.name === 'php-version-run' ||
-          route.name === 'php-version-logs'
-            ? 'page'
-            : undefined
-        "
-      >
-        {{ t('nav.php_versions') }}
-      </RouterLink>
+    <nav v-if="showChrome" class="app-nav" aria-label="Main" data-tour="app-nav">
+      <ul class="app-nav-list">
+        <li v-for="item in navItems" :key="item.route">
+          <RouterLink
+            :to="item.route"
+            class="app-nav-link"
+            :class="{ 'is-active': item.active }"
+            :data-tour="item.tour"
+            :aria-current="item.active ? 'page' : undefined"
+          >
+            {{ item.label }}
+          </RouterLink>
+        </li>
+      </ul>
     </nav>
 
-    <div
+    <Message
       v-if="showPhpControllerBanner"
-      class="notice warning php-controller-banner"
+      severity="warn"
+      class="php-controller-banner"
+      :closable="false"
       role="status"
     >
-      <div class="php-controller-banner-copy">
-        <span
-          class="state-badge"
-          :class="stateClass(data.php_controller_daemon?.state)"
-        >
-          {{ stateLabel(data.php_controller_daemon?.state) }}
-        </span>
-        <p>{{ t('php_controller.daemon_banner') }}</p>
-        <p
-          v-if="!data.php_controller_daemon?.start_available"
-          class="create-hint"
-        >
-          {{ t('php_controller.daemon_not_created_hint') }}
-        </p>
+      <div class="php-controller-banner-inner">
+        <div class="php-controller-banner-copy">
+          <Tag
+            :value="stateLabel(data.php_controller_daemon?.state)"
+            severity="warn"
+          />
+          <p>{{ t('php_controller.daemon_banner') }}</p>
+          <p
+            v-if="!data.php_controller_daemon?.start_available"
+            class="create-hint"
+          >
+            {{ t('php_controller.daemon_not_created_hint') }}
+          </p>
+        </div>
+        <Button
+          type="button"
+          :label="
+            isPending('php-daemon')
+              ? t('action.working')
+              : t('php_controller.daemon_start')
+          "
+          :loading="isPending('php-daemon')"
+          :disabled="!data.php_controller_daemon?.start_available || isPending('php-daemon')"
+          @click="startPhpControllerDaemon"
+        />
       </div>
-      <button
-        type="button"
-        class="primary"
-        :class="{ 'is-loading': isPending('php-daemon') }"
-        :disabled="!data.php_controller_daemon?.start_available || isPending('php-daemon')"
-        @click="startPhpControllerDaemon"
-      >
-        <span
-          v-if="isPending('php-daemon')"
-          class="btn-spinner"
-          aria-hidden="true"
-        ></span>
-        {{
-          isPending('php-daemon')
-            ? t('action.working')
-            : t('php_controller.daemon_start')
-        }}
-      </button>
-    </div>
+    </Message>
 
-    <div v-if="showChrome && fatalError" class="notice failure">{{ fatalError }}</div>
+    <Message
+      v-if="showChrome && fatalError"
+      severity="error"
+      :closable="false"
+    >
+      {{ fatalError }}
+    </Message>
     <RouterView v-if="!showChrome || !fatalError" />
     <ToastHost />
+    <ConfirmDialog />
     <PullProgressPanel />
   </main>
 </template>

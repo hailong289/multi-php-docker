@@ -2,16 +2,18 @@
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import ActionMenu from '../components/ActionMenu.vue'
 import { useManager } from '../composables/useManager'
+import { confirmDialog } from '../lib/confirm'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
 const router = useRouter()
 const { t } = useI18n()
 const {
-  stateClass,
   stateLabel,
   composeFileState,
   composeFileAction,
@@ -39,6 +41,14 @@ async function refreshAll() {
 }
 
 const dirty = computed(() => draft.value !== original.value)
+
+function stateSeverity(state) {
+  if (state === 'running') return 'success'
+  if (state === 'stopped') return 'secondary'
+  if (state === 'error') return 'danger'
+  if (state === 'busy') return 'warn'
+  return 'contrast'
+}
 const selectedFile = computed(
   () => composeFiles.value.find((item) => item.name === selectedName.value) || null,
 )
@@ -182,7 +192,7 @@ async function refreshFiles() {
 async function openFile(name) {
   if (!name) return
   if (dirty.value && selectedName.value !== name) {
-    if (!confirm(t('services.compose_discard_confirm'))) return
+    if (!(await confirmDialog(t('services.compose_discard_confirm'), { acceptLabel: t('action.ok'), rejectLabel: t('action.cancel'), acceptSeverity: 'primary' }))) return
   }
   selectedName.value = name
   composeLoading.value = true
@@ -221,7 +231,7 @@ async function saveCompose() {
     await loadBootstrap({ silent: true })
     const item = selectedFile.value
     if (item && showContainerRecreateButton(item)) {
-      if (confirm(t('services.compose_save_recreate_confirm'))) {
+      if (await confirmDialog(t('services.compose_save_recreate_confirm'), { acceptLabel: t('action.ok'), rejectLabel: t('action.cancel'), acceptSeverity: 'primary' })) {
         await runContainerAction('recreate')
       }
     }
@@ -245,33 +255,24 @@ onMounted(async () => {
   <section class="panel compose-yaml-page" data-tour="php-compose-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
-        <button
+                <Button
           type="button"
           class="icon-back"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
           :aria-label="t('php_controller.back_to_versions')"
           :title="t('php_controller.back_to_versions')"
           @click="router.push({ name: 'php-versions' })"
-        >
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-            <path
-              d="M12.5 4.5 7 10l5.5 5.5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
+        />
         <div>
           <h2>{{ t('php_controller.manage_yaml') }}</h2>
           <p>{{ t('php_controller.yaml_hint') }}</p>
         </div>
       </div>
       <div class="panel-heading-actions">
-        <button type="button" :disabled="saving || filesLoading" @click="refreshAll">
-          {{ t('nginx.refresh') }}
-        </button>
+        <Button type="button" severity="secondary" outlined :label="t('nginx.refresh')" :disabled="saving || filesLoading" @click="refreshAll" />
       </div>
     </div>
 
@@ -310,13 +311,12 @@ onMounted(async () => {
                   <div class="create-hint">{{ t('services.compose_managed') }}</div>
                 </td>
                 <td>
-                  <span
+                  <Tag
                     v-if="row.item.runtime"
-                    class="state-badge"
-                    :class="stateClass(composeFileState(row.item))"
-                  >
-                    {{ stateLabel(composeFileState(row.item)) }}
-                  </span>
+                    :value="stateLabel(composeFileState(row.item))"
+                    :severity="stateSeverity(composeFileState(row.item))"
+                    rounded
+                  />
                   <span v-else class="create-hint">—</span>
                 </td>
               </tr>
@@ -326,22 +326,21 @@ onMounted(async () => {
                     <div class="nginx-template-editor-head compose-yaml-editor-head">
                       <div class="compose-yaml-title">
                         <strong><code>{{ selectedName }}</code></strong>
-                        <span v-if="dirty" class="status-pill status-off">{{ t('nginx.template_dirty') }}</span>
+                        <Tag v-if="dirty" class="home-inline-tag" :value="t('nginx.template_dirty')" severity="secondary" rounded />
                         <p v-if="composeMeta" class="nginx-template-meta">
                           <code>{{ composeMeta.relative_path }}</code>
                           · {{ formatSize(composeMeta.size) }} · {{ formatTime(composeMeta.updated_at) }}
                         </p>
                       </div>
                       <div class="actions controller-actions">
-                        <button
+                        <Button
                           type="button"
-                          class="primary"
+                          size="small"
+                          :label="saving ? t('action.working') : t('services.compose_save')"
+                          :loading="saving"
                           :disabled="saving || composeLoading || !dirty"
                           @click.stop="saveCompose"
-                        >
-                          <span v-if="saving" class="btn-spinner" aria-hidden="true"></span>
-                          {{ saving ? t('action.working') : t('services.compose_save') }}
-                        </button>
+                        />
                         <ActionMenu v-if="actionContext" :items="containerMenuItems(actionContext)" />
                       </div>
                     </div>
