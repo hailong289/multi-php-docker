@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis, and RabbitMQ. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those images. PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis, and RabbitMQ. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those PHP images. The Server Manager UI is published as `long301001/multi-php-docker:manager` (frontend is built inside that image). PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Demo videos
 
@@ -40,7 +40,8 @@ The following images are provided:
 | `nginx` | `long301001/multi-php-docker:nginx` |
 | `php-8.0`, `supervisor-8.0` | `long301001/multi-php-docker:php-8.0` |
 | `php-8.1`, `supervisor-8.1` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.5`, `supervisor-8.5`, `manager` | `long301001/multi-php-docker:php-8.5` |
+| `php-8.5`, `supervisor-8.5` | `long301001/multi-php-docker:php-8.5` |
+| `manager` | `long301001/multi-php-docker:manager` |
 | `php-8.4`, `supervisor-8.4` | `long301001/multi-php-docker:php-8.4` |
 | `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
 | `php-8.2`, `supervisor-8.2` | `long301001/multi-php-docker:php-8.2` |
@@ -135,6 +136,8 @@ docker compose ps
 
 ### 4. Open Server Manager
 
+The Manager UI is baked into `long301001/multi-php-docker:manager`. Clone and `docker compose pull` is enough — you do not need Node.js or `npm run build` on the host. Built Vite files under `server/manager/public/` are gitignored.
+
 Open:
 
 [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
@@ -171,6 +174,19 @@ The browser opens `multi-php-hosts:write` and writes hosts (UAC on Windows / adm
 5. Open the domain, for example `http://my-php85-app.test`.
 
 The next section lists everything Server Manager can do. Manual `env.json` format, hosts CLI, and Compose profile commands are optional alternatives after that.
+
+After changing Manager PHP or Vue source, rebuild and recreate the service (Node runs inside the image build, not on the host):
+
+```bash
+docker compose build manager
+docker compose up -d manager
+```
+
+Publish the image (amd64 + arm64) with the same Buildx flow as the other Hub tags:
+
+```bash
+docker compose build --push manager
+```
 
 ## Manage servers in the web interface
 
@@ -901,7 +917,7 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 │   ├── docker/              # entrypoint, supervisord, compose wrappers
 │   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
-│   ├── manager/             # env.json management UI
+│   ├── manager/             # Manager source (UI is baked into the manager image)
 │   ├── source_php7.4/       # PHP 7.4 projects
 │   ├── source_php8.0/       # PHP 8.0 projects
 │   ├── source_php8.1/       # PHP 8.1 projects
