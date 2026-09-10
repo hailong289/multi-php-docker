@@ -182,7 +182,8 @@ run_compose_create() {
     "$@"
 }
 
-# Hub images (MySQL/Redis/RabbitMQ): pull then create — do not build.
+# Hub images (MySQL/Redis/RabbitMQ/Kafka): prefer pull, then create.
+# If the tag is not on Hub yet (or pull fails), fall back to local image / build.
 run_compose_pull_create() {
     project_name="$1"
     compose_file="$2"
@@ -194,6 +195,22 @@ run_compose_pull_create() {
         set -- "$@" --env-file /project/.env
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" pull "$service"
+    "$@" || true
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" create "$service"
+    if "$@"; then
+        return 0
+    fi
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" build "$service"
     "$@" || return 1
 
     set -- docker compose -p "$project_name"
