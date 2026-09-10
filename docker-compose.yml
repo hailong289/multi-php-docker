@@ -21,6 +21,8 @@ include:
     project_directory: .
   - path: compose/postgres.yml
     project_directory: .
+  - path: compose/kafka.yml
+    project_directory: .
 
 services:
   env-init:

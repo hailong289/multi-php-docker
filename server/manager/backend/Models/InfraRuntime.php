@@ -39,6 +39,12 @@ final class InfraRuntime
             'profile' => 'rabbitmq',
             'ports' => '5672, 15672',
         ],
+        'kafka' => [
+            'label' => 'Kafka',
+            'container' => 'kafka_container',
+            'profile' => 'kafka',
+            'ports' => '9092',
+        ],
     ];
 
     private readonly string $basePath;
