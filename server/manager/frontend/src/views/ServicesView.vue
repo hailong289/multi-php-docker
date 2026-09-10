@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import ActionMenu from '../components/ActionMenu.vue'
 import TableSkeleton from '../components/TableSkeleton.vue'
 import { useManager } from '../composables/useManager'
 
@@ -25,6 +26,118 @@ const {
 } = useManager()
 
 const targets = computed(() => data.infra_services?.targets || {})
+
+function infraMenuItems(service, target) {
+  return [
+    {
+      id: 'create',
+      label: t('services.create'),
+      primary: true,
+      disabled: !infraActionEnabled(service, 'create'),
+      loading: isPending('infra', { service, action: 'create' }),
+      run: () => infraAction(service, 'create'),
+    },
+    {
+      id: 'start',
+      label: t('services.start'),
+      disabled: !infraActionEnabled(service, 'start'),
+      loading: isPending('infra', { service, action: 'start' }),
+      run: () => infraAction(service, 'start'),
+    },
+    {
+      id: 'stop',
+      label: t('services.stop'),
+      disabled: !infraActionEnabled(service, 'stop'),
+      loading: isPending('infra', { service, action: 'stop' }),
+      run: () => infraAction(service, 'stop'),
+    },
+    {
+      id: 'restart',
+      label: t('services.restart'),
+      disabled: !infraActionEnabled(service, 'restart'),
+      loading: isPending('infra', { service, action: 'restart' }),
+      run: () => infraAction(service, 'restart'),
+    },
+    {
+      id: 'logs',
+      label: t('services.view_logs'),
+      disabled: infraServiceState(service) === 'not_created',
+      run: () => router.push({ name: 'service-logs', params: { service } }),
+    },
+    {
+      id: 'delete',
+      label: t('services.delete_container'),
+      danger: true,
+      disabled: !infraActionEnabled(service, 'delete'),
+      loading: isPending('infra', { service, action: 'delete' }),
+      run: () => infraAction(service, 'delete'),
+    },
+    {
+      id: 'delete-image',
+      label: t('services.delete_image'),
+      danger: true,
+      disabled: !infraActionEnabled(service, 'delete-image'),
+      loading: isPending('infra', { service, action: 'delete-image' }),
+      run: () => infraAction(service, 'delete-image'),
+    },
+  ]
+}
+
+function composeMenuItems(item) {
+  return [
+    {
+      id: 'create',
+      label: t('services.create'),
+      primary: true,
+      disabled: !composeYamlActionEnabled(item, 'create'),
+      loading: isPending('compose-file', { name: item.name, action: 'create' }),
+      run: () => composeYamlAction(item, 'create'),
+    },
+    {
+      id: 'start',
+      label: t('services.start'),
+      disabled: !composeYamlActionEnabled(item, 'start'),
+      loading: isPending('compose-file', { name: item.name, action: 'start' }),
+      run: () => composeYamlAction(item, 'start'),
+    },
+    {
+      id: 'stop',
+      label: t('services.stop'),
+      disabled: !composeYamlActionEnabled(item, 'stop'),
+      loading: isPending('compose-file', { name: item.name, action: 'stop' }),
+      run: () => composeYamlAction(item, 'stop'),
+    },
+    {
+      id: 'restart',
+      label: t('services.restart'),
+      disabled: !composeYamlActionEnabled(item, 'restart'),
+      loading: isPending('compose-file', { name: item.name, action: 'restart' }),
+      run: () => composeYamlAction(item, 'restart'),
+    },
+    {
+      id: 'logs',
+      label: t('services.view_logs'),
+      disabled: composeFileState(item) === 'not_created',
+      run: () => router.push({ name: 'compose-file-logs', params: { name: item.name } }),
+    },
+    {
+      id: 'delete',
+      label: t('services.delete_container'),
+      danger: true,
+      disabled: !composeYamlActionEnabled(item, 'delete'),
+      loading: isPending('compose-file', { name: item.name, action: 'delete' }),
+      run: () => composeYamlAction(item, 'delete'),
+    },
+    {
+      id: 'delete-image',
+      label: t('services.delete_image'),
+      danger: true,
+      disabled: !composeYamlActionEnabled(item, 'delete-image'),
+      loading: isPending('compose-file', { name: item.name, action: 'delete-image' }),
+      run: () => composeYamlAction(item, 'delete-image'),
+    },
+  ]
+}
 
 const serviceRows = computed(() => {
   const rows = Object.entries(targets.value).map(([service, target]) => ({
@@ -55,12 +168,9 @@ const serviceRows = computed(() => {
   return rows
 })
 
-function openLogs(service) {
-  router.push({ name: 'service-logs', params: { service } })
-}
-
-function openComposeLogs(name) {
-  router.push({ name: 'compose-file-logs', params: { name } })
+function rowMenuItems(row) {
+  if (row.kind === 'infra') return infraMenuItems(row.service, row.target)
+  return composeMenuItems(row.item)
 }
 
 function openComposeYaml() {
@@ -150,239 +260,7 @@ onMounted(() => {
               </div>
             </td>
             <td>
-              <div v-if="row.kind === 'infra'" class="controller-actions">
-                <button
-                  v-if="showInfraCreateHint(row.service, row.target)"
-                  type="button"
-                  class="primary"
-                  :class="{ 'is-loading': isPending('infra', { service: row.service, action: 'create' }) }"
-                  :disabled="!infraActionEnabled(row.service, 'create')"
-                  @click="infraAction(row.service, 'create')"
-                >
-                  <span
-                    v-if="isPending('infra', { service: row.service, action: 'create' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service: row.service, action: 'create' })
-                      ? t('action.working')
-                      : t('services.create')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('infra', { service: row.service, action: 'start' }) }"
-                  :disabled="!infraActionEnabled(row.service, 'start')"
-                  @click="infraAction(row.service, 'start')"
-                >
-                  <span
-                    v-if="isPending('infra', { service: row.service, action: 'start' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service: row.service, action: 'start' })
-                      ? t('action.working')
-                      : t('services.start')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('infra', { service: row.service, action: 'stop' }) }"
-                  :disabled="!infraActionEnabled(row.service, 'stop')"
-                  @click="infraAction(row.service, 'stop')"
-                >
-                  <span
-                    v-if="isPending('infra', { service: row.service, action: 'stop' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service: row.service, action: 'stop' })
-                      ? t('action.working')
-                      : t('services.stop')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('infra', { service: row.service, action: 'restart' }) }"
-                  :disabled="!infraActionEnabled(row.service, 'restart')"
-                  @click="infraAction(row.service, 'restart')"
-                >
-                  <span
-                    v-if="isPending('infra', { service: row.service, action: 'restart' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service: row.service, action: 'restart' })
-                      ? t('action.working')
-                      : t('services.restart')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  data-tour="services-logs-btn"
-                  :disabled="infraServiceState(row.service) === 'not_created'"
-                  @click="openLogs(row.service)"
-                >
-                  {{ t('services.view_logs') }}
-                </button>
-                <button
-                  type="button"
-                  class="danger"
-                  data-tour="services-delete-btn"
-                  :class="{ 'is-loading': isPending('infra', { service: row.service, action: 'delete' }) }"
-                  :disabled="!infraActionEnabled(row.service, 'delete')"
-                  @click="infraAction(row.service, 'delete')"
-                >
-                  <span
-                    v-if="isPending('infra', { service: row.service, action: 'delete' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service: row.service, action: 'delete' })
-                      ? t('action.working')
-                      : t('services.delete')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  class="danger"
-                  data-tour="services-delete-image-btn"
-                  :class="{ 'is-loading': isPending('infra', { service: row.service, action: 'delete-image' }) }"
-                  :disabled="!infraActionEnabled(row.service, 'delete-image')"
-                  @click="infraAction(row.service, 'delete-image')"
-                >
-                  <span
-                    v-if="isPending('infra', { service: row.service, action: 'delete-image' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('infra', { service: row.service, action: 'delete-image' })
-                      ? t('action.working')
-                      : t('services.delete_image')
-                  }}
-                </button>
-              </div>
-              <div v-else class="controller-actions">
-                <button
-                  v-if="showComposeCreateHint(row.item)"
-                  type="button"
-                  class="primary"
-                  :class="{ 'is-loading': isPending('compose-file', { name: row.item.name, action: 'create' }) }"
-                  :disabled="!composeYamlActionEnabled(row.item, 'create')"
-                  @click="composeYamlAction(row.item, 'create')"
-                >
-                  <span
-                    v-if="isPending('compose-file', { name: row.item.name, action: 'create' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('compose-file', { name: row.item.name, action: 'create' })
-                      ? t('action.working')
-                      : t('services.create')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('compose-file', { name: row.item.name, action: 'start' }) }"
-                  :disabled="!composeYamlActionEnabled(row.item, 'start')"
-                  @click="composeYamlAction(row.item, 'start')"
-                >
-                  <span
-                    v-if="isPending('compose-file', { name: row.item.name, action: 'start' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('compose-file', { name: row.item.name, action: 'start' })
-                      ? t('action.working')
-                      : t('services.start')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('compose-file', { name: row.item.name, action: 'stop' }) }"
-                  :disabled="!composeYamlActionEnabled(row.item, 'stop')"
-                  @click="composeYamlAction(row.item, 'stop')"
-                >
-                  <span
-                    v-if="isPending('compose-file', { name: row.item.name, action: 'stop' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('compose-file', { name: row.item.name, action: 'stop' })
-                      ? t('action.working')
-                      : t('services.stop')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('compose-file', { name: row.item.name, action: 'restart' }) }"
-                  :disabled="!composeYamlActionEnabled(row.item, 'restart')"
-                  @click="composeYamlAction(row.item, 'restart')"
-                >
-                  <span
-                    v-if="isPending('compose-file', { name: row.item.name, action: 'restart' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('compose-file', { name: row.item.name, action: 'restart' })
-                      ? t('action.working')
-                      : t('services.restart')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :disabled="composeFileState(row.item) === 'not_created'"
-                  @click="openComposeLogs(row.item.name)"
-                >
-                  {{ t('services.view_logs') }}
-                </button>
-                <button
-                  type="button"
-                  class="danger"
-                  :class="{ 'is-loading': isPending('compose-file', { name: row.item.name, action: 'delete' }) }"
-                  :disabled="!composeYamlActionEnabled(row.item, 'delete')"
-                  @click="composeYamlAction(row.item, 'delete')"
-                >
-                  <span
-                    v-if="isPending('compose-file', { name: row.item.name, action: 'delete' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('compose-file', { name: row.item.name, action: 'delete' })
-                      ? t('action.working')
-                      : t('services.delete')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  class="danger"
-                  :class="{ 'is-loading': isPending('compose-file', { name: row.item.name, action: 'delete-image' }) }"
-                  :disabled="!composeYamlActionEnabled(row.item, 'delete-image')"
-                  @click="composeYamlAction(row.item, 'delete-image')"
-                >
-                  <span
-                    v-if="isPending('compose-file', { name: row.item.name, action: 'delete-image' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('compose-file', { name: row.item.name, action: 'delete-image' })
-                      ? t('action.working')
-                      : t('services.delete_image')
-                  }}
-                </button>
-              </div>
+              <ActionMenu :items="rowMenuItems(row)" />
             </td>
           </tr>
         </tbody>

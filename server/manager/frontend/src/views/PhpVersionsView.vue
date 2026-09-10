@@ -1,10 +1,13 @@
 <script setup>
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import ActionMenu from '../components/ActionMenu.vue'
 import TableSkeleton from '../components/TableSkeleton.vue'
 import { useManager } from '../composables/useManager'
 
 const router = useRouter()
+const { t } = useI18n()
 const {
   loading,
   data,
@@ -18,6 +21,84 @@ const {
   loadBootstrap,
   busy,
 } = useManager()
+
+function phpMenuItems(service, target) {
+  return [
+    {
+      id: 'create',
+      label: t('php_controller.create'),
+      primary: true,
+      disabled: !phpActionEnabled(service, 'create'),
+      loading: isPending('php', { service, action: 'create' }),
+      run: () => phpAction(service, 'create'),
+    },
+    {
+      id: 'start',
+      label: t('php_controller.start'),
+      disabled: !phpActionEnabled(service, 'start'),
+      loading: isPending('php', { service, action: 'start' }),
+      run: () => phpAction(service, 'start'),
+    },
+    {
+      id: 'stop',
+      label: t('php_controller.stop'),
+      disabled: !phpActionEnabled(service, 'stop'),
+      loading: isPending('php', { service, action: 'stop' }),
+      run: () => phpAction(service, 'stop'),
+    },
+    {
+      id: 'restart',
+      label: t('php_controller.restart'),
+      disabled: !phpActionEnabled(service, 'restart'),
+      loading: isPending('php', { service, action: 'restart' }),
+      run: () => phpAction(service, 'restart'),
+    },
+    {
+      id: 'logs',
+      label: t('php_controller.view_logs'),
+      disabled: phpServiceState(service) === 'not_created',
+      run: () => router.push({ name: 'php-version-logs', params: { service } }),
+    },
+    {
+      id: 'run',
+      label: t('php_controller.run'),
+      run: () => router.push({ name: 'php-version-run', params: { service } }),
+    },
+    {
+      id: 'details',
+      label: t('php_controller.details'),
+      run: () => router.push({ name: 'php-version-detail', params: { service } }),
+    },
+    {
+      id: 'supervisor',
+      label: t('php_controller.supervisor'),
+      run: () => router.push({ name: 'php-version-supervisor', params: { service } }),
+    },
+    {
+      id: 'delete',
+      label: t('services.delete_container'),
+      danger: true,
+      disabled: !phpActionEnabled(service, 'delete'),
+      loading: isPending('php', { service, action: 'delete' }),
+      run: () => phpAction(service, 'delete'),
+    },
+    {
+      id: 'delete-image',
+      label: t('services.delete_image'),
+      danger: true,
+      disabled: !phpActionEnabled(service, 'delete-image'),
+      loading: isPending('php', { service, action: 'delete-image' }),
+      run: () => phpAction(service, 'delete-image'),
+    },
+  ]
+}
+
+const phpRows = computed(() =>
+  Object.entries(data.php_controllers?.targets || {}).map(([service, target]) => ({
+    service,
+    target,
+  })),
+)
 
 onMounted(() => {
   loadBootstrap()
@@ -33,6 +114,14 @@ onMounted(() => {
           <p>{{ $t('php_controller.subtitle') }}</p>
         </div>
         <div class="panel-heading-actions">
+          <button
+            type="button"
+            data-tour="php-compose-yaml"
+            :disabled="busy || loading"
+            @click="router.push({ name: 'php-compose-yaml' })"
+          >
+            {{ $t('php_controller.manage_yaml') }}
+          </button>
           <button
             type="button"
             class="primary"
@@ -70,119 +159,20 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(target, service) in data.php_controllers.targets" :key="service">
-            <td>{{ target.label }}</td>
-            <td><code>{{ target.container }}</code></td>
-            <td><code>{{ target.profile || $t('php_controller.default_profile') }}</code></td>
+          <tr v-for="row in phpRows" :key="row.service">
+            <td>{{ row.target.label }}</td>
+            <td><code>{{ row.target.container }}</code></td>
+            <td><code>{{ row.target.profile || $t('php_controller.default_profile') }}</code></td>
             <td>
-              <span class="state-badge" :class="stateClass(phpServiceState(service))">
-                {{ stateLabel(phpServiceState(service)) }}
+              <span class="state-badge" :class="stateClass(phpServiceState(row.service))">
+                {{ stateLabel(phpServiceState(row.service)) }}
               </span>
-              <div v-if="showCreateHint(service, target)" class="create-hint">
+              <div v-if="showCreateHint(row.service, row.target)" class="create-hint">
                 {{ $t('php_controller.create_hint') }}
               </div>
             </td>
             <td>
-              <div class="controller-actions">
-                <button
-                  v-if="showCreateHint(service, target)"
-                  type="button"
-                  class="primary"
-                  :class="{ 'is-loading': isPending('php', { service, action: 'create' }) }"
-                  :disabled="!phpActionEnabled(service, 'create')"
-                  @click="phpAction(service, 'create')"
-                >
-                  <span
-                    v-if="isPending('php', { service, action: 'create' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('php', { service, action: 'create' })
-                      ? $t('action.working')
-                      : $t('php_controller.create')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('php', { service, action: 'start' }) }"
-                  :disabled="!phpActionEnabled(service, 'start')"
-                  @click="phpAction(service, 'start')"
-                >
-                  <span
-                    v-if="isPending('php', { service, action: 'start' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('php', { service, action: 'start' })
-                      ? $t('action.working')
-                      : $t('php_controller.start')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('php', { service, action: 'stop' }) }"
-                  :disabled="!phpActionEnabled(service, 'stop')"
-                  @click="phpAction(service, 'stop')"
-                >
-                  <span
-                    v-if="isPending('php', { service, action: 'stop' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('php', { service, action: 'stop' })
-                      ? $t('action.working')
-                      : $t('php_controller.stop')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('php', { service, action: 'restart' }) }"
-                  :disabled="!phpActionEnabled(service, 'restart')"
-                  @click="phpAction(service, 'restart')"
-                >
-                  <span
-                    v-if="isPending('php', { service, action: 'restart' })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('php', { service, action: 'restart' })
-                      ? $t('action.working')
-                      : $t('php_controller.restart')
-                  }}
-                </button>
-                <button
-                  type="button"
-                  data-tour="php-logs-btn"
-                  :disabled="phpServiceState(service) === 'not_created'"
-                  @click="$router.push({ name: 'php-version-logs', params: { service } })"
-                >
-                  {{ $t('php_controller.view_logs') }}
-                </button>
-                <button
-                  type="button"
-                  data-tour="php-run"
-                  @click="$router.push({ name: 'php-version-run', params: { service } })"
-                >
-                  {{ $t('php_controller.run') }}
-                </button>
-                <button
-                  type="button"
-                  @click="$router.push({ name: 'php-version-detail', params: { service } })"
-                >
-                  {{ $t('php_controller.details') }}
-                </button>
-                <button
-                  type="button"
-                  data-tour="php-supervisor"
-                  @click="$router.push({ name: 'php-version-supervisor', params: { service } })"
-                >
-                  {{ $t('php_controller.supervisor') }}
-                </button>
-              </div>
+              <ActionMenu :items="phpMenuItems(row.service, row.target)" />
             </td>
           </tr>
         </tbody>

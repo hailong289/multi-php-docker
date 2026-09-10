@@ -67,7 +67,7 @@ return [
     ['GET', '/php-controllers', [PhpControllerController::class, 'index']],
     ['GET', '/php-controllers/available-versions', [PhpControllerController::class, 'availableVersions']],
     ['POST', '/php-controllers/install-version', [PhpControllerController::class, 'installVersion']],
-    ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/(?P<action>start|stop|restart|create)', [PhpControllerController::class, 'action']],
+    ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/(?P<action>start|stop|restart|create|recreate|delete|delete-image)', [PhpControllerController::class, 'action']],
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/details', [PhpControllerController::class, 'details']],
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/action-logs', [PhpControllerController::class, 'actionLogs']],
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/logs', [PhpControllerController::class, 'logs']],

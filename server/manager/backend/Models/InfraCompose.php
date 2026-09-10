@@ -254,9 +254,13 @@ YAML;
         return (bool) preg_match('/^php-.*\.(yml|yaml)$/', $lower);
     }
 
-    /** @return list<array{name: string, relative_path: string, size: int, updated_at: string, core: bool, protected: bool, service: ?string, runtime: ?string, pull_recreate: bool, compose_services: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>, has_build: bool, included: bool, state: string}> */
-    public function list(): array
+    /**
+     * @param 'services'|'php'|null $scope services (default) hides php-*.yml; php returns only those files
+     * @return list<array{name: string, relative_path: string, size: int, updated_at: string, core: bool, protected: bool, service: ?string, runtime: ?string, pull_recreate: bool, compose_services: list<array{name: string, profile: ?string, container: ?string, has_build: bool}>, has_build: bool, included: bool, state: string}>
+     */
+    public function list(?string $scope = null): array
     {
+        $scope = $scope === 'php' ? 'php' : 'services';
         $dir = $this->composeDirAbsolute();
         $files = [];
         $paths = array_merge(
@@ -268,7 +272,15 @@ YAML;
                 continue;
             }
             $name = basename($path);
-            if (!$this->isSafeName($name) || $this->isHiddenInServicesList($name)) {
+            if (!$this->isSafeName($name)) {
+                continue;
+            }
+            $isPhp = $this->isHiddenInServicesList($name);
+            if ($scope === 'php') {
+                if (!$isPhp) {
+                    continue;
+                }
+            } elseif ($isPhp) {
                 continue;
             }
             $content = (string) file_get_contents($path);

@@ -194,6 +194,10 @@ assert_true(count($list) >= 2, 'compose list has files');
 $listedNames = array_column($list, 'name');
 assert_true(!in_array('php-8.5.yml', $listedNames, true), 'php compose hidden from services list');
 assert_true(in_array('mysql.yml', $listedNames, true), 'mysql compose listed');
+$phpList = $compose->list('php');
+$phpListedNames = array_column($phpList, 'name');
+assert_true(in_array('php-8.5.yml', $phpListedNames, true), 'php compose listed with scope=php');
+assert_true(!in_array('mysql.yml', $phpListedNames, true), 'mysql hidden from php scope list');
 assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {

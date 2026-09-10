@@ -9,6 +9,7 @@ import PhpRunView from '../views/PhpRunView.vue'
 import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
 import ComposeYamlView from '../views/ComposeYamlView.vue'
+import PhpComposeYamlView from '../views/PhpComposeYamlView.vue'
 import ServiceLogsView from '../views/ServiceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
 import TerminalView from '../views/TerminalView.vue'
@@ -79,6 +80,12 @@ const router = createRouter({
       name: 'php-versions',
       component: PhpVersionsView,
       meta: { titleKey: 'nav.php_versions', manager: true },
+    },
+    {
+      path: '/php-versions/compose',
+      name: 'php-compose-yaml',
+      component: PhpComposeYamlView,
+      meta: { titleKey: 'php_controller.manage_yaml', manager: true },
     },
     {
       path: '/php-versions/catalog',

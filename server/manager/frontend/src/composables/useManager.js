@@ -491,11 +491,39 @@ export function useManager() {
   /** Queue a PHP container lifecycle action; status updates via bootstrap poll. */
   async function phpAction(service, action) {
     const target = data.php_controllers?.targets?.[service]
+    if (action === 'delete') {
+      if (
+        !confirm(
+          t('services.delete_confirm', {
+            service: target?.label || service,
+            container: target?.container || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
+    if (action === 'delete-image') {
+      if (
+        !confirm(
+          t('services.delete_image_confirm', {
+            service: target?.label || service,
+            image: target?.image || service,
+          }),
+        )
+      ) {
+        return
+      }
+    }
     pendingAction.value = { kind: 'php', service, action }
     try {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
+      if (action === 'delete' || action === 'delete-image') {
+        await loadBootstrap({ silent: true })
+        return
+      }
       await waitForPullProgress({
         runtime: 'php',
         service,
@@ -1049,6 +1077,15 @@ export function useManager() {
     if (action === 'create') {
       return state === 'not_created' && target?.profile != null
     }
+    if (action === 'recreate') {
+      return (state === 'running' || state === 'stopped' || state === 'error') && target?.profile != null
+    }
+    if (action === 'delete') {
+      return state === 'running' || state === 'stopped'
+    }
+    if (action === 'delete-image') {
+      return state === 'not_created' && !!target?.image_present
+    }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
     if (action === 'stop' || action === 'restart') return state === 'running'
@@ -1192,7 +1229,14 @@ export function useManager() {
     if (!item.service) return false
     if (action === 'create') {
       if (item.runtime === 'infra') return infraActionEnabled(item.service, 'create')
+      if (item.runtime === 'php') return phpActionEnabled(item.service, 'create')
       if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'create')
+    }
+    if (action === 'recreate') {
+      if (item.runtime === 'php') return phpActionEnabled(item.service, 'recreate')
+    }
+    if (action === 'delete' || action === 'delete-image') {
+      if (item.runtime === 'php') return phpActionEnabled(item.service, action)
     }
     if (action === 'start') {
       if (item.runtime === 'infra') return infraActionEnabled(item.service, 'start')
@@ -1208,6 +1252,7 @@ export function useManager() {
     if (item.runtime === 'compose') return composeYamlAction(item, action)
     if (!item?.runtime || !item.service) return
     if (item.runtime === 'infra') return infraAction(item.service, action)
+    if (item.runtime === 'php') return phpAction(item.service, action)
     if (item.runtime === 'supervisor') return supervisorAction(item.service, action)
   }
 

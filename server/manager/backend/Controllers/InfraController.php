@@ -82,10 +82,13 @@ final class InfraController extends Controller
     public function composeFiles(Request $request, array $params = []): Response
     {
         $compose = new InfraCompose();
+        $scope = (string) ($request->queryParam('scope') ?? '');
+        $scope = $scope === 'php' ? 'php' : null;
 
         return Response::json([
             'compose_dir' => 'compose',
-            'files' => $compose->list(),
+            'scope' => $scope ?? 'services',
+            'files' => $compose->list($scope),
             'default_content' => $compose->defaultContent(),
         ]);
     }

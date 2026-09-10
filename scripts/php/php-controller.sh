@@ -104,16 +104,24 @@ prepare_compose_tmp() {
     host_project="$1"
     tmp_dir="$2"
     mkdir -p "$tmp_dir/compose"
-    # Bind mounts must use host paths (daemon-side). Build context must stay
-    # container-visible (/project/...) because the Docker CLI reads it locally.
-    sed -e "s|- \\./|- ${host_project}/|g" \
-        -e "s|context: \\./|context: /project/|g" \
-        /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
+    # Bind mounts must use host paths (daemon-side). Build context and
+    # include project_directory must stay container-visible (/project/...)
+    # because the Docker CLI reads them from this container — not from the
+    # rewritten files under /tmp/compose-*.
+    rewrite_compose_paths() {
+        sed \
+            -e "s|- \\./|- ${host_project}/|g" \
+            -e 's|project_directory:[[:space:]]*\.[[:space:]]*$|project_directory: /project|' \
+            -e 's|context:[[:space:]]*\.[[:space:]]*$|context: /project|' \
+            -e 's|context:[[:space:]]*"\."[[:space:]]*$|context: /project|' \
+            -e "s|context:[[:space:]]*'\\.'[[:space:]]*$|context: /project|" \
+            -e 's|context:[[:space:]]*\./|context: /project/|g' \
+            "$1"
+    }
+    rewrite_compose_paths /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
     for f in /project/compose/*.yml; do
         [ -f "$f" ] || continue
-        sed -e "s|- \\./|- ${host_project}/|g" \
-            -e "s|context: \\./|context: /project/|g" \
-            "$f" > "$tmp_dir/compose/$(basename "$f")"
+        rewrite_compose_paths "$f" > "$tmp_dir/compose/$(basename "$f")"
     done
 }
 
@@ -675,12 +683,15 @@ parse_request_fields() {
         *) return 1 ;;
     esac
     case "$action" in
-        start|stop|restart|create|install-version|pull-recreate|delete)
+        start|stop|restart|create|recreate|install-version|pull-recreate|delete)
             [ -z "$extension" ] || return 1
             if [ "$action" = "install-version" ] && { is_infra_service "$service" || is_supervisor_service "$service"; }; then
                 return 1
             fi
             if [ "$action" = "pull-recreate" ] && ! is_infra_service "$service"; then
+                return 1
+            fi
+            if [ "$action" = "recreate" ] && { is_infra_service "$service" || is_supervisor_service "$service"; }; then
                 return 1
             fi
             if [ "$action" = "delete" ] && ! is_infra_service "$service"; then
@@ -811,7 +822,7 @@ while true; do
 
         write_status "$service" "busy" "php_controller.processing" "$request_id"
         ok=0
-        if [ "$action" = "install-version" ] || [ "$action" = "create" ] || [ "$action" = "pull-recreate" ]; then
+        if [ "$action" = "install-version" ] || [ "$action" = "create" ] || [ "$action" = "pull-recreate" ] || [ "$action" = "recreate" ]; then
             profile=$(profile_for_service "$service") || {
                 write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
                 rm -f "$request_file"
@@ -835,6 +846,15 @@ while true; do
                     ok=1
                 else
                     cp "$STATUS_DIR/$service.last-pull-recreate.log" "$STATUS_DIR/last-pull-recreate-error.log" 2>/dev/null || true
+                fi
+            elif [ "$action" = "recreate" ]; then
+                log_file="$STATUS_DIR/$service.last-recreate.log"
+                : >"$log_file"
+                if run_compose_file_build "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 \
+                    && run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
+                    ok=1
+                else
+                    cp "$log_file" "$STATUS_DIR/last-recreate-error.log" 2>/dev/null || true
                 fi
             elif [ "$action" = "install-version" ]; then
                 if run_compose_build_up "$project_name" "$tmp_dir/docker-compose.yml" \
