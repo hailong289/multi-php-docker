@@ -2866,3 +2866,225 @@ select:focus:not([class*='p-']) {
 .compose-yaml-logs .status-line {
   margin: 6px 0 0;
 }
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.pin-button.p-button {
+  width: 2rem;
+  height: 2rem;
+}
+
+.home-pinned {
+  margin-bottom: 1.25rem;
+}
+
+.home-pinned .panel-heading h2 {
+  margin-bottom: 0.25rem;
+}
+
+.home-pinned-body {
+  padding-top: 1.25rem;
+}
+
+.home-pinned-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.home-pinned-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.7rem;
+  row-gap: 0.55rem;
+  min-width: 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--p-content-border-color, var(--line));
+  border-radius: var(--p-content-border-radius, 10px);
+  background: var(--p-content-background, var(--panel-strong, var(--panel)));
+}
+
+.home-pinned-row.is-dragging {
+  opacity: 0.55;
+}
+
+.home-pinned-row.is-unavailable {
+  opacity: 0.72;
+  background: color-mix(in srgb, var(--p-content-background, var(--panel)) 88%, var(--p-content-border-color, var(--line)));
+}
+
+.home-pinned-handle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--p-text-muted-color, var(--muted));
+  cursor: grab;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.9rem;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  user-select: none;
+  touch-action: none;
+}
+
+.home-pinned-handle:active {
+  cursor: grabbing;
+}
+
+.home-pinned-main {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.home-pinned-kind {
+  flex: 0 0 auto;
+}
+
+.home-pinned-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.home-pinned-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.home-pinned-meta .p-tag {
+  flex: 0 0 auto;
+}
+
+.home-pinned-actions {
+  display: grid;
+  grid-template-columns: auto minmax(5.75rem, max-content) auto;
+  align-items: center;
+  justify-items: end;
+  column-gap: 0.2rem;
+  width: max-content;
+  min-height: 2.1rem;
+  justify-self: end;
+}
+
+.home-pinned-actions .action-menu .p-button,
+.home-pinned-actions .pin-button.p-button,
+.home-pinned-reorder .p-button {
+  height: 2.1rem;
+  min-width: 2.1rem;
+}
+
+.home-pinned-reorder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.home-pinned-reorder .p-button {
+  color: var(--p-primary-color, var(--accent));
+}
+
+.home-pinned-menu {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 2.1rem;
+}
+
+.service-conn-intro {
+  margin: 0 0 1rem;
+  color: var(--muted, #64748b);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.service-conn-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.service-conn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border, rgba(15, 23, 42, 0.1));
+  border-radius: 8px;
+  background: var(--surface-ground, rgba(15, 23, 42, 0.03));
+}
+
+.service-conn-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.service-conn-label {
+  font-size: 0.78rem;
+  color: var(--muted, #64748b);
+}
+
+.service-conn-value {
+  font-size: 0.92rem;
+  word-break: break-all;
+}
+
+.service-conn-note {
+  margin: 0.85rem 0 0;
+}
+
+.service-conn-env {
+  margin-top: 1.1rem;
+}
+
+.service-conn-env-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.service-conn-env-block {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(15, 23, 42, 0.1));
+  background: var(--surface-ground, rgba(15, 23, 42, 0.04));
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+@media (max-width: 720px) {
+  .home-pinned-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .home-pinned-actions {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}
+

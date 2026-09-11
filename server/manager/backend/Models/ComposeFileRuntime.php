@@ -11,6 +11,7 @@ use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
+use Manager\Support\JsonFile;
 
 /** Queue build/pull/create for arbitrary compose/*.yml fragments (minio, …). */
 final class ComposeFileRuntime
@@ -274,12 +275,10 @@ final class ComposeFileRuntime
 
         $statusFile = $this->basePath . '/status/' . $queueKey . '.json';
         $fileState = null;
-        if (is_file($statusFile) && is_readable($statusFile)) {
-            $decoded = json_decode((string) file_get_contents($statusFile), true);
-            if (is_array($decoded) && ($decoded['queue_key'] ?? null) === $queueKey) {
-                $status = array_merge($status, array_intersect_key($decoded, $status));
-                $fileState = $decoded['state'] ?? null;
-            }
+        $decoded = JsonFile::readObject($statusFile);
+        if (is_array($decoded) && ($decoded['queue_key'] ?? null) === $queueKey) {
+            $status = array_merge($status, array_intersect_key($decoded, $status));
+            $fileState = $decoded['state'] ?? null;
         }
 
         if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($name)) {
