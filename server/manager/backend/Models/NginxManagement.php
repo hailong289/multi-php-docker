@@ -8,6 +8,7 @@ use Manager\Http\HttpException;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
+use Manager\Support\JsonFile;
 
 final class NginxManagement
 {
@@ -39,11 +40,9 @@ final class NginxManagement
             'updated_at' => '',
         ];
         $file = $base . '/status/nginx.json';
-        if (is_file($file) && is_readable($file)) {
-            $decoded = json_decode((string) file_get_contents($file), true);
-            if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
-                $status = array_merge($status, array_intersect_key($decoded, $status));
-            }
+        $decoded = JsonFile::readObject($file);
+        if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
+            $status = array_merge($status, array_intersect_key($decoded, $status));
         }
         if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
             $status['state'] = 'busy';

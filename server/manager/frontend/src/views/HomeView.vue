@@ -2,8 +2,17 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import TableSkeleton from '../components/TableSkeleton.vue'
+import Button from 'primevue/button'
+import Checkbox from 'primevue/checkbox'
+import Column from 'primevue/column'
+import DataTable from 'primevue/datatable'
+import Dialog from 'primevue/dialog'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Select from 'primevue/select'
+import Tag from 'primevue/tag'
 import { useManager } from '../composables/useManager'
+import HomePinnedSection from '../components/HomePinnedSection.vue'
 import {
   FRAMEWORK_PRESETS,
   buildDocRoot,
@@ -79,6 +88,20 @@ const hostExample = computed(() => {
   return String(container).replace(/^\/var\/www\//, '') || '—'
 })
 
+const phpOptions = computed(() =>
+  Object.entries(data.php_versions || {}).map(([id, cfg]) => ({
+    label: versionLabel(cfg),
+    value: id,
+  })),
+)
+
+const frameworkOptions = computed(() =>
+  FRAMEWORK_PRESETS.map((item) => ({
+    label: t(`form.framework_${item.id}`),
+    value: item.id,
+  })),
+)
+
 function syncServerPathFromParts() {
   form.server_path = joinServerPath(projectDir.value, docRoot.value)
 }
@@ -145,301 +168,320 @@ async function onSslFile(kind, event) {
   if (kind === 'cert') form.ssl_certificate = text
   else form.ssl_private_key = text
 }
+
+function onSubmit() {
+  syncServerPathFromParts()
+  saveServer()
+}
 </script>
 
 <template>
+  <HomePinnedSection />
   <section class="panel" data-tour="home-panel">
     <div class="panel-heading">
       <div class="panel-heading-row">
-        <h2>{{ $t('servers.title') }}</h2>
+        <h2>{{ t('servers.title') }}</h2>
         <div class="panel-heading-actions">
-          <button
+          <Button
             type="button"
-            class="primary"
             data-tour="home-add"
+            :label="t('form.add')"
             :disabled="busy || loading"
             @click="openAdd"
-          >
-            {{ $t('form.add') }}
-          </button>
-          <button
+          />
+          <Button
             v-if="nginxReloadAvailable"
             type="button"
             data-tour="home-reload"
-            :class="{ 'is-loading': isPending('reload') }"
+            :label="isPending('reload') ? t('reload.waiting') : t('reload.button')"
+            :loading="isPending('reload')"
             :disabled="busy || loading"
             @click="reloadNginx"
-          >
-            <span v-if="isPending('reload')" class="btn-spinner" aria-hidden="true"></span>
-            {{ isPending('reload') ? $t('reload.waiting') : $t('reload.button') }}
-          </button>
+          />
         </div>
       </div>
       <p v-if="!loading && isPending('reload')" class="status-line">
-        <span class="btn-spinner" aria-hidden="true" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>
-        {{ $t('reload.waiting') }}
+        {{ t('reload.waiting') }}
       </p>
-      <p v-else-if="!loading && data.nginx_status" class="status-line">
+      <Message
+        v-else-if="!loading && data.nginx_status"
+        :severity="nginxStatusOk() ? 'success' : 'error'"
+        :closable="false"
+        class="home-status-msg"
+      >
         <strong>
-          {{ nginxStatusOk() ? $t('reload.success') : $t('reload.error') }}:
+          {{ nginxStatusOk() ? t('reload.success') : t('reload.error') }}:
         </strong>
         {{ nginxStatusText() }}
-      </p>
-      <div v-else-if="loading" class="status-line">
-        <span class="skeleton-line skeleton-w2"></span>
-      </div>
+      </Message>
     </div>
 
-    <TableSkeleton
+    <DataTable
       v-if="loading"
       data-tour="home-table"
-      :columns="4"
-      :rows="4"
-      :headers="[
-        $t('table.app_domain'),
-        $t('table.php'),
-        $t('table.document_root'),
-        $t('table.actions'),
-      ]"
-    />
-    <div v-else-if="serverEntries.length === 0" class="empty" data-tour="home-table">{{ $t('servers.empty') }}</div>
-    <div v-else class="table-wrap" data-tour="home-table">
-      <table class="servers-table">
-        <thead>
-          <tr>
-            <th>{{ $t('table.app_domain') }}</th>
-            <th>{{ $t('table.php') }}</th>
-            <th>{{ $t('table.document_root') }}</th>
-            <th>{{ $t('table.actions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in serverEntries"
-            :key="item.key"
-            :class="{ 'is-disabled': !isServerEnabled(item.server) }"
-          >
-            <td>
-              <strong>{{ item.server.APP_NAME }}</strong>
-              <span
-                v-if="!isServerEnabled(item.server)"
-                class="status-pill status-off"
-              >{{ $t('servers.disabled_badge') }}</span>
-              <br />
-              <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
-                http://{{ item.server.DOMAIN_NAME }}
-              </a>
-              <template v-if="isSslEnabled(item.server)">
-                <br />
-                <a :href="'https://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
-                  https://{{ item.server.DOMAIN_NAME }}
-                </a>
-                <span
-                  class="status-pill"
-                  :class="item.server.ssl_mode === 'uploaded' ? 'status-ssl-uploaded' : 'status-ssl'"
-                >{{
-                  item.server.ssl_mode === 'uploaded'
-                    ? $t('ssl.badge_uploaded')
-                    : $t('ssl.badge_generated')
-                }}</span>
-                <p v-if="item.server.ssl_files_present === false" class="ssl-warn">
-                  {{ $t('ssl.files_missing') }}
-                  <button
-                    v-if="item.server.ssl_mode !== 'uploaded'"
-                    type="button"
-                    class="linkish"
-                    :class="{ 'is-loading': isPending('ssl-regenerate', { key: item.key }) }"
-                    :disabled="busy"
-                    @click="regenerateSsl(item.key)"
-                  >
-                    {{ $t('action.ssl_regenerate') }}
-                  </button>
-                </p>
-                <p v-else-if="item.server.ssl_names_match === false" class="ssl-warn">
-                  {{ $t('ssl.names_mismatch') }}
-                </p>
-              </template>
-            </td>
-            <td><code>{{ item.server.CONTAINER_PHP_VERSION }}</code></td>
-            <td><code>{{ item.server.SERVER_PATH }}</code></td>
-            <td>
-              <div class="actions">
-                <button
-                  type="button"
-                  :class="{ 'is-loading': isPending('toggle', { key: item.key }) }"
-                  :disabled="busy"
-                  :title="
-                    isServerEnabled(item.server)
-                      ? $t('action.disable_hint')
-                      : $t('action.enable_hint')
-                  "
-                  @click="toggleServerEnabled(item.key)"
-                >
-                  <span
-                    v-if="isPending('toggle', { key: item.key })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('toggle', { key: item.key })
-                      ? $t('action.working')
-                      : isServerEnabled(item.server)
-                        ? $t('action.disable')
-                        : $t('action.enable')
-                  }}
-                </button>
-                <button type="button" :disabled="busy" @click="openTerminal(item)">
-                  {{ $t('action.terminal') }}
-                </button>
-                <button type="button" :disabled="busy" @click="openEdit(item.key)">
-                  {{ $t('action.edit') }}
-                </button>
-                <button
-                  type="button"
-                  class="danger"
-                  :class="{ 'is-loading': isPending('delete', { key: item.key }) }"
-                  :disabled="busy"
-                  @click="deleteServer(item.key)"
-                >
-                  <span
-                    v-if="isPending('delete', { key: item.key })"
-                    class="btn-spinner"
-                    aria-hidden="true"
-                  ></span>
-                  {{
-                    isPending('delete', { key: item.key })
-                      ? $t('action.working')
-                      : $t('action.delete')
-                  }}
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      :value="[{}, {}, {}, {}]"
+      :loading="true"
+    >
+      <Column :header="t('table.app_domain')" />
+      <Column :header="t('table.php')" />
+      <Column :header="t('table.document_root')" />
+      <Column :header="t('table.actions')" />
+    </DataTable>
+    <div v-else-if="serverEntries.length === 0" class="empty" data-tour="home-table">
+      {{ t('servers.empty') }}
     </div>
-
-    <div class="panel-body command-block">
-      <div class="command">
-        <strong>{{ $t('apply.title') }}</strong>
-        <pre v-if="!loading">{{ data.apply_command }}</pre>
-        <div v-else class="skeleton-command">
-          <span class="skeleton-line skeleton-w2"></span>
-          <span class="skeleton-line skeleton-w1"></span>
-        </div>
-      </div>
+    <div v-else data-tour="home-table">
+      <DataTable
+        :value="serverEntries"
+        data-key="key"
+        striped-rows
+        :row-class="(row) => (!isServerEnabled(row.server) ? 'is-disabled' : '')"
+      >
+        <Column :header="t('table.app_domain')">
+          <template #body="{ data: item }">
+            <strong>{{ item.server.APP_NAME }}</strong>
+            <Tag
+              v-if="!isServerEnabled(item.server)"
+              class="home-inline-tag"
+              :value="t('servers.disabled_badge')"
+              severity="secondary"
+              rounded
+            />
+            <br />
+            <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
+              http://{{ item.server.DOMAIN_NAME }}
+            </a>
+            <template v-if="isSslEnabled(item.server)">
+              <br />
+              <a :href="'https://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
+                https://{{ item.server.DOMAIN_NAME }}
+              </a>
+              <Tag
+                class="home-inline-tag"
+                :value="
+                  item.server.ssl_mode === 'uploaded'
+                    ? t('ssl.badge_uploaded')
+                    : t('ssl.badge_generated')
+                "
+                :severity="item.server.ssl_mode === 'uploaded' ? 'success' : 'info'"
+                rounded
+              />
+              <p v-if="item.server.ssl_files_present === false" class="ssl-warn">
+                {{ t('ssl.files_missing') }}
+                <Button
+                  v-if="item.server.ssl_mode !== 'uploaded'"
+                  type="button"
+                  link
+                  size="small"
+                  :label="t('action.ssl_regenerate')"
+                  :loading="isPending('ssl-regenerate', { key: item.key })"
+                  :disabled="busy"
+                  @click="regenerateSsl(item.key)"
+                />
+              </p>
+              <p v-else-if="item.server.ssl_names_match === false" class="ssl-warn">
+                {{ t('ssl.names_mismatch') }}
+              </p>
+            </template>
+          </template>
+        </Column>
+        <Column :header="t('table.php')">
+          <template #body="{ data: item }">
+            <code>{{ item.server.CONTAINER_PHP_VERSION }}</code>
+          </template>
+        </Column>
+        <Column :header="t('table.document_root')">
+          <template #body="{ data: item }">
+            <code>{{ item.server.SERVER_PATH }}</code>
+          </template>
+        </Column>
+        <Column :header="t('table.actions')">
+          <template #body="{ data: item }">
+            <div class="actions">
+              <Button
+                type="button"
+                size="small"
+                :label="
+                  isPending('toggle', { key: item.key })
+                    ? t('action.working')
+                    : isServerEnabled(item.server)
+                      ? t('action.disable')
+                      : t('action.enable')
+                "
+                :loading="isPending('toggle', { key: item.key })"
+                :disabled="busy"
+                :title="
+                  isServerEnabled(item.server)
+                    ? t('action.disable_hint')
+                    : t('action.enable_hint')
+                "
+                @click="toggleServerEnabled(item.key)"
+              />
+              <Button
+                type="button"
+                size="small"
+                :label="t('action.terminal')"
+                :disabled="busy"
+                @click="openTerminal(item)"
+              />
+              <Button
+                type="button"
+                size="small"
+                :label="t('action.edit')"
+                :disabled="busy"
+                @click="openEdit(item.key)"
+              />
+              <Button
+                type="button"
+                size="small"
+                severity="danger"
+                outlined
+                :label="
+                  isPending('delete', { key: item.key })
+                    ? t('action.working')
+                    : t('action.delete')
+                "
+                :loading="isPending('delete', { key: item.key })"
+                :disabled="busy"
+                @click="deleteServer(item.key)"
+              />
+            </div>
+          </template>
+        </Column>
+      </DataTable>
     </div>
   </section>
 
-  <div v-if="modalOpen" class="modal-backdrop" @click.self="!busy && closeModal()">
-    <div
-      class="modal-panel"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="editingKey ? $t('form.edit_title') : $t('form.add_title')"
-    >
-      <div class="modal-header">
-        <h2>{{ editingKey ? $t('form.edit_title') : $t('form.add_title') }}</h2>
-        <button type="button" class="modal-close" :disabled="busy" @click="closeModal">×</button>
-      </div>
-      <form class="modal-body" @submit.prevent="syncServerPathFromParts(); saveServer()">
-        <fieldset :disabled="busy" class="modal-fieldset">
-          <label>{{ $t('form.app_name') }}</label>
-          <input v-model="form.app_name" :placeholder="$t('form.app_placeholder')" required />
-          <div v-if="fieldErrors.app_name" class="error">{{ fieldErrors.app_name }}</div>
+  <Dialog
+    :visible="modalOpen"
+    modal
+    :header="editingKey ? t('form.edit_title') : t('form.add_title')"
+    :closable="!busy"
+    :dismissable-mask="!busy"
+    :style="{ width: 'min(640px, 100%)' }"
+    @update:visible="(v) => { if (!v) closeModal() }"
+  >
+    <form class="home-modal-form" @submit.prevent="onSubmit">
+      <fieldset :disabled="busy" class="modal-fieldset">
+        <label>{{ t('form.app_name') }}</label>
+        <InputText
+          v-model="form.app_name"
+          :placeholder="t('form.app_placeholder')"
+          required
+          fluid
+        />
+        <small v-if="fieldErrors.app_name" class="p-error">{{ fieldErrors.app_name }}</small>
 
-          <label>{{ $t('form.domain') }}</label>
-          <input v-model="form.domain_name" :placeholder="$t('form.server_domain_placeholder')" required />
-          <div v-if="fieldErrors.domain_name" class="error">{{ fieldErrors.domain_name }}</div>
+        <label>{{ t('form.domain') }}</label>
+        <InputText
+          v-model="form.domain_name"
+          :placeholder="t('form.server_domain_placeholder')"
+          required
+          fluid
+        />
+        <small v-if="fieldErrors.domain_name" class="p-error">{{ fieldErrors.domain_name }}</small>
 
-          <label>{{ $t('form.php_version') }}</label>
-          <select v-model="form.php_version">
-            <option v-for="(cfg, id) in data.php_versions" :key="id" :value="id">
-              {{ versionLabel(cfg) }}
-            </option>
-          </select>
-          <div v-if="fieldErrors.php_version" class="error">{{ fieldErrors.php_version }}</div>
+        <label>{{ t('form.php_version') }}</label>
+        <Select
+          v-model="form.php_version"
+          :options="phpOptions"
+          option-label="label"
+          option-value="value"
+          fluid
+        />
+        <small v-if="fieldErrors.php_version" class="p-error">{{ fieldErrors.php_version }}</small>
 
-          <label>{{ t('form.framework') }}</label>
-          <select
-            v-model="frameworkId"
-            data-tour="home-framework"
-            @change="onFrameworkChange"
-          >
-            <option v-for="item in FRAMEWORK_PRESETS" :key="item.id" :value="item.id">
-              {{ t(`form.framework_${item.id}`) }}
-            </option>
-          </select>
-          <p class="form-path-hint">{{ frameworkHint }}</p>
+        <label>{{ t('form.framework') }}</label>
+        <Select
+          v-model="frameworkId"
+          data-tour="home-framework"
+          :options="frameworkOptions"
+          option-label="label"
+          option-value="value"
+          fluid
+          @update:model-value="onFrameworkChange"
+        />
+        <p class="form-path-hint">{{ frameworkHint }}</p>
 
-          <label for="mgr-project-dir">{{ $t('form.project_dir') }}</label>
-          <input
-            id="mgr-project-dir"
-            v-model="projectDir"
-            :placeholder="$t('form.project_dir_placeholder')"
-            required
-            autocomplete="off"
-            @input="onPathPartsInput"
-          />
+        <label for="mgr-project-dir">{{ t('form.project_dir') }}</label>
+        <InputText
+          id="mgr-project-dir"
+          v-model="projectDir"
+          :placeholder="t('form.project_dir_placeholder')"
+          required
+          autocomplete="off"
+          fluid
+          @update:model-value="onPathPartsInput"
+        />
 
-          <label for="mgr-doc-root">{{ $t('form.doc_root') }}</label>
-          <input
-            id="mgr-doc-root"
-            v-model="docRoot"
-            :placeholder="$t('form.doc_root_placeholder')"
-            autocomplete="off"
-            @input="onPathPartsInput"
-          />
-          <p class="form-path-hint form-path-hint-below">{{ $t('form.doc_root_hint') }}</p>
-          <div v-if="fieldErrors.server_path" class="error">{{ fieldErrors.server_path }}</div>
-          <div class="form-path-guide" data-tour="home-path-guide">
-            <div>
-              <span class="form-path-guide-label">{{ t('form.path_in_container') }}</span>
-              <code>{{ pathExample }}</code>
-            </div>
-            <div>
-              <span class="form-path-guide-label">{{ t('form.path_on_host') }}</span>
-              <code>{{ hostExample }}</code>
-            </div>
-            <p class="create-hint">{{ t('form.path_guide_note') }}</p>
+        <label for="mgr-doc-root">{{ t('form.doc_root') }}</label>
+        <InputText
+          id="mgr-doc-root"
+          v-model="docRoot"
+          :placeholder="t('form.doc_root_placeholder')"
+          autocomplete="off"
+          fluid
+          @update:model-value="onPathPartsInput"
+        />
+        <p class="form-path-hint form-path-hint-below">{{ t('form.doc_root_hint') }}</p>
+        <small v-if="fieldErrors.server_path" class="p-error">{{ fieldErrors.server_path }}</small>
+        <div class="form-path-guide" data-tour="home-path-guide">
+          <div>
+            <span class="form-path-guide-label">{{ t('form.path_in_container') }}</span>
+            <code>{{ pathExample }}</code>
           </div>
-
-          <label class="follow-toggle form-ssl-toggle">
-            <input v-model="form.ssl_enabled" type="checkbox" />
-            <span>{{ $t('form.ssl_enable') }}</span>
-          </label>
-          <p class="form-path-hint">{{ $t('form.ssl_hint') }}</p>
-          <template v-if="form.ssl_enabled">
-            <label>{{ $t('form.ssl_cert') }}</label>
-            <input type="file" accept=".crt,.pem,.cer,application/x-pem-file,application/x-x509-ca-cert" @change="onSslFile('cert', $event)" />
-            <div v-if="fieldErrors.ssl_certificate" class="error">{{ fieldErrors.ssl_certificate }}</div>
-            <label>{{ $t('form.ssl_key') }}</label>
-            <input type="file" accept=".key,.pem,application/x-pem-file" @change="onSslFile('key', $event)" />
-            <div v-if="fieldErrors.ssl_private_key" class="error">{{ fieldErrors.ssl_private_key }}</div>
-          </template>
-        </fieldset>
-
-        <div class="form-actions">
-          <button
-            type="submit"
-            class="primary"
-            :class="{ 'is-loading': isPending('save') }"
-            :disabled="busy"
-          >
-            <span v-if="isPending('save')" class="btn-spinner" aria-hidden="true"></span>
-            {{
-              isPending('save')
-                ? $t('action.working')
-                : editingKey
-                  ? $t('form.save')
-                  : $t('form.add')
-            }}
-          </button>
-          <button type="button" :disabled="busy" @click="closeModal">
-            {{ $t('action.cancel') }}
-          </button>
+          <div>
+            <span class="form-path-guide-label">{{ t('form.path_on_host') }}</span>
+            <code>{{ hostExample }}</code>
+          </div>
+          <p class="create-hint">{{ t('form.path_guide_note') }}</p>
         </div>
-      </form>
-    </div>
-  </div>
+
+        <div class="follow-toggle form-ssl-toggle">
+          <Checkbox v-model="form.ssl_enabled" binary input-id="form-ssl-enabled" />
+          <label for="form-ssl-enabled">{{ t('form.ssl_enable') }}</label>
+        </div>
+        <p class="form-path-hint">{{ t('form.ssl_hint') }}</p>
+        <template v-if="form.ssl_enabled">
+          <label>{{ t('form.ssl_cert') }}</label>
+          <input
+            type="file"
+            accept=".crt,.pem,.cer,application/x-pem-file,application/x-x509-ca-cert"
+            @change="onSslFile('cert', $event)"
+          />
+          <small v-if="fieldErrors.ssl_certificate" class="p-error">{{ fieldErrors.ssl_certificate }}</small>
+          <label>{{ t('form.ssl_key') }}</label>
+          <input
+            type="file"
+            accept=".key,.pem,application/x-pem-file"
+            @change="onSslFile('key', $event)"
+          />
+          <small v-if="fieldErrors.ssl_private_key" class="p-error">{{ fieldErrors.ssl_private_key }}</small>
+        </template>
+      </fieldset>
+
+      <div class="form-actions">
+        <Button
+          type="submit"
+          :label="
+            isPending('save')
+              ? t('action.working')
+              : editingKey
+                ? t('form.save')
+                : t('form.add')
+          "
+          :loading="isPending('save')"
+          :disabled="busy"
+        />
+        <Button
+          type="button"
+          severity="secondary"
+          outlined
+          :label="t('action.cancel')"
+          :disabled="busy"
+          @click="closeModal"
+        />
+      </div>
+    </form>
+  </Dialog>
 </template>

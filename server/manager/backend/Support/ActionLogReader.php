@@ -31,11 +31,9 @@ final class ActionLogReader
             'updated_at' => '',
         ];
         $statusFile = rtrim($statusDir, '/') . '/' . $key . '.json';
-        if (is_file($statusFile) && is_readable($statusFile)) {
-            $decoded = json_decode((string) file_get_contents($statusFile), true);
-            if (is_array($decoded) && ($statusValidator === null || $statusValidator($decoded))) {
-                $status = array_merge($status, array_intersect_key($decoded, $status));
-            }
+        $decoded = JsonFile::readObject($statusFile);
+        if (is_array($decoded) && ($statusValidator === null || $statusValidator($decoded))) {
+            $status = array_merge($status, array_intersect_key($decoded, $status));
         }
 
         $createLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-create.log');
@@ -79,7 +77,7 @@ final class ActionLogReader
             return '';
         }
         if ($size <= self::MAX_BYTES) {
-            $content = file_get_contents($path);
+            $content = @file_get_contents($path);
 
             return is_string($content) ? $content : '';
         }

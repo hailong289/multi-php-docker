@@ -20,6 +20,10 @@
             : mode
         document.documentElement.dataset.theme = effective
         document.documentElement.dataset.themeMode = mode
+        try {
+          const primary = localStorage.getItem('manager-primary')
+          if (primary) document.documentElement.dataset.primary = primary
+        } catch (_) {}
       })()
     </script>
   </head>
