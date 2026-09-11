@@ -1,6 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ensureMonacoEnvironment, monacoThemeFromDocument } from '../lib/monaco'
+import { ensureMonacoEnvironment, monacoThemeFromDocument, registerManagerMonacoThemes } from '../lib/monaco'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -22,6 +22,7 @@ async function mountEditor() {
   if (!host.value || editor) return
   ensureMonacoEnvironment()
   monaco = await import('monaco-editor')
+  registerManagerMonacoThemes(monaco)
   editor = monaco.editor.create(host.value, {
     value: props.modelValue,
     language: props.language,

@@ -2,6 +2,10 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Password from 'primevue/password'
 import { apiGet, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 
@@ -61,20 +65,41 @@ async function submit() {
 <template>
   <section class="login-panel">
     <h2>{{ t('login.title') }}</h2>
-    <p v-if="authState.locked" class="notice failure">{{ t('login.locked') }}</p>
+    <Message v-if="authState.locked" severity="error" :closable="false">
+      {{ t('login.locked') }}
+    </Message>
     <form v-else class="login-form" @submit.prevent="submit">
-      <label>
+      <label class="login-field">
         <span>{{ t('login.username') }}</span>
-        <input v-model="username" type="text" autocomplete="username" required />
+        <InputText
+          v-model="username"
+          type="text"
+          autocomplete="username"
+          required
+          class="w-full"
+          fluid
+        />
       </label>
-      <label>
+      <label class="login-field">
         <span>{{ t('login.password') }}</span>
-        <input v-model="password" type="password" autocomplete="current-password" required />
+        <Password
+          v-model="password"
+          input-id="login-password"
+          autocomplete="current-password"
+          :feedback="false"
+          toggle-mask
+          required
+          fluid
+          input-class="w-full"
+        />
       </label>
-      <p v-if="error" class="notice failure">{{ error }}</p>
-      <button type="submit" class="primary" :disabled="busy">
-        {{ t('login.submit') }}
-      </button>
+      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <Button
+        type="submit"
+        :label="t('login.submit')"
+        :loading="busy"
+        :disabled="busy"
+      />
     </form>
   </section>
 </template>

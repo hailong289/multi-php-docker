@@ -5,6 +5,9 @@ import '@xterm/xterm/css/xterm.css'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+import { terminalThemeFromDocument } from '../lib/monaco'
+import Button from 'primevue/button'
+import Tag from 'primevue/tag'
 
 const props = defineProps({
   serverKey: { type: String, required: true },
@@ -25,10 +28,29 @@ let offset = 0
 let closed = false
 let resizeTimer = null
 let hostObserver = null
+let themeObserver = null
 let idleTimer = 0
 let inputBuf = ''
 let inputFlushTimer = 0
 let inputInFlight = null
+
+function statusSeverity() {
+  if (status.value === 'ready') return 'success'
+  if (status.value === 'connecting') return 'info'
+  if (status.value === 'disconnected') return 'warn'
+  return 'danger'
+}
+
+function statusLabelKey() {
+  if (status.value === 'connecting') return 'terminal.connecting'
+  if (status.value === 'disconnected') return 'terminal.disconnected'
+  if (status.value === 'ready') return 'terminal.ready'
+  return 'terminal.unavailable'
+}
+
+function applyTerminalTheme() {
+  term?.options && (term.options.theme = terminalThemeFromDocument())
+}
 
 function bytesToBase64(bytes) {
   let binary = ''
@@ -287,6 +309,8 @@ function teardownIo() {
   if (inputFlushTimer) clearTimeout(inputFlushTimer)
   hostObserver?.disconnect()
   hostObserver = null
+  themeObserver?.disconnect()
+  themeObserver = null
   window.removeEventListener('resize', onWinResize)
   hostEl.value?.removeEventListener('keydown', onHostKeyDown, true)
   hostEl.value?.removeEventListener('compositionstart', onImeNoise, true)
@@ -327,11 +351,7 @@ onMounted(async () => {
       fontSize: 13,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       scrollback: 4000,
-      theme: {
-        background: '#0f1419',
-        foreground: '#e7ecf3',
-        cursor: '#e7ecf3',
-      },
+      theme: terminalThemeFromDocument(),
     })
     fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -350,6 +370,11 @@ onMounted(async () => {
     window.addEventListener('resize', onWinResize)
     hostObserver = new ResizeObserver(() => onWinResize())
     hostObserver.observe(hostEl.value)
+    themeObserver = new MutationObserver(() => applyTerminalTheme())
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-surface', 'data-primary', 'style'],
+    })
     await sendResize()
     await pullOutput()
     scheduleIdle()
@@ -380,31 +405,27 @@ onBeforeUnmount(() => {
     data-tour="docker-terminal"
   >
     <div class="terminal-panel-header">
-      <div>
-        <h3>{{ title || $t('terminal.title') }}</h3>
+      <div class="terminal-panel-copy">
+        <h3 v-if="!page">{{ title || $t('terminal.title') }}</h3>
         <p class="terminal-hint">
           {{ $t('terminal.hint') }}
           <template v-if="cwdLabel">
-            <br />
+            <span class="terminal-hint-sep" aria-hidden="true">·</span>
             <code>{{ cwdLabel }}</code>
           </template>
         </p>
       </div>
       <div class="terminal-panel-actions">
-        <span class="terminal-status">
-          {{
-            status === 'connecting'
-              ? $t('terminal.connecting')
-              : status === 'disconnected'
-                ? $t('terminal.disconnected')
-                : status === 'ready'
-                  ? ''
-                  : $t('terminal.unavailable')
-          }}
-        </span>
-        <button type="button" @click="closeSession">
-          {{ page ? $t('terminal.back') : $t('terminal.close') }}
-        </button>
+        <Tag v-if="status !== 'ready'" :severity="statusSeverity()" :value="$t(statusLabelKey())" />
+        <Button
+          v-if="!page"
+          type="button"
+          :label="$t('terminal.close')"
+          severity="secondary"
+          outlined
+          size="small"
+          @click="closeSession"
+        />
       </div>
     </div>
     <div class="terminal-screen">

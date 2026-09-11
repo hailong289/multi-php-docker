@@ -2,8 +2,11 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import Column from 'primevue/column'
+import DataTable from 'primevue/datatable'
+import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
-import TableSkeleton from '../components/TableSkeleton.vue'
 import { useManager } from '../composables/useManager'
 
 const router = useRouter()
@@ -11,7 +14,6 @@ const { t } = useI18n()
 const {
   loading,
   data,
-  stateClass,
   stateLabel,
   infraServiceState,
   infraActionEnabled,
@@ -27,7 +29,15 @@ const {
 
 const targets = computed(() => data.infra_services?.targets || {})
 
-function infraMenuItems(service, target) {
+function stateSeverity(state) {
+  if (state === 'running') return 'success'
+  if (state === 'stopped') return 'secondary'
+  if (state === 'error') return 'danger'
+  if (state === 'busy') return 'warn'
+  return 'contrast'
+}
+
+function infraMenuItems(service) {
   return [
     {
       id: 'create',
@@ -169,7 +179,7 @@ const serviceRows = computed(() => {
 })
 
 function rowMenuItems(row) {
-  if (row.kind === 'infra') return infraMenuItems(row.service, row.target)
+  if (row.kind === 'infra') return infraMenuItems(row.service)
   return composeMenuItems(row.item)
 }
 
@@ -201,70 +211,75 @@ onMounted(() => {
           <p>{{ t('services.subtitle') }}</p>
         </div>
         <div class="panel-heading-actions">
-          <button
+          <Button
             type="button"
             data-tour="services-compose-yaml"
+            :label="t('services.manage_compose_yaml')"
             @click="openComposeYaml"
-          >
-            {{ t('services.manage_compose_yaml') }}
-          </button>
+          />
         </div>
       </div>
     </div>
 
-    <TableSkeleton
+    <DataTable
       v-if="loading"
-      :columns="5"
-      :rows="4"
-      :headers="[
-        t('services.service'),
-        t('services.container'),
-        t('services.profile'),
-        t('services.state'),
-        t('services.actions'),
-      ]"
-    />
-    <div v-else class="table-wrap" data-tour="services-table">
-      <table>
-        <thead>
-          <tr>
-            <th>{{ t('services.service') }}</th>
-            <th>{{ t('services.container') }}</th>
-            <th>{{ t('services.profile') }}</th>
-            <th>{{ t('services.state') }}</th>
-            <th>{{ t('services.actions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in serviceRows" :key="row.key">
-            <td>
-              <div>{{ row.label }}</div>
-              <div v-if="row.kind === 'infra'" class="create-hint">
-                {{ t('services.ports') }}: {{ row.ports }}
-              </div>
-              <div v-else class="create-hint">
-                <code>{{ row.ports }}</code>
-                <span v-if="!row.item.included" class="status-line warn">
-                  · {{ t('services.compose_not_included') }}
-                </span>
-              </div>
-            </td>
-            <td><code>{{ row.container }}</code></td>
-            <td><code>{{ row.profile }}</code></td>
-            <td>
-              <span class="state-badge" :class="stateClass(rowState(row))">
-                {{ stateLabel(rowState(row)) }}
+      :value="[{}, {}, {}, {}]"
+      :loading="true"
+    >
+      <Column :header="t('services.service')" />
+      <Column :header="t('services.container')" />
+      <Column :header="t('services.profile')" />
+      <Column :header="t('services.state')" />
+      <Column :header="t('services.actions')" />
+    </DataTable>
+    <div v-else data-tour="services-table">
+      <DataTable :value="serviceRows" data-key="key" striped-rows>
+        <Column :header="t('services.service')">
+          <template #body="{ data: row }">
+            <div>{{ row.label }}</div>
+            <div v-if="row.kind === 'infra'" class="create-hint">
+              {{ t('services.ports') }}: {{ row.ports }}
+            </div>
+            <div v-else class="create-hint">
+              <code>{{ row.ports }}</code>
+              <span v-if="!row.item.included" class="status-line warn">
+                · {{ t('services.compose_not_included') }}
               </span>
-              <div v-if="showCreateHint(row)" class="create-hint">
-                {{ t('services.create_hint') }}
-              </div>
-            </td>
-            <td>
-              <ActionMenu :items="rowMenuItems(row)" />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+          </template>
+        </Column>
+        <Column :header="t('services.container')">
+          <template #body="{ data: row }">
+            <code>{{ row.container }}</code>
+          </template>
+        </Column>
+        <Column :header="t('services.profile')">
+          <template #body="{ data: row }">
+            <code>{{ row.profile }}</code>
+          </template>
+        </Column>
+        <Column :header="t('services.state')">
+          <template #body="{ data: row }">
+            <Tag
+              :value="stateLabel(rowState(row))"
+              :severity="stateSeverity(rowState(row))"
+              rounded
+            />
+            <div v-if="showCreateHint(row)" class="create-hint">
+              {{ t('services.create_hint') }}
+            </div>
+          </template>
+        </Column>
+        <Column
+          :header="t('services.actions')"
+          header-style="width: 1%; white-space: nowrap"
+          style="width: 1%; white-space: nowrap; vertical-align: middle"
+        >
+          <template #body="{ data: row }">
+            <ActionMenu :items="rowMenuItems(row)" />
+          </template>
+        </Column>
+      </DataTable>
     </div>
   </section>
 </template>

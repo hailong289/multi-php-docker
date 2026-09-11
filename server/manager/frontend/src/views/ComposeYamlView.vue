@@ -2,15 +2,18 @@
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
+import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+import { confirmDialog } from '../lib/confirm'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
 const router = useRouter()
 const { t } = useI18n()
 const {
-  stateClass,
   stateLabel,
   composeFileState,
   composeFileAction,
@@ -41,6 +44,14 @@ async function refreshAll() {
 }
 
 const dirty = computed(() => draft.value !== original.value)
+
+function stateSeverity(state) {
+  if (state === 'running') return 'success'
+  if (state === 'stopped') return 'secondary'
+  if (state === 'error') return 'danger'
+  if (state === 'busy') return 'warn'
+  return 'contrast'
+}
 const selectedFile = computed(
   () => composeFiles.value.find((item) => item.name === selectedName.value) || null,
 )
@@ -172,7 +183,7 @@ async function refreshFiles() {
 async function openFile(name) {
   if (!name) return
   if ((dirty.value || creating.value) && selectedName.value !== name) {
-    if (!confirm(t('services.compose_discard_confirm'))) return
+    if (!(await confirmDialog(t('services.compose_discard_confirm'), { acceptLabel: t('action.ok'), rejectLabel: t('action.cancel'), acceptSeverity: 'primary' }))) return
   }
   creating.value = false
   newFileName.value = ''
@@ -194,9 +205,9 @@ async function openFile(name) {
   }
 }
 
-function startCreate() {
+async function startCreate() {
   if (dirty.value || creating.value) {
-    if (!confirm(t('services.compose_discard_confirm'))) return
+    if (!(await confirmDialog(t('services.compose_discard_confirm'), { acceptLabel: t('action.ok'), rejectLabel: t('action.cancel'), acceptSeverity: 'primary' }))) return
   }
   creating.value = true
   selectedName.value = ''
@@ -250,7 +261,7 @@ async function saveCompose() {
     await loadBootstrap({ silent: true })
     const item = selectedFile.value
     if (!creating.value && item && showContainerRecreateButton(item)) {
-      if (confirm(t('services.compose_save_recreate_confirm'))) {
+      if (await confirmDialog(t('services.compose_save_recreate_confirm'), { acceptLabel: t('action.ok'), rejectLabel: t('action.cancel'), acceptSeverity: 'primary' })) {
         await runContainerAction('recreate')
       }
     }
@@ -269,7 +280,7 @@ async function deleteCompose(name) {
     showToast('failure', t('services.compose_core_protected'))
     return
   }
-  if (!confirm(t('services.compose_delete_confirm', { name: targetName }))) return
+  if (!(await confirmDialog(t('services.compose_delete_confirm', { name: targetName }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
   saving.value = true
   try {
     const result = await apiSend(
@@ -306,46 +317,25 @@ onMounted(async () => {
   <section class="panel compose-yaml-page" data-tour="compose-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
-        <button
+                <Button
           type="button"
           class="icon-back"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
           :aria-label="t('services.back_to_services')"
           :title="t('services.back_to_services')"
           @click="router.push({ name: 'services' })"
-        >
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-            <path
-              d="M12.5 4.5 7 10l5.5 5.5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
+        />
         <div>
           <h2>{{ t('services.manage_compose_yaml') }}</h2>
           <p>{{ t('services.compose_hint') }}</p>
         </div>
       </div>
       <div class="panel-heading-actions">
-          <button
-            type="button"
-            :disabled="saving || filesLoading"
-            @click="refreshAll"
-          >
-            {{ t('nginx.refresh') }}
-          </button>
-          <button
-            type="button"
-            class="primary"
-            data-tour="compose-add"
-            :disabled="saving || filesLoading"
-            @click="startCreate"
-          >
-            {{ t('services.compose_add') }}
-          </button>
+          <Button type="button" :label="t('nginx.refresh')" :disabled="saving || filesLoading" @click="refreshAll" />
+          <Button type="button" data-tour="compose-add" :label="t('services.compose_add')" :disabled="saving || filesLoading" @click="startCreate" />
         </div>
     </div>
 
@@ -377,7 +367,7 @@ onMounted(async () => {
                 >
                   <td colspan="2">
                     <code>{{ newFileName || t('services.compose_create') }}</code>
-                    <span class="status-pill status-off">{{ t('nginx.template_dirty') }}</span>
+                    <Tag class="home-inline-tag" :value="t('nginx.template_dirty')" severity="secondary" rounded />
                   </td>
                 </tr>
                 <tr
@@ -400,13 +390,12 @@ onMounted(async () => {
                     </div>
                   </td>
                   <td>
-                    <span
+                    <Tag
                       v-if="row.item.runtime"
-                      class="state-badge"
-                      :class="stateClass(composeFileState(row.item))"
-                    >
-                      {{ stateLabel(composeFileState(row.item)) }}
-                    </span>
+                      :value="stateLabel(composeFileState(row.item))"
+                      :severity="stateSeverity(composeFileState(row.item))"
+                      rounded
+                    />
                     <span v-else class="create-hint">—</span>
                   </td>
                 </tr>
@@ -418,12 +407,12 @@ onMounted(async () => {
                           <template v-if="creating">
                             <label class="supervisor-log-file">
                               {{ t('services.compose_name') }}
-                              <input v-model="newFileName" type="text" placeholder="custom.yml" />
+                              <InputText v-model="newFileName" placeholder="custom.yml" fluid />
                             </label>
                           </template>
                           <template v-else>
                             <strong><code>{{ selectedName }}</code></strong>
-                            <span v-if="dirty" class="status-pill status-off">{{ t('nginx.template_dirty') }}</span>
+                            <Tag v-if="dirty" class="home-inline-tag" :value="t('nginx.template_dirty')" severity="secondary" rounded />
                           </template>
                           <p v-if="composeMeta && !creating" class="nginx-template-meta">
                             <code>{{ composeMeta.relative_path }}</code>
@@ -431,69 +420,42 @@ onMounted(async () => {
                           </p>
                         </div>
                         <div class="actions controller-actions">
-                          <button
+                          <Button
                             type="button"
-                            class="primary"
+                            size="small"
+                            :label="saving ? t('action.working') : creating ? t('services.compose_create') : t('services.compose_save')"
+                            :loading="saving"
                             :disabled="saving || composeLoading || (!creating && !dirty)"
                             @click.stop="saveCompose"
-                          >
-                            <span v-if="saving" class="btn-spinner" aria-hidden="true"></span>
-                            {{
-                              saving
-                                ? t('action.working')
-                                : creating
-                                  ? t('services.compose_create')
-                                  : t('services.compose_save')
-                            }}
-                          </button>
-                          <button
+                          />
+                          <Button
                             v-if="!creating && selectedName && !(selectedFile?.protected || selectedFile?.core)"
                             type="button"
-                            class="danger"
+                            size="small"
+                            severity="danger"
+                            outlined
+                            :label="t('services.compose_delete_file')"
                             :disabled="saving"
                             @click.stop="deleteCompose()"
-                          >
-                            {{ t('services.compose_delete_file') }}
-                          </button>
-                          <button
+                          />
+                          <Button
                             v-if="!creating && actionContext && showContainerCreateButton(actionContext)"
                             type="button"
-                            class="primary"
-                            :class="{ 'is-loading': containerActionPending(actionContext, 'create') }"
+                            size="small"
+                            :label="containerActionPending(actionContext, 'create') ? t('action.working') : t('services.create')"
+                            :loading="containerActionPending(actionContext, 'create')"
                             :disabled="!containerActionEnabled(actionContext, 'create')"
                             @click.stop="runContainerAction('create')"
-                          >
-                            <span
-                              v-if="containerActionPending(actionContext, 'create')"
-                              class="btn-spinner"
-                              aria-hidden="true"
-                            ></span>
-                            {{
-                              containerActionPending(actionContext, 'create')
-                                ? t('action.working')
-                                : t('services.create')
-                            }}
-                          </button>
-                          <button
+                          />
+                          <Button
                             v-if="!creating && actionContext && showContainerRecreateButton(actionContext)"
                             type="button"
-                            :class="{ 'is-loading': containerActionPending(actionContext, containerRecreateAction) }"
+                            size="small"
+                            :label="containerActionPending(actionContext, containerRecreateAction) ? t('action.working') : (actionContext.pull_recreate && actionContext.runtime === 'infra' ? t('services.pull_recreate') : t('services.recreate'))"
+                            :loading="containerActionPending(actionContext, containerRecreateAction)"
                             :disabled="!containerActionEnabled(actionContext, containerRecreateAction)"
                             @click.stop="runContainerAction(containerRecreateAction)"
-                          >
-                            <span
-                              v-if="containerActionPending(actionContext, containerRecreateAction)"
-                              class="btn-spinner"
-                              aria-hidden="true"
-                            ></span>
-                            {{
-                              containerActionPending(actionContext, containerRecreateAction)
-                                ? t('action.working')
-                                : actionContext.pull_recreate && actionContext.runtime === 'infra'
-                                  ? t('services.pull_recreate')
-                                  : t('services.recreate')
-                            }}
-                          </button>
+                          />
                         </div>
                       </div>
 
