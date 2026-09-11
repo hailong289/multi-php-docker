@@ -1,4 +1,9 @@
-import { hasInfraConnectionDetails } from './infraConnectionDetails'
+import {
+  getInfraWebUrl,
+  hasInfraConnectionDetails,
+  hasInfraWebAccess,
+  openInfraWeb,
+} from './infraConnectionDetails'
 
 export function buildPinMenuItem(kind, id, { t, pinned, toggle }) {
   return {
@@ -15,6 +20,7 @@ export function buildInfraMenuItems(service, { t, router, mgr, onDetails }) {
     infraServiceState,
     isPending,
   } = mgr
+  const webUrl = getInfraWebUrl(service)
   return [
     {
       id: 'create',
@@ -50,6 +56,13 @@ export function buildInfraMenuItems(service, { t, router, mgr, onDetails }) {
       label: t('services.view_logs'),
       disabled: infraServiceState(service) === 'not_created',
       run: () => router.push({ name: 'service-logs', params: { service } }),
+    },
+    {
+      id: 'open-web',
+      label: t('services.open_web'),
+      hidden: !hasInfraWebAccess(service),
+      disabled: !webUrl || infraServiceState(service) !== 'running',
+      run: () => openInfraWeb(service),
     },
     {
       id: 'details',
