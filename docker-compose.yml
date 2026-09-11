@@ -88,12 +88,11 @@ services:
       - app-network
 
   manager:
-    image: long301001/multi-php-docker:php-8.5
+    image: long301001/multi-php-docker:manager
     container_name: manager_container
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./server/manager:/app:ro
       - ./runtime:/runtime
       - ./php-controller-runtime:/runtime/php-controller
       - ./nginx/logs:/nginx-logs

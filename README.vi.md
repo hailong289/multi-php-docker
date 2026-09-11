@@ -2,7 +2,7 @@
 
 # Môi trường phát triển PHP với Docker
 
-Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis và RabbitMQ. Tất cả PHP 7.4–8.5 dùng image multi-architecture sẵn trên Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` không tự build image. PHP 8.5 chạy mặc định; các bản còn lại dùng Compose profile riêng và mặc định tắt. Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
+Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, Redis và RabbitMQ. Tất cả PHP 7.4–8.5 dùng image multi-architecture sẵn trên Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` không tự build các image PHP đó. Giao diện Server Manager nằm trong `long301001/multi-php-docker:manager` (frontend được build sẵn trong image). PHP 8.5 chạy mặc định; các bản còn lại dùng Compose profile riêng và mặc định tắt. Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
 ## Video hướng dẫn
 
@@ -40,7 +40,8 @@ Các image được cung cấp sẵn:
 | `nginx` | `long301001/multi-php-docker:nginx` |
 | `php-8.0`, `supervisor-8.0` | `long301001/multi-php-docker:php-8.0` |
 | `php-8.1`, `supervisor-8.1` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.5`, `supervisor-8.5`, `manager` | `long301001/multi-php-docker:php-8.5` |
+| `php-8.5`, `supervisor-8.5` | `long301001/multi-php-docker:php-8.5` |
+| `manager` | `long301001/multi-php-docker:manager` |
 | `php-8.4`, `supervisor-8.4` | `long301001/multi-php-docker:php-8.4` |
 | `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
 | `php-8.2`, `supervisor-8.2` | `long301001/multi-php-docker:php-8.2` |
@@ -135,6 +136,8 @@ docker compose ps
 
 ### 4. Mở Server Manager
 
+Giao diện Manager nằm trong image `long301001/multi-php-docker:manager`. Clone rồi `docker compose pull` là đủ — không cần Node.js hay `npm run build` trên máy. File Vite đã build trong `server/manager/public/` được Git bỏ qua.
+
 Mở:
 
 [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
@@ -171,6 +174,19 @@ Trình duyệt mở `multi-php-hosts:write` rồi ghi hosts (UAC trên Windows /
 5. Mở domain, ví dụ `http://my-php85-app.test`.
 
 Mục tiếp theo liệt kê toàn bộ thao tác trong Server Manager. Định dạng `env.json` thủ công, CLI hosts và lệnh Compose profile là tùy chọn, nằm phía sau.
+
+Khi sửa source PHP hoặc Vue của Manager, build lại image rồi recreate service (Node chạy trong lúc build image, không cần cài trên máy):
+
+```bash
+docker compose build manager
+docker compose up -d manager
+```
+
+Đẩy image (amd64 + arm64) bằng cùng quy trình Buildx với các tag Hub khác:
+
+```bash
+docker compose build --push manager
+```
 
 ## Quản lý server bằng giao diện web
 
@@ -783,7 +799,7 @@ Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mụ
 │   ├── docker/              # entrypoint, supervisord, compose wrappers
 │   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
-│   ├── manager/             # UI quản lý env.json
+│   ├── manager/             # Source Manager (UI nằm trong image manager)
 │   ├── source_php7.4/       # Source chạy PHP 7.4
 │   ├── source_php8.0/       # Source chạy PHP 8.0
 │   ├── source_php8.1/       # Source chạy PHP 8.1

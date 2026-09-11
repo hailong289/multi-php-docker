@@ -1,1 +1,5 @@
-/server
+# Local PHP apps are bind-mounted at runtime, not copied into images.
+/server/source_php*
+/server/manager/frontend/node_modules
+/server/manager/frontend/.vite
+/server/manager/public
