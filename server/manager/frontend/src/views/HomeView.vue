@@ -350,17 +350,6 @@ function onSubmit() {
         </Column>
       </DataTable>
     </div>
-
-    <div class="panel-body command-block">
-      <div class="command">
-        <strong>{{ t('apply.title') }}</strong>
-        <pre v-if="!loading">{{ data.apply_command }}</pre>
-        <div v-else class="skeleton-command">
-          <span class="skeleton-line skeleton-w2"></span>
-          <span class="skeleton-line skeleton-w1"></span>
-        </div>
-      </div>
-    </div>
   </section>
 
   <Dialog

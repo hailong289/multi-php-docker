@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import ActionMenu from './ActionMenu.vue'
+import PinButton from './PinButton.vue'
 import { apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { usePinnedContainers } from '../composables/usePinnedContainers'
@@ -28,7 +29,7 @@ const {
   showToast,
   translateApiError,
 } = mgr
-const { pins, movePin, reorderPins, unpin } = usePinnedContainers()
+const { pins, movePin, reorderPins } = usePinnedContainers()
 
 const nginxPending = ref('')
 const dragKey = ref('')
@@ -91,7 +92,7 @@ const rows = computed(() =>
         kind: 'nginx',
         id: 'nginx',
         available: true,
-        label: data.nginx_management?.container || 'nginx',
+        label: t('nginx.name'),
         state: nginxState(),
       }
     }
@@ -153,6 +154,10 @@ function onDragStart(row, event) {
   event.dataTransfer.effectAllowed = 'move'
 }
 
+function onDragEnd() {
+  dragKey.value = ''
+}
+
 function onDrop(toIndex) {
   if (!dragKey.value) return
   const list = pins.value.slice()
@@ -175,76 +180,83 @@ function onDrop(toIndex) {
       <h2>{{ t('pin.section_title') }}</h2>
       <p class="status-line">{{ t('pin.section_hint') }}</p>
     </div>
-    <ul class="home-pinned-list">
-      <li
-        v-for="(row, index) in rows"
-        :key="row.key"
-        class="home-pinned-row"
-        :class="{
-          'is-unavailable': !row.available,
-          'is-dragging': dragKey === row.key,
-        }"
-        draggable="true"
-        @dragstart="onDragStart(row, $event)"
-        @dragover.prevent
-        @drop.prevent="onDrop(index)"
-      >
-        <button
-          type="button"
-          class="home-pinned-handle"
-          :aria-label="t('pin.drag_handle')"
-          tabindex="-1"
+    <div class="panel-body home-pinned-body">
+      <ul class="home-pinned-list">
+        <li
+          v-for="(row, index) in rows"
+          :key="row.key"
+          class="home-pinned-row"
+          :class="{
+            'is-unavailable': !row.available,
+            'is-dragging': dragKey === row.key,
+          }"
+          @dragover.prevent
+          @drop.prevent="onDrop(index)"
         >
-          ⋮⋮
-        </button>
-        <Tag :value="t(`pin.kind_${row.kind}`)" severity="secondary" rounded />
-        <div class="home-pinned-meta">
-          <strong>{{ row.label }}</strong>
-          <Tag
-            v-if="row.available"
-            :value="stateLabel(row.state)"
-            :severity="stateSeverity(row.state)"
-            rounded
-          />
-          <Tag
-            v-else
-            :value="t('pin.unavailable')"
-            severity="contrast"
-            rounded
-          />
-        </div>
-        <div class="home-pinned-reorder">
-          <Button
-            type="button"
-            icon="pi pi-arrow-up"
-            text
-            rounded
-            size="small"
-            :disabled="index === 0"
-            :aria-label="t('pin.move_up')"
-            @click="movePin(row.kind, row.id, index - 1)"
-          />
-          <Button
-            type="button"
-            icon="pi pi-arrow-down"
-            text
-            rounded
-            size="small"
-            :disabled="index === rows.length - 1"
-            :aria-label="t('pin.move_down')"
-            @click="movePin(row.kind, row.id, index + 1)"
-          />
-        </div>
-        <ActionMenu v-if="row.available" :items="menuItems(row)" />
-        <Button
-          type="button"
-          size="small"
-          severity="secondary"
-          outlined
-          :label="t('pin.from_home')"
-          @click="unpin(row.kind, row.id)"
-        />
-      </li>
-    </ul>
+          <span
+            class="home-pinned-handle"
+            role="button"
+            tabindex="0"
+            :aria-label="t('pin.drag_handle')"
+            draggable="true"
+            @dragstart="onDragStart(row, $event)"
+            @dragend="onDragEnd"
+          >
+            ⋮⋮
+          </span>
+          <div class="home-pinned-main">
+            <Tag
+              class="home-pinned-kind"
+              :value="t(`pin.kind_${row.kind}`)"
+              severity="secondary"
+              rounded
+            />
+            <div class="home-pinned-meta">
+              <strong :title="row.label">{{ row.label }}</strong>
+              <Tag
+                v-if="row.available"
+                :value="stateLabel(row.state)"
+                :severity="stateSeverity(row.state)"
+                rounded
+              />
+              <Tag
+                v-else
+                :value="t('pin.unavailable')"
+                severity="contrast"
+                rounded
+              />
+            </div>
+          </div>
+          <div class="home-pinned-actions">
+            <div class="home-pinned-reorder">
+              <Button
+                type="button"
+                icon="pi pi-arrow-up"
+                text
+                rounded
+                size="small"
+                :disabled="index === 0"
+                :aria-label="t('pin.move_up')"
+                @click="movePin(row.kind, row.id, index - 1)"
+              />
+              <Button
+                type="button"
+                icon="pi pi-arrow-down"
+                text
+                rounded
+                size="small"
+                :disabled="index === rows.length - 1"
+                :aria-label="t('pin.move_down')"
+                @click="movePin(row.kind, row.id, index + 1)"
+              />
+            </div>
+            <div class="home-pinned-menu">
+              <ActionMenu v-if="row.available" :items="menuItems(row)" />
+            </div>
+            <PinButton :kind="row.kind" :id="row.id" />
+          </div>
+        </li>
+      </ul>
+    </div>
   </section>
 </template>
