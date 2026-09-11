@@ -7,22 +7,24 @@ import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
 import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
+import PinButton from '../components/PinButton.vue'
 import { useManager } from '../composables/useManager'
+import { usePinnedContainers } from '../composables/usePinnedContainers'
+import { buildPhpMenuItems, buildPinMenuItem } from '../lib/containerMenus'
 
 const router = useRouter()
 const { t } = useI18n()
+const mgr = useManager()
 const {
   loading,
   data,
-  phpAction,
   stateLabel,
   phpServiceState,
-  phpActionEnabled,
   showCreateHint,
-  isPending,
   loadBootstrap,
   busy,
-} = useManager()
+} = mgr
+const { isPinned, togglePin } = usePinnedContainers()
 
 function stateSeverity(state) {
   if (state === 'running') return 'success'
@@ -32,75 +34,15 @@ function stateSeverity(state) {
   return 'contrast'
 }
 
+const menuCtx = computed(() => ({ t, router, mgr }))
+
 function phpMenuItems(service) {
-  return [
-    {
-      id: 'create',
-      label: t('php_controller.create'),
-      primary: true,
-      disabled: !phpActionEnabled(service, 'create'),
-      loading: isPending('php', { service, action: 'create' }),
-      run: () => phpAction(service, 'create'),
-    },
-    {
-      id: 'start',
-      label: t('php_controller.start'),
-      disabled: !phpActionEnabled(service, 'start'),
-      loading: isPending('php', { service, action: 'start' }),
-      run: () => phpAction(service, 'start'),
-    },
-    {
-      id: 'stop',
-      label: t('php_controller.stop'),
-      disabled: !phpActionEnabled(service, 'stop'),
-      loading: isPending('php', { service, action: 'stop' }),
-      run: () => phpAction(service, 'stop'),
-    },
-    {
-      id: 'restart',
-      label: t('php_controller.restart'),
-      disabled: !phpActionEnabled(service, 'restart'),
-      loading: isPending('php', { service, action: 'restart' }),
-      run: () => phpAction(service, 'restart'),
-    },
-    {
-      id: 'logs',
-      label: t('php_controller.view_logs'),
-      disabled: phpServiceState(service) === 'not_created',
-      run: () => router.push({ name: 'php-version-logs', params: { service } }),
-    },
-    {
-      id: 'run',
-      label: t('php_controller.run'),
-      run: () => router.push({ name: 'php-version-run', params: { service } }),
-    },
-    {
-      id: 'details',
-      label: t('php_controller.details'),
-      run: () => router.push({ name: 'php-version-detail', params: { service } }),
-    },
-    {
-      id: 'supervisor',
-      label: t('php_controller.supervisor'),
-      run: () => router.push({ name: 'php-version-supervisor', params: { service } }),
-    },
-    {
-      id: 'delete',
-      label: t('services.delete_container'),
-      danger: true,
-      disabled: !phpActionEnabled(service, 'delete'),
-      loading: isPending('php', { service, action: 'delete' }),
-      run: () => phpAction(service, 'delete'),
-    },
-    {
-      id: 'delete-image',
-      label: t('services.delete_image'),
-      danger: true,
-      disabled: !phpActionEnabled(service, 'delete-image'),
-      loading: isPending('php', { service, action: 'delete-image' }),
-      run: () => phpAction(service, 'delete-image'),
-    },
-  ]
+  const pinItem = buildPinMenuItem('php', service, {
+    t,
+    pinned: isPinned('php', service),
+    toggle: togglePin,
+  })
+  return [...buildPhpMenuItems(service, menuCtx.value), pinItem]
 }
 
 const phpRows = computed(() =>
@@ -188,7 +130,10 @@ onMounted(() => {
           style="width: 1%; white-space: nowrap; vertical-align: middle"
         >
           <template #body="{ data: row }">
-            <ActionMenu :items="phpMenuItems(row.service)" />
+            <div class="row-actions">
+              <PinButton kind="php" :id="row.service" />
+              <ActionMenu :items="phpMenuItems(row.service)" />
+            </div>
           </template>
         </Column>
       </DataTable>

@@ -52,6 +52,15 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="home-pinned"]',
+        popover: {
+          title: t('tour.home.pinned_title'),
+          description: t('tour.home.pinned_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="home-reload"]',
         popover: {
           title: t('tour.home.reload_title'),
