@@ -3,10 +3,11 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
+import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Tab from 'primevue/tab'
 import TabList from 'primevue/tablist'
@@ -14,6 +15,8 @@ import TabPanel from 'primevue/tabpanel'
 import TabPanels from 'primevue/tabpanels'
 import Tabs from 'primevue/tabs'
 import Tag from 'primevue/tag'
+import Textarea from 'primevue/textarea'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
@@ -437,8 +440,6 @@ onUnmounted(stopFollow)
       </div>
       <Button
         type="button"
-        severity="secondary"
-        outlined
         :label="t('supervisor.refresh')"
         :disabled="loading || !!pending || detailsLoading || configsLoading"
         @click="refreshCurrent"
@@ -475,7 +476,7 @@ onUnmounted(stopFollow)
                     :disabled="!enabled('create')"
                     @click="runAction('create')"
                   />
-                  <Button type="button" size="small" severity="secondary" outlined :label="pending === 'start' ? t('action.working') : t('supervisor.start')" :loading="pending === 'start'" :disabled="!enabled('start')" @click="runAction('start')" />
+                  <Button type="button" size="small" :label="pending === 'start' ? t('action.working') : t('supervisor.start')" :loading="pending === 'start'" :disabled="!enabled('start')" @click="runAction('start')" />
                   <Button type="button" size="small" severity="secondary" outlined :label="pending === 'stop' ? t('action.working') : t('supervisor.stop')" :loading="pending === 'stop'" :disabled="!enabled('stop')" @click="runAction('stop')" />
                   <Button type="button" size="small" severity="secondary" outlined :label="pending === 'restart' ? t('action.working') : t('supervisor.restart')" :loading="pending === 'restart'" :disabled="!enabled('restart')" @click="runAction('restart')" />
                 </div>
@@ -488,11 +489,15 @@ onUnmounted(stopFollow)
                     <p v-if="details?.log_dir"><code>{{ details.log_dir }}</code></p>
                   </div>
                   <div class="controller-actions">
-                    <div class="follow-toggle">
-                      <Checkbox :model-value="followLogs" binary input-id="supervisor-follow" @update:model-value="onFollowChange" />
-                      <label for="supervisor-follow">{{ t('supervisor.follow') }}</label>
-                    </div>
-                    <Button type="button" size="small" severity="secondary" outlined :label="t('supervisor.refresh_logs')" :disabled="detailsLoading" @click="loadDetails()" />
+                    <label class="follow-toggle" for="supervisor-follow">
+                      <ToggleSwitch
+                        :model-value="followLogs"
+                        input-id="supervisor-follow"
+                        @update:model-value="onFollowChange"
+                      />
+                      <span>{{ t('supervisor.follow') }}</span>
+                    </label>
+                    <Button type="button" size="small" :label="t('supervisor.refresh_logs')" :disabled="detailsLoading" @click="loadDetails()" />
                     <Button type="button" size="small" severity="secondary" outlined :label="clearing ? t('action.working') : t('supervisor.clear_log')" :loading="clearing" :disabled="!selectedLog || clearing || detailsLoading" @click="clearSelectedLog" />
                   </div>
                 </div>

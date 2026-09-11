@@ -127,8 +127,6 @@ onMounted(() => {
           <Button
             type="button"
             data-tour="php-compose-yaml"
-            severity="secondary"
-            outlined
             :label="t('php_controller.manage_yaml')"
             :disabled="busy || loading"
             @click="router.push({ name: 'php-compose-yaml' })"
@@ -184,7 +182,11 @@ onMounted(() => {
             </div>
           </template>
         </Column>
-        <Column :header="t('php_controller.actions')">
+        <Column
+          :header="t('php_controller.actions')"
+          header-style="width: 1%; white-space: nowrap"
+          style="width: 1%; white-space: nowrap; vertical-align: middle"
+        >
           <template #body="{ data: row }">
             <ActionMenu :items="phpMenuItems(row.service)" />
           </template>

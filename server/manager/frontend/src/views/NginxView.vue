@@ -268,6 +268,7 @@ async function run(action, path) {
             const ok = rs.status === 'success'
             showToast(ok ? 'success' : 'failure', msg)
             pending.value = ''
+            if (ok) loadTemplates({ silent: true }).catch(() => {})
           } else if (Date.now() - started > POLL_TIMEOUT) {
             clearInterval(poll)
             showToast('failure', t('reload.timeout'))
@@ -289,6 +290,14 @@ async function run(action, path) {
 function statusText(status) {
   if (!status) return t('nginx.no_result')
   return status.message_key ? t(status.message_key) : status.message || t('nginx.no_result')
+}
+
+function resultSeverity(status) {
+  if (!status) return 'secondary'
+  if (status.status === 'success') return 'success'
+  if (status.status === 'error' || status.status === 'failure') return 'error'
+  if (status.status === 'pending' || status.status === 'busy') return 'info'
+  return 'warn'
 }
 
 function refreshCurrentTab() {
@@ -337,7 +346,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="panel" data-tour="nginx-panel">
+  <section class="panel nginx-page" data-tour="nginx-panel">
     <div class="panel-heading nginx-heading">
       <div>
         <h2>{{ t('nginx.title') }}</h2>
@@ -346,8 +355,6 @@ onUnmounted(() => {
       <div class="panel-heading-actions nginx-heading-actions">
         <Button
           type="button"
-          severity="secondary"
-          outlined
           :label="t('nginx.refresh')"
           :disabled="loading || templatesLoading || domainLogsLoading || !!pending"
           @click="refreshCurrentTab"
@@ -355,7 +362,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="panel-body php-detail-tabs-wrap" data-tour="nginx-tabs">
+    <div class="panel-body nginx-tabs-wrap" data-tour="nginx-tabs">
       <Tabs v-model:value="tab">
         <TabList>
           <Tab value="control" data-tour="nginx-control-tab">{{ t('nginx.tab_control') }}</Tab>
@@ -364,52 +371,146 @@ onUnmounted(() => {
         </TabList>
         <TabPanels>
           <TabPanel value="control">
-            <div v-if="loading" class="panel-body">{{ t('loading') }}</div>
+            <div v-if="loading" class="nginx-tab-pad">{{ t('loading') }}</div>
             <template v-else>
-              <div class="panel-body nginx-overview">
-                <div>
-                  <Tag :value="stateLabel" :severity="stateSeverity(nginx.state)" rounded />
-                  <code class="php-detail-container">{{ nginx.container }}</code>
-                </div>
-                <div class="controller-actions" data-tour="nginx-actions">
-                  <Button type="button" size="small" severity="secondary" outlined :label="pending === 'start' ? t('action.working') : t('nginx.start')" :loading="pending === 'start'" :disabled="!enabled('start')" @click="run('start', '/api/nginx/actions/start')" />
-                  <Button type="button" size="small" severity="secondary" outlined :label="pending === 'stop' ? t('action.working') : t('nginx.stop')" :loading="pending === 'stop'" :disabled="!enabled('stop')" @click="run('stop', '/api/nginx/actions/stop')" />
-                  <Button type="button" size="small" severity="secondary" outlined :label="pending === 'restart' ? t('action.working') : t('nginx.restart')" :loading="pending === 'restart'" :disabled="!enabled('restart')" @click="run('restart', '/api/nginx/actions/restart')" />
-                  <Button type="button" size="small" severity="secondary" outlined :label="pending === 'test' ? t('action.working') : t('nginx.test')" :loading="pending === 'test'" :disabled="!enabled('test')" @click="run('test', '/api/nginx/test')" />
-                  <Button type="button" size="small" :label="pending === 'reload' ? t('reload.waiting') : t('nginx.apply_reload')" :loading="pending === 'reload'" :disabled="!enabled('reload')" @click="run('reload', '/api/nginx/reload')" />
-                </div>
-              </div>
-
-              <div class="panel-body nginx-results">
-                <p><strong>{{ t('nginx.test_result') }}:</strong> {{ statusText(nginx.test_status) }}</p>
-                <Message v-if="pending === 'reload'" severity="info" :closable="false">{{ t('reload.waiting') }}</Message>
-                <p v-else><strong>{{ t('nginx.reload_result') }}:</strong> {{ statusText(nginx.reload_status) }}</p>
-              </div>
-
-              <div class="panel-body nginx-log-grid" data-tour="nginx-logs">
-                <article v-for="name in ['operation', 'error', 'access']" :key="name" class="nginx-log-card">
-                  <div class="nginx-log-card-head">
-                    <h3>{{ t(`nginx.log_${name}`) }}</h3>
-                    <Button type="button" size="small" severity="danger" outlined :label="pending === `clear-${name}` ? t('action.working') : t('nginx.global_log_clear')" :loading="pending === `clear-${name}`" :disabled="!!pending || loading" @click="clearGlobalLog(name)" />
+              <div class="nginx-control-stack">
+                <div class="nginx-status-bar">
+                  <div class="nginx-status-meta">
+                    <Tag :value="stateLabel" :severity="stateSeverity(nginx.state)" rounded />
+                    <code class="nginx-container">{{ nginx.container }}</code>
                   </div>
-                  <pre>{{ nginx.logs?.[name]?.available ? nginx.logs[name].content : t('nginx.log_empty') }}</pre>
-                </article>
+                  <div class="controller-actions" data-tour="nginx-actions">
+                    <Button
+                      type="button"
+                      size="small"
+                      :label="pending === 'start' ? t('action.working') : t('nginx.start')"
+                      :loading="pending === 'start'"
+                      :disabled="!enabled('start')"
+                      @click="run('start', '/api/nginx/actions/start')"
+                    />
+                    <Button
+                      type="button"
+                      size="small"
+                      severity="secondary"
+                      outlined
+                      :label="pending === 'stop' ? t('action.working') : t('nginx.stop')"
+                      :loading="pending === 'stop'"
+                      :disabled="!enabled('stop')"
+                      @click="run('stop', '/api/nginx/actions/stop')"
+                    />
+                    <Button
+                      type="button"
+                      size="small"
+                      severity="secondary"
+                      outlined
+                      :label="pending === 'restart' ? t('action.working') : t('nginx.restart')"
+                      :loading="pending === 'restart'"
+                      :disabled="!enabled('restart')"
+                      @click="run('restart', '/api/nginx/actions/restart')"
+                    />
+                    <Button
+                      type="button"
+                      size="small"
+                      severity="secondary"
+                      outlined
+                      :label="pending === 'test' ? t('action.working') : t('nginx.test')"
+                      :loading="pending === 'test'"
+                      :disabled="!enabled('test')"
+                      @click="run('test', '/api/nginx/test')"
+                    />
+                    <Button
+                      type="button"
+                      size="small"
+                      data-tour="nginx-apply-reload"
+                      :label="pending === 'reload' ? t('reload.waiting') : t('nginx.apply_reload')"
+                      :loading="pending === 'reload'"
+                      :disabled="!enabled('reload')"
+                      @click="run('reload', '/api/nginx/reload')"
+                    />
+                  </div>
+                </div>
+
+                <Message severity="info" :closable="false" class="nginx-apply-hint">
+                  {{ t('nginx.apply_reload_hint') }}
+                </Message>
+
+                <div class="nginx-results">
+                  <Message
+                    :severity="resultSeverity(nginx.test_status)"
+                    :closable="false"
+                  >
+                    <strong>{{ t('nginx.test_result') }}:</strong>
+                    {{ statusText(nginx.test_status) }}
+                  </Message>
+                  <Message
+                    v-if="pending === 'reload'"
+                    severity="info"
+                    :closable="false"
+                  >
+                    {{ t('reload.waiting') }}
+                  </Message>
+                  <Message
+                    v-else
+                    :severity="resultSeverity(nginx.reload_status)"
+                    :closable="false"
+                  >
+                    <strong>{{ t('nginx.reload_result') }}:</strong>
+                    {{ statusText(nginx.reload_status) }}
+                  </Message>
+                </div>
+
+                <div class="nginx-log-grid" data-tour="nginx-logs">
+                  <article
+                    v-for="name in ['operation', 'error', 'access']"
+                    :key="name"
+                    class="nginx-log-card"
+                  >
+                    <div class="nginx-log-card-head">
+                      <h3>{{ t(`nginx.log_${name}`) }}</h3>
+                      <Button
+                        type="button"
+                        size="small"
+                        severity="danger"
+                        outlined
+                        :label="
+                          pending === `clear-${name}`
+                            ? t('action.working')
+                            : t('nginx.global_log_clear')
+                        "
+                        :loading="pending === `clear-${name}`"
+                        :disabled="!!pending || loading"
+                        @click="clearGlobalLog(name)"
+                      />
+                    </div>
+                    <pre class="nginx-log-pre">{{
+                      nginx.logs?.[name]?.available
+                        ? nginx.logs[name].content
+                        : t('nginx.log_empty')
+                    }}</pre>
+                  </article>
+                </div>
               </div>
             </template>
           </TabPanel>
 
           <TabPanel value="templates">
             <div class="nginx-templates" data-tour="nginx-templates">
-              <div class="panel-body">
+              <div class="nginx-tab-pad nginx-templates-hints">
+                <Message severity="info" :closable="false">{{ t('nginx.templates_hint') }}</Message>
                 <Message severity="warn" :closable="false">{{ t('nginx.templates_warn') }}</Message>
               </div>
-              <div v-if="templatesLoading && templates.length === 0" class="panel-body">{{ t('loading') }}</div>
-              <div v-else-if="templates.length === 0" class="panel-body empty">{{ t('nginx.templates_empty') }}</div>
+              <div v-if="templatesLoading && templates.length === 0" class="nginx-tab-pad">
+                {{ t('loading') }}
+              </div>
+              <div v-else-if="templates.length === 0" class="nginx-tab-pad empty">
+                {{ t('nginx.templates_empty') }}
+              </div>
               <div v-else class="nginx-templates-layout">
                 <DataTable
                   :value="templates"
                   data-key="name"
                   selection-mode="single"
+                  striped-rows
                   :row-class="(row) => (row.name === selectedName ? 'is-selected' : '')"
                   class="nginx-templates-list"
                   @row-click="(e) => openTemplate(e.data.name)"
@@ -424,18 +525,41 @@ onUnmounted(() => {
                     <template #body="{ data: item }">{{ formatTime(item.updated_at) }}</template>
                   </Column>
                 </DataTable>
-                <div class="panel-body nginx-template-editor">
-                  <div v-if="!selectedName" class="empty">{{ t('nginx.template_pick') }}</div>
+                <div class="nginx-template-editor">
+                  <div v-if="!selectedName" class="nginx-pane-empty">{{ t('nginx.template_pick') }}</div>
                   <template v-else>
                     <div class="nginx-template-editor-head">
-                      <div>
+                      <div class="nginx-template-title">
                         <strong><code>{{ selectedName }}</code></strong>
-                        <Tag v-if="dirty" class="home-inline-tag" :value="t('nginx.template_dirty')" severity="secondary" rounded />
+                        <Tag
+                          v-if="dirty"
+                          class="home-inline-tag"
+                          :value="t('nginx.template_dirty')"
+                          severity="warn"
+                          rounded
+                        />
+                        <span v-if="templateMeta" class="nginx-template-meta">
+                          {{ formatSize(templateMeta.size) }} · {{ formatTime(templateMeta.updated_at) }}
+                        </span>
                       </div>
-                      <Button type="button" :label="pending === 'template-save' ? t('action.working') : t('nginx.template_save')" :loading="pending === 'template-save'" :disabled="!dirty || !!pending || templateLoading" @click="saveTemplate" />
+                      <Button
+                        type="button"
+                        :label="
+                          pending === 'template-save'
+                            ? t('action.working')
+                            : t('nginx.template_save')
+                        "
+                        :loading="pending === 'template-save'"
+                        :disabled="!dirty || !!pending || templateLoading"
+                        @click="saveTemplate"
+                      />
                     </div>
-                    <p v-if="templateMeta" class="nginx-template-meta">{{ formatSize(templateMeta.size) }} · {{ formatTime(templateMeta.updated_at) }}</p>
-                    <MonacoEditor v-model="draft" language="plaintext" min-height="420px" :read-only="templateLoading || pending === 'template-save'" />
+                    <MonacoEditor
+                      v-model="draft"
+                      language="plaintext"
+                      min-height="420px"
+                      :read-only="templateLoading || pending === 'template-save'"
+                    />
                   </template>
                 </div>
               </div>
@@ -444,15 +568,20 @@ onUnmounted(() => {
 
           <TabPanel value="domain-logs">
             <div class="nginx-domain-logs" data-tour="nginx-domain-logs">
-              <div class="panel-body">
+              <div class="nginx-tab-pad">
                 <p class="status-line">{{ t('nginx.domain_logs_hint') }}</p>
               </div>
-              <div v-if="domainLogsLoading && domainLogList.length === 0" class="panel-body">{{ t('loading') }}</div>
-              <div v-else-if="domainLogList.length === 0" class="panel-body empty">{{ t('nginx.domain_logs_empty') }}</div>
+              <div v-if="domainLogsLoading && domainLogList.length === 0" class="nginx-tab-pad">
+                {{ t('loading') }}
+              </div>
+              <div v-else-if="domainLogList.length === 0" class="nginx-tab-pad empty">
+                {{ t('nginx.domain_logs_empty') }}
+              </div>
               <div v-else class="nginx-templates-layout">
                 <DataTable
                   :value="domainLogList"
                   data-key="domain"
+                  striped-rows
                   :row-class="(row) => (row.domain === selectedDomain ? 'is-selected' : '')"
                   class="nginx-templates-list"
                   @row-click="(e) => openDomainLogs(e.data.domain)"
@@ -461,41 +590,88 @@ onUnmounted(() => {
                     <template #body="{ data: item }"><code>{{ item.domain }}</code></template>
                   </Column>
                   <Column :header="t('nginx.log_access')">
-                    <template #body="{ data: item }">{{ item.access?.available ? formatSize(item.access.size) : '—' }}</template>
+                    <template #body="{ data: item }">
+                      {{ item.access?.available ? formatSize(item.access.size) : '—' }}
+                    </template>
                   </Column>
                   <Column :header="t('nginx.log_error')">
-                    <template #body="{ data: item }">{{ item.error?.available ? formatSize(item.error.size) : '—' }}</template>
+                    <template #body="{ data: item }">
+                      {{ item.error?.available ? formatSize(item.error.size) : '—' }}
+                    </template>
                   </Column>
                 </DataTable>
-                <div class="panel-body nginx-domain-log-viewer">
-                  <div v-if="!selectedDomain" class="empty">{{ t('nginx.domain_logs_pick') }}</div>
-                  <div v-else-if="domainLogsDetailLoading && !domainLogs" class="empty">{{ t('loading') }}</div>
+                <div class="nginx-domain-log-viewer">
+                  <div v-if="!selectedDomain" class="nginx-pane-empty">
+                    {{ t('nginx.domain_logs_pick') }}
+                  </div>
+                  <div v-else-if="domainLogsDetailLoading && !domainLogs" class="nginx-pane-empty">
+                    {{ t('loading') }}
+                  </div>
                   <template v-else-if="domainLogs">
                     <div class="nginx-template-editor-head">
                       <strong><code>{{ domainLogs.domain }}</code></strong>
                       <div class="actions">
-                        <Button type="button" size="small" severity="secondary" outlined :label="t('nginx.refresh')" :disabled="domainLogsDetailLoading || !!pending" @click="openDomainLogs(selectedDomain)" />
-                        <Button type="button" size="small" severity="danger" outlined :label="pending === 'domain-clear' ? t('action.working') : t('nginx.domain_logs_clear')" :loading="pending === 'domain-clear'" :disabled="domainLogsDetailLoading || !!pending" @click="clearDomainLogs" />
+                        <Button
+                          type="button"
+                          size="small"
+                          :label="t('nginx.refresh')"
+                          :disabled="domainLogsDetailLoading || !!pending"
+                          @click="openDomainLogs(selectedDomain)"
+                        />
+                        <Button
+                          type="button"
+                          size="small"
+                          severity="danger"
+                          outlined
+                          :label="
+                            pending === 'domain-clear'
+                              ? t('action.working')
+                              : t('nginx.domain_logs_clear')
+                          "
+                          :loading="pending === 'domain-clear'"
+                          :disabled="domainLogsDetailLoading || !!pending"
+                          @click="clearDomainLogs"
+                        />
                       </div>
                     </div>
                     <div class="nginx-domain-log-grid">
                       <article class="nginx-log-card">
-                        <h3>
-                          {{ t('nginx.log_error') }}
-                          <span v-if="domainLogs.error?.updated_at" class="nginx-template-meta">
-                            · {{ formatTime(domainLogs.error.updated_at) }} · {{ formatSize(domainLogs.error.size) }}
-                          </span>
-                        </h3>
-                        <pre>{{ domainLogs.error?.available ? domainLogs.error.content || t('nginx.log_empty') : t('nginx.log_empty') }}</pre>
+                        <div class="nginx-log-card-head">
+                          <h3>
+                            {{ t('nginx.log_error') }}
+                            <span
+                              v-if="domainLogs.error?.updated_at"
+                              class="nginx-template-meta"
+                            >
+                              · {{ formatTime(domainLogs.error.updated_at) }} ·
+                              {{ formatSize(domainLogs.error.size) }}
+                            </span>
+                          </h3>
+                        </div>
+                        <pre class="nginx-log-pre">{{
+                          domainLogs.error?.available
+                            ? domainLogs.error.content || t('nginx.log_empty')
+                            : t('nginx.log_empty')
+                        }}</pre>
                       </article>
                       <article class="nginx-log-card">
-                        <h3>
-                          {{ t('nginx.log_access') }}
-                          <span v-if="domainLogs.access?.updated_at" class="nginx-template-meta">
-                            · {{ formatTime(domainLogs.access.updated_at) }} · {{ formatSize(domainLogs.access.size) }}
-                          </span>
-                        </h3>
-                        <pre>{{ domainLogs.access?.available ? domainLogs.access.content || t('nginx.log_empty') : t('nginx.log_empty') }}</pre>
+                        <div class="nginx-log-card-head">
+                          <h3>
+                            {{ t('nginx.log_access') }}
+                            <span
+                              v-if="domainLogs.access?.updated_at"
+                              class="nginx-template-meta"
+                            >
+                              · {{ formatTime(domainLogs.access.updated_at) }} ·
+                              {{ formatSize(domainLogs.access.size) }}
+                            </span>
+                          </h3>
+                        </div>
+                        <pre class="nginx-log-pre">{{
+                          domainLogs.access?.available
+                            ? domainLogs.access.content || t('nginx.log_empty')
+                            : t('nginx.log_empty')
+                        }}</pre>
                       </article>
                     </div>
                   </template>

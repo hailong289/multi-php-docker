@@ -3,8 +3,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Checkbox from 'primevue/checkbox'
 import Tag from 'primevue/tag'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { apiGet } from '../api'
 import { useManager } from '../composables/useManager'
 
@@ -187,27 +187,26 @@ onUnmounted(() => {
         />
         <div>
           <h2>{{ title }}</h2>
-          <p>
+          <p class="service-logs-meta">
             <code>{{ container || service || composeName }}</code>
-            ·
             <Tag :value="stateLabel(state)" :severity="stateSeverity(state)" rounded />
+            <span v-if="logs?.updated_at" class="service-logs-updated">
+              {{ t('services.logs_updated', { at: logs.updated_at }) }}
+            </span>
           </p>
         </div>
       </div>
-      <div class="controller-actions">
-        <div class="follow-toggle">
-          <Checkbox
+      <div class="panel-heading-actions">
+        <label class="follow-toggle" for="service-follow-logs">
+          <ToggleSwitch
             :model-value="followLogs"
-            binary
             input-id="service-follow-logs"
             @update:model-value="onFollowChange"
           />
-          <label for="service-follow-logs">{{ t('services.follow_logs') }}</label>
-        </div>
+          <span>{{ t('services.follow_logs') }}</span>
+        </label>
         <Button
           type="button"
-          severity="secondary"
-          outlined
           size="small"
           :label="t('services.refresh_logs')"
           :loading="logsLoading"
@@ -217,16 +216,18 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="panel-body supervisor-logs">
-      <p v-if="logs?.updated_at" class="create-hint">
-        {{ t('services.logs_updated', { at: logs.updated_at }) }}
-      </p>
-      <article class="nginx-log-card">
-        <pre v-if="logsLoading && !logs">{{ t('loading') }}</pre>
-        <pre v-else ref="logPre">{{
-          logs?.available ? logs.content || t('services.logs_empty') : t('services.logs_unavailable')
-        }}</pre>
-      </article>
+    <div class="panel-body service-logs-body">
+      <pre
+        v-if="logsLoading && !logs"
+        class="service-logs-pre"
+      >{{ t('loading') }}</pre>
+      <pre
+        v-else
+        ref="logPre"
+        class="service-logs-pre"
+      >{{
+        logs?.available ? logs.content || t('services.logs_empty') : t('services.logs_unavailable')
+      }}</pre>
     </div>
   </section>
 </template>

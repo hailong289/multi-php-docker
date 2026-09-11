@@ -4,15 +4,16 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
-import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import Tag from 'primevue/tag'
 import ToastHost from './components/ToastHost.vue'
 import PullProgressPanel from './components/PullProgressPanel.vue'
+import AppearanceMenu from './components/AppearanceMenu.vue'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useManager } from './composables/useManager'
 import { useTour } from './composables/useTour'
 import { authState } from './lib/authState'
+import { applyThemeMode, readStoredThemeMode } from './lib/appearance'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -61,16 +62,10 @@ const accessBadge = computed(() => {
   return t('header.remote_unnamed')
 })
 
-const themeMode = ref(document.documentElement.dataset.themeMode || 'system')
 const localeOptions = [
   { label: 'VI', value: 'vi' },
   { label: 'EN', value: 'en' },
 ]
-const themeOptions = computed(() => [
-  { label: t('theme.system'), value: 'system' },
-  { label: t('theme.light'), value: 'light' },
-  { label: t('theme.dark'), value: 'dark' },
-])
 
 const navItems = computed(() => [
   {
@@ -121,23 +116,8 @@ let statusPollTimer = null
 const STATUS_POLL_IDLE_MS = 5000
 const STATUS_POLL_BUSY_MS = 2000
 
-function applyTheme(mode) {
-  themeMode.value = mode
-  try {
-    localStorage.setItem('manager-theme', mode)
-  } catch (_) {}
-  const effective =
-    mode === 'system'
-      ? matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light'
-      : mode
-  document.documentElement.dataset.theme = effective
-  document.documentElement.dataset.themeMode = mode
-}
-
 function onSystemThemeChange() {
-  if (themeMode.value === 'system') applyTheme('system')
+  if (readStoredThemeMode() === 'system') applyThemeMode('system')
 }
 
 function setLocale(next) {
@@ -176,7 +156,7 @@ function startStatusPoll() {
 }
 
 onMounted(async () => {
-  applyTheme(themeMode.value)
+  applyThemeMode(readStoredThemeMode())
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onSystemThemeChange)
   updateTitle()
   if (showChrome.value && !bootstrapped.value && route.meta?.manager) {
@@ -255,18 +235,7 @@ watch(() => route.fullPath, updateTitle)
             @update:model-value="setLocale"
           />
         </div>
-        <div class="switcher">
-          <span class="switcher-label">{{ t('theme.label') }}</span>
-          <Select
-            :model-value="themeMode"
-            :options="themeOptions"
-            option-label="label"
-            option-value="value"
-            size="small"
-            class="theme-select"
-            @update:model-value="applyTheme"
-          />
-        </div>
+        <AppearanceMenu />
       </div>
     </header>
 
@@ -330,7 +299,7 @@ watch(() => route.fullPath, updateTitle)
     </Message>
     <RouterView v-if="!showChrome || !fatalError" />
     <ToastHost />
-    <ConfirmDialog />
+    <ConfirmDialog class="manager-confirm-dialog" />
     <PullProgressPanel />
   </main>
 </template>

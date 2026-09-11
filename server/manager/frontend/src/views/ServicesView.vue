@@ -214,8 +214,6 @@ onMounted(() => {
           <Button
             type="button"
             data-tour="services-compose-yaml"
-            severity="secondary"
-            outlined
             :label="t('services.manage_compose_yaml')"
             @click="openComposeYaml"
           />
@@ -272,7 +270,11 @@ onMounted(() => {
             </div>
           </template>
         </Column>
-        <Column :header="t('services.actions')">
+        <Column
+          :header="t('services.actions')"
+          header-style="width: 1%; white-space: nowrap"
+          style="width: 1%; white-space: nowrap; vertical-align: middle"
+        >
           <template #body="{ data: row }">
             <ActionMenu :items="rowMenuItems(row)" />
           </template>

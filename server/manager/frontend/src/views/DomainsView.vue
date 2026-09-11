@@ -190,8 +190,6 @@ async function copyManualLines() {
               <Button
                 type="button"
                 size="small"
-                severity="secondary"
-                outlined
                 :label="t('action.edit')"
                 :disabled="busy"
                 @click="openDomainEdit(row.key)"

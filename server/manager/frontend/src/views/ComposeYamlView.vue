@@ -334,7 +334,7 @@ onMounted(async () => {
         </div>
       </div>
       <div class="panel-heading-actions">
-          <Button type="button" severity="secondary" outlined :label="t('nginx.refresh')" :disabled="saving || filesLoading" @click="refreshAll" />
+          <Button type="button" :label="t('nginx.refresh')" :disabled="saving || filesLoading" @click="refreshAll" />
           <Button type="button" data-tour="compose-add" :label="t('services.compose_add')" :disabled="saving || filesLoading" @click="startCreate" />
         </div>
     </div>
@@ -451,8 +451,6 @@ onMounted(async () => {
                             v-if="!creating && actionContext && showContainerRecreateButton(actionContext)"
                             type="button"
                             size="small"
-                            severity="secondary"
-                            outlined
                             :label="containerActionPending(actionContext, containerRecreateAction) ? t('action.working') : (actionContext.pull_recreate && actionContext.runtime === 'infra' ? t('services.pull_recreate') : t('services.recreate'))"
                             :loading="containerActionPending(actionContext, containerRecreateAction)"
                             :disabled="!containerActionEnabled(actionContext, containerRecreateAction)"

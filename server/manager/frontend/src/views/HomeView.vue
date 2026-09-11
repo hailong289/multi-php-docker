@@ -191,8 +191,6 @@ function onSubmit() {
             v-if="nginxReloadAvailable"
             type="button"
             data-tour="home-reload"
-            severity="secondary"
-            outlined
             :label="isPending('reload') ? t('reload.waiting') : t('reload.button')"
             :loading="isPending('reload')"
             :disabled="busy || loading"
@@ -301,8 +299,6 @@ function onSubmit() {
               <Button
                 type="button"
                 size="small"
-                severity="secondary"
-                outlined
                 :label="
                   isPending('toggle', { key: item.key })
                     ? t('action.working')
@@ -322,8 +318,6 @@ function onSubmit() {
               <Button
                 type="button"
                 size="small"
-                severity="secondary"
-                outlined
                 :label="t('action.terminal')"
                 :disabled="busy"
                 @click="openTerminal(item)"
@@ -331,8 +325,6 @@ function onSubmit() {
               <Button
                 type="button"
                 size="small"
-                severity="secondary"
-                outlined
                 :label="t('action.edit')"
                 :disabled="busy"
                 @click="openEdit(item.key)"

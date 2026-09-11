@@ -373,7 +373,7 @@ onMounted(async () => {
     themeObserver = new MutationObserver(() => applyTerminalTheme())
     themeObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme'],
+      attributeFilter: ['data-theme', 'data-surface', 'data-primary', 'style'],
     })
     await sendResize()
     await pullOutput()
@@ -405,12 +405,12 @@ onBeforeUnmount(() => {
     data-tour="docker-terminal"
   >
     <div class="terminal-panel-header">
-      <div>
-        <h3>{{ title || $t('terminal.title') }}</h3>
+      <div class="terminal-panel-copy">
+        <h3 v-if="!page">{{ title || $t('terminal.title') }}</h3>
         <p class="terminal-hint">
           {{ $t('terminal.hint') }}
           <template v-if="cwdLabel">
-            <br />
+            <span class="terminal-hint-sep" aria-hidden="true">·</span>
             <code>{{ cwdLabel }}</code>
           </template>
         </p>
@@ -418,8 +418,9 @@ onBeforeUnmount(() => {
       <div class="terminal-panel-actions">
         <Tag v-if="status !== 'ready'" :severity="statusSeverity()" :value="$t(statusLabelKey())" />
         <Button
+          v-if="!page"
           type="button"
-          :label="page ? $t('terminal.back') : $t('terminal.close')"
+          :label="$t('terminal.close')"
           severity="secondary"
           outlined
           size="small"

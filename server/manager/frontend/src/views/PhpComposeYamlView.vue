@@ -272,7 +272,7 @@ onMounted(async () => {
         </div>
       </div>
       <div class="panel-heading-actions">
-        <Button type="button" severity="secondary" outlined :label="t('nginx.refresh')" :disabled="saving || filesLoading" @click="refreshAll" />
+        <Button type="button" :label="t('nginx.refresh')" :disabled="saving || filesLoading" @click="refreshAll" />
       </div>
     </div>
 

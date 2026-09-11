@@ -230,8 +230,6 @@ onUnmounted(() => {
       </div>
       <Button
         type="button"
-        severity="secondary"
-        outlined
         :label="t('php_controller.refresh')"
         :disabled="loading || !!pending"
         @click="load"
@@ -266,8 +264,6 @@ onUnmounted(() => {
           <Button
             type="button"
             size="small"
-            severity="secondary"
-            outlined
             :label="
               isPending('php', { service, action: 'start' })
                 ? t('action.working')

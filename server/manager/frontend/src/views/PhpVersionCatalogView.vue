@@ -150,8 +150,6 @@ onMounted(async () => {
       </div>
       <Button
         type="button"
-        severity="secondary"
-        outlined
         :label="refreshing ? t('action.working') : t('php_controller.refresh_hub')"
         :loading="refreshing"
         :disabled="loading || refreshing || !!installing"

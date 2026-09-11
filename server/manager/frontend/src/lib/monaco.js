@@ -67,53 +67,36 @@ export function registerManagerMonacoThemes(monaco) {
 }
 
 export function terminalThemeFromDocument() {
-  const dark = document.documentElement.getAttribute('data-theme') !== 'light'
-  if (dark) {
-    return {
-      background: '#0b1220',
-      foreground: '#e8eef8',
-      cursor: '#58a6ff',
-      cursorAccent: '#0b1220',
-      selectionBackground: '#1d4ed866',
-      black: '#0b1220',
-      red: '#ff7b86',
-      green: '#3fb950',
-      yellow: '#d29922',
-      blue: '#58a6ff',
-      magenta: '#bc8cff',
-      cyan: '#39c5cf',
-      white: '#e8eef8',
-      brightBlack: '#6b7c93',
-      brightRed: '#ffa198',
-      brightGreen: '#56d364',
-      brightYellow: '#e3b341',
-      brightBlue: '#79c0ff',
-      brightMagenta: '#d2a8ff',
-      brightCyan: '#56d4dd',
-      brightWhite: '#ffffff',
-    }
-  }
+  const styles = getComputedStyle(document.documentElement)
+  const bg = (styles.getPropertyValue('--log-bg') || '').trim() || '#0f172a'
+  const fg = (styles.getPropertyValue('--log-fg') || '').trim() || '#e2e8f0'
+  const muted = (styles.getPropertyValue('--log-muted') || '').trim() || '#94a3b8'
+  const primary =
+    (styles.getPropertyValue('--p-primary-color') || '').trim() ||
+    (styles.getPropertyValue('--primary') || '').trim() ||
+    '#3b82f6'
+
   return {
-    background: '#ffffff',
-    foreground: '#172033',
-    cursor: '#0969da',
-    cursorAccent: '#ffffff',
-    selectionBackground: '#0969da33',
-    black: '#172033',
-    red: '#cf222e',
-    green: '#1a7f37',
-    yellow: '#9a6700',
-    blue: '#0969da',
-    magenta: '#8250df',
-    cyan: '#1b7c83',
-    white: '#5d6e85',
-    brightBlack: '#8a9bb0',
-    brightRed: '#a40e26',
-    brightGreen: '#116329',
-    brightYellow: '#7d4e00',
-    brightBlue: '#0550ae',
-    brightMagenta: '#6639ba',
-    brightCyan: '#1b7c83',
-    brightWhite: '#172033',
+    background: bg,
+    foreground: fg,
+    cursor: primary,
+    cursorAccent: bg,
+    selectionBackground: `${primary}66`,
+    black: bg,
+    red: '#f87171',
+    green: '#4ade80',
+    yellow: '#fbbf24',
+    blue: '#60a5fa',
+    magenta: '#c084fc',
+    cyan: '#22d3ee',
+    white: fg,
+    brightBlack: muted,
+    brightRed: '#fca5a5',
+    brightGreen: '#86efac',
+    brightYellow: '#fde68a',
+    brightBlue: '#93c5fd',
+    brightMagenta: '#d8b4fe',
+    brightCyan: '#67e8f9',
+    brightWhite: '#ffffff',
   }
 }

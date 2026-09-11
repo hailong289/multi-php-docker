@@ -66,8 +66,6 @@ function toggle(event) {
     <Button
       type="button"
       size="small"
-      severity="secondary"
-      outlined
       :label="triggerLabel"
       :loading="anyLoading"
       aria-haspopup="true"

@@ -82,7 +82,6 @@ watch(
         v-if="serverEntry"
         :key="serverKey"
         :server-key="serverKey"
-        :title="pageTitle"
         page
         @close="goHome"
       />

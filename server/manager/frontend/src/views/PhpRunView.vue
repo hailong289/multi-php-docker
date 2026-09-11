@@ -458,7 +458,7 @@ onUnmounted(() => {
             <Tag v-if="dirty" class="home-inline-tag" :value="t('php_controller.run_unsaved')" severity="secondary" rounded />
           </div>
           <div class="actions">
-            <Button type="button" size="small" severity="secondary" outlined :label="t('php_controller.session_rename')" :disabled="!!mutating || !sessionId" @click="renameSession()" />
+            <Button type="button" size="small" :label="t('php_controller.session_rename')" :disabled="!!mutating || !sessionId" @click="renameSession()" />
             <Button type="button" size="small" severity="danger" outlined :label="mutating === 'delete' ? t('action.working') : t('action.delete')" :loading="mutating === 'delete'" :disabled="!!mutating || !sessionId" @click="deleteSession()" />
           </div>
         </div>
