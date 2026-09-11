@@ -2866,3 +2866,92 @@ select:focus:not([class*='p-']) {
 .compose-yaml-logs .status-line {
   margin: 6px 0 0;
 }
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.pin-button.p-button {
+  width: 2rem;
+  height: 2rem;
+}
+
+.home-pinned {
+  margin-bottom: 1.25rem;
+}
+
+.home-pinned .panel-heading h2 {
+  margin-bottom: 0.25rem;
+}
+
+.home-pinned-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0 0.85rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.home-pinned-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--p-content-border-color, var(--line));
+  border-radius: var(--p-content-border-radius, 10px);
+  background: var(--p-card-background, var(--panel));
+}
+
+.home-pinned-row.is-dragging {
+  opacity: 0.55;
+}
+
+.home-pinned-row.is-unavailable {
+  opacity: 0.78;
+}
+
+.home-pinned-handle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--p-text-muted-color, var(--muted));
+  cursor: grab;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.85rem;
+  letter-spacing: -0.08em;
+  line-height: 1;
+}
+
+.home-pinned-handle:active {
+  cursor: grabbing;
+}
+
+.home-pinned-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+  min-width: 0;
+  flex: 1 1 10rem;
+}
+
+.home-pinned-meta strong {
+  font-weight: 650;
+}
+
+.home-pinned-reorder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+@media (max-width: 720px) {
+  .home-pinned-row {
+    align-items: flex-start;
+  }
+}
+

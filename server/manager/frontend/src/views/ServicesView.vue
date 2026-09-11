@@ -7,25 +7,29 @@ import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
 import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
+import PinButton from '../components/PinButton.vue'
 import { useManager } from '../composables/useManager'
+import { usePinnedContainers } from '../composables/usePinnedContainers'
+import {
+  buildComposeMenuItems,
+  buildInfraMenuItems,
+  buildPinMenuItem,
+} from '../lib/containerMenus'
 
 const router = useRouter()
 const { t } = useI18n()
+const mgr = useManager()
 const {
   loading,
   data,
   stateLabel,
   infraServiceState,
-  infraActionEnabled,
-  infraAction,
   showInfraCreateHint,
-  composeYamlAction,
-  composeYamlActionEnabled,
   composeFileState,
   showComposeCreateHint,
-  isPending,
   loadBootstrap,
-} = useManager()
+} = mgr
+const { isPinned, togglePin } = usePinnedContainers()
 
 const targets = computed(() => data.infra_services?.targets || {})
 
@@ -37,116 +41,25 @@ function stateSeverity(state) {
   return 'contrast'
 }
 
-function infraMenuItems(service) {
-  return [
-    {
-      id: 'create',
-      label: t('services.create'),
-      primary: true,
-      disabled: !infraActionEnabled(service, 'create'),
-      loading: isPending('infra', { service, action: 'create' }),
-      run: () => infraAction(service, 'create'),
-    },
-    {
-      id: 'start',
-      label: t('services.start'),
-      disabled: !infraActionEnabled(service, 'start'),
-      loading: isPending('infra', { service, action: 'start' }),
-      run: () => infraAction(service, 'start'),
-    },
-    {
-      id: 'stop',
-      label: t('services.stop'),
-      disabled: !infraActionEnabled(service, 'stop'),
-      loading: isPending('infra', { service, action: 'stop' }),
-      run: () => infraAction(service, 'stop'),
-    },
-    {
-      id: 'restart',
-      label: t('services.restart'),
-      disabled: !infraActionEnabled(service, 'restart'),
-      loading: isPending('infra', { service, action: 'restart' }),
-      run: () => infraAction(service, 'restart'),
-    },
-    {
-      id: 'logs',
-      label: t('services.view_logs'),
-      disabled: infraServiceState(service) === 'not_created',
-      run: () => router.push({ name: 'service-logs', params: { service } }),
-    },
-    {
-      id: 'delete',
-      label: t('services.delete_container'),
-      danger: true,
-      disabled: !infraActionEnabled(service, 'delete'),
-      loading: isPending('infra', { service, action: 'delete' }),
-      run: () => infraAction(service, 'delete'),
-    },
-    {
-      id: 'delete-image',
-      label: t('services.delete_image'),
-      danger: true,
-      disabled: !infraActionEnabled(service, 'delete-image'),
-      loading: isPending('infra', { service, action: 'delete-image' }),
-      run: () => infraAction(service, 'delete-image'),
-    },
-  ]
+const menuCtx = computed(() => ({ t, router, mgr }))
+
+function pinKindId(row) {
+  if (row.kind === 'compose') return { kind: 'compose', id: row.item.name }
+  return { kind: 'infra', id: row.service }
 }
 
-function composeMenuItems(item) {
-  return [
-    {
-      id: 'create',
-      label: t('services.create'),
-      primary: true,
-      disabled: !composeYamlActionEnabled(item, 'create'),
-      loading: isPending('compose-file', { name: item.name, action: 'create' }),
-      run: () => composeYamlAction(item, 'create'),
-    },
-    {
-      id: 'start',
-      label: t('services.start'),
-      disabled: !composeYamlActionEnabled(item, 'start'),
-      loading: isPending('compose-file', { name: item.name, action: 'start' }),
-      run: () => composeYamlAction(item, 'start'),
-    },
-    {
-      id: 'stop',
-      label: t('services.stop'),
-      disabled: !composeYamlActionEnabled(item, 'stop'),
-      loading: isPending('compose-file', { name: item.name, action: 'stop' }),
-      run: () => composeYamlAction(item, 'stop'),
-    },
-    {
-      id: 'restart',
-      label: t('services.restart'),
-      disabled: !composeYamlActionEnabled(item, 'restart'),
-      loading: isPending('compose-file', { name: item.name, action: 'restart' }),
-      run: () => composeYamlAction(item, 'restart'),
-    },
-    {
-      id: 'logs',
-      label: t('services.view_logs'),
-      disabled: composeFileState(item) === 'not_created',
-      run: () => router.push({ name: 'compose-file-logs', params: { name: item.name } }),
-    },
-    {
-      id: 'delete',
-      label: t('services.delete_container'),
-      danger: true,
-      disabled: !composeYamlActionEnabled(item, 'delete'),
-      loading: isPending('compose-file', { name: item.name, action: 'delete' }),
-      run: () => composeYamlAction(item, 'delete'),
-    },
-    {
-      id: 'delete-image',
-      label: t('services.delete_image'),
-      danger: true,
-      disabled: !composeYamlActionEnabled(item, 'delete-image'),
-      loading: isPending('compose-file', { name: item.name, action: 'delete-image' }),
-      run: () => composeYamlAction(item, 'delete-image'),
-    },
-  ]
+function rowMenuItems(row) {
+  const { kind, id } = pinKindId(row)
+  const pinItem = buildPinMenuItem(kind, id, {
+    t,
+    pinned: isPinned(kind, id),
+    toggle: togglePin,
+  })
+  const items =
+    row.kind === 'infra'
+      ? buildInfraMenuItems(row.service, menuCtx.value)
+      : buildComposeMenuItems(row.item, menuCtx.value)
+  return [...items, pinItem]
 }
 
 const serviceRows = computed(() => {
@@ -177,11 +90,6 @@ const serviceRows = computed(() => {
 
   return rows
 })
-
-function rowMenuItems(row) {
-  if (row.kind === 'infra') return infraMenuItems(row.service)
-  return composeMenuItems(row.item)
-}
 
 function openComposeYaml() {
   router.push({ name: 'compose-yaml' })
@@ -276,7 +184,13 @@ onMounted(() => {
           style="width: 1%; white-space: nowrap; vertical-align: middle"
         >
           <template #body="{ data: row }">
-            <ActionMenu :items="rowMenuItems(row)" />
+            <div class="row-actions">
+              <PinButton
+                :kind="pinKindId(row).kind"
+                :id="pinKindId(row).id"
+              />
+              <ActionMenu :items="rowMenuItems(row)" />
+            </div>
           </template>
         </Column>
       </DataTable>

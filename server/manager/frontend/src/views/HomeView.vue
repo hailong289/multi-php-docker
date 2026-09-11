@@ -12,6 +12,7 @@ import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { useManager } from '../composables/useManager'
+import HomePinnedSection from '../components/HomePinnedSection.vue'
 import {
   FRAMEWORK_PRESETS,
   buildDocRoot,
@@ -175,6 +176,7 @@ function onSubmit() {
 </script>
 
 <template>
+  <HomePinnedSection />
   <section class="panel" data-tour="home-panel">
     <div class="panel-heading">
       <div class="panel-heading-row">
