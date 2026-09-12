@@ -100,11 +100,12 @@ RUN apk add --no-cache \\
     libxml2-dev \\
     oniguruma-dev \\
     linux-headers \\
+    postgresql-dev \\
     supervisor \\
     && pecl install redis \\
     && docker-php-ext-enable redis \\
     && docker-php-ext-configure gd --with-freetype --with-jpeg \\
-    && docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl \\
+    && docker-php-ext-install pdo_mysql pdo_pgsql pgsql mysqli gd zip sockets pcntl \\
     && curl -sS https://getcomposer.org/installer | php \\
     && mv composer.phar /usr/local/bin/composer \\
     && apk del \$PHPIZE_DEPS
@@ -126,6 +127,7 @@ RUN apt-get update && apt-get install -y \\
     libxml2-dev \\
     unzip \\
     libz-dev \\
+    libpq-dev \\
     curl \\
     supervisor \\
     && pecl install redis \\
@@ -133,7 +135,7 @@ RUN apt-get update && apt-get install -y \\
     && curl -sS https://getcomposer.org/installer | php \\
     && mv composer.phar /usr/local/bin/composer
 
-RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl
+RUN docker-php-ext-install pdo_mysql pdo_pgsql pgsql mysqli gd zip sockets pcntl
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -193,10 +195,16 @@ services:
       mysql:
         condition: service_started
         required: false
+      postgres:
+        condition: service_started
+        required: false
       redis:
         condition: service_started
         required: false
       rabbitmq:
+        condition: service_started
+        required: false
+      kafka:
         condition: service_started
         required: false
     networks:

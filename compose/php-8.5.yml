@@ -28,10 +28,16 @@ services:
       mysql:
         condition: service_started
         required: false
+      postgres:
+        condition: service_started
+        required: false
       redis:
         condition: service_started
         required: false
       rabbitmq:
+        condition: service_started
+        required: false
+      kafka:
         condition: service_started
         required: false
     networks:

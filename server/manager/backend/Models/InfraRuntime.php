@@ -21,6 +21,12 @@ final class InfraRuntime
             'profile' => 'mysql',
             'ports' => '3306',
         ],
+        'postgres' => [
+            'label' => 'PostgreSQL',
+            'container' => 'postgres_container',
+            'profile' => 'postgres',
+            'ports' => '5432',
+        ],
         'redis' => [
             'label' => 'Redis',
             'container' => 'redis_container',
@@ -32,6 +38,12 @@ final class InfraRuntime
             'container' => 'rabbitmq_container',
             'profile' => 'rabbitmq',
             'ports' => '5672, 15672',
+        ],
+        'kafka' => [
+            'label' => 'Kafka',
+            'container' => 'kafka_container',
+            'profile' => 'kafka',
+            'ports' => '9092',
         ],
     ];
 

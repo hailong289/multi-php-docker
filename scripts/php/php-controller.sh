@@ -25,8 +25,10 @@ container_for_service() {
     case "$1" in
         nginx) printf '%s' 'nginx_container' ;;
         mysql) printf '%s' 'mysql_container' ;;
+        postgres) printf '%s' 'postgres_container' ;;
         redis) printf '%s' 'redis_container' ;;
         rabbitmq) printf '%s' 'rabbitmq_container' ;;
+        kafka) printf '%s' 'kafka_container' ;;
         supervisor) printf '%s' 'supervisor_container' ;;
         supervisor-*)
             # supervisor-8.1 → supervisor81_container
@@ -45,7 +47,7 @@ container_for_service() {
 profile_for_service() {
     case "$1" in
         php-8.5) return 1 ;;
-        mysql|redis|rabbitmq|supervisor)
+        mysql|postgres|redis|rabbitmq|kafka|supervisor)
             printf '%s' "$1"
             ;;
         supervisor-*)
@@ -60,7 +62,7 @@ profile_for_service() {
 
 is_infra_service() {
     case "$1" in
-        mysql|redis|rabbitmq) return 0 ;;
+        mysql|postgres|redis|rabbitmq|kafka) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -83,7 +85,7 @@ list_php_services() {
 }
 
 list_infra_services() {
-    printf '%s\n' mysql redis rabbitmq
+    printf '%s\n' mysql postgres redis rabbitmq kafka
 }
 
 list_supervisor_services() {
@@ -180,7 +182,8 @@ run_compose_create() {
     "$@"
 }
 
-# Hub images (MySQL/Redis/RabbitMQ): pull then create — do not build.
+# Hub images (MySQL/Redis/RabbitMQ/Kafka): prefer pull, then create.
+# If the tag is not on Hub yet (or pull fails), fall back to local image / build.
 run_compose_pull_create() {
     project_name="$1"
     compose_file="$2"
@@ -192,6 +195,22 @@ run_compose_pull_create() {
         set -- "$@" --env-file /project/.env
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" pull "$service"
+    "$@" || true
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" create "$service"
+    if "$@"; then
+        return 0
+    fi
+
+    set -- docker compose -p "$project_name"
+    if [ -f /project/.env ]; then
+        set -- "$@" --env-file /project/.env
+    fi
+    set -- "$@" -f "$compose_file" --profile "$profile" build "$service"
     "$@" || return 1
 
     set -- docker compose -p "$project_name"
@@ -672,7 +691,7 @@ parse_request_fields() {
     printf '%s' "$request_id" | grep -Eq '^[0-9a-f]{32}$' || return 1
     case "$service" in
         nginx) ;;
-        mysql|redis|rabbitmq) ;;
+        mysql|postgres|redis|rabbitmq|kafka) ;;
         supervisor) ;;
         supervisor-*)
             printf '%s' "$service" | grep -Eq '^supervisor-[0-9]+(\.[0-9]+)+(-alpine|-trixie)?$' || return 1
@@ -955,6 +974,12 @@ while true; do
         if [ "$ok" -eq 1 ]; then
             write_status "$service" "$state" "php_controller.action_success" "$request_id"
         else
+            # Failed create/install with no container → error so UI can retry Create.
+            if [ "$state" = "not_created" ] && {
+                [ "$action" = "create" ] || [ "$action" = "install-version" ] || [ "$action" = "pull-recreate" ] || [ "$action" = "recreate" ]
+            }; then
+                state="error"
+            fi
             write_status "$service" "$state" "php_controller.action_failed" "$request_id"
         fi
         rm -f "$request_file"
