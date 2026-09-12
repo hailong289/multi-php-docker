@@ -833,6 +833,57 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 └── env.json                 # Local configuration ignored by Git
 ```
 
+## Contributing
+
+### Report a bug (create an Issue)
+
+If something breaks or behaves incorrectly, open a GitHub Issue instead of only messaging privately. That keeps a clear record and helps others find the same problem.
+
+1. Go to [Issues](https://github.com/hailong289/multi-php-docker/issues).
+2. Click **New issue**.
+3. Use a short title that describes the problem.
+4. In the body, include:
+   - Steps to reproduce
+   - Expected vs actual behavior
+   - OS (Windows / macOS / Linux), Docker version (`docker --version`), Compose version (`docker compose version`)
+   - Relevant logs (`docker compose logs …`, Manager UI errors, or files under `runtime/` / `php-controller-runtime/status/`)
+5. Submit the issue. Do not put passwords, tokens, or private project paths in the report.
+
+### Create a branch for a fix or feature
+
+Do not commit fixes directly on `main` / `master`. Create a branch from the latest default branch, then open a pull request.
+
+```bash
+# Update the default branch
+git checkout main   # or: git checkout master
+git pull origin main
+
+# Create and switch to a new branch
+git checkout -b fix/short-description
+# Examples:
+#   git checkout -b fix/nginx-reload-timeout
+#   git checkout -b feat/add-php-8.6
+```
+
+Suggested branch name prefixes:
+
+| Prefix | Use for |
+| --- | --- |
+| `fix/` | Bug fix |
+| `feat/` | New feature |
+| `docs/` | Documentation only |
+| `chore/` | Build, CI, or tooling |
+
+Then commit, push, and open a PR:
+
+```bash
+git add .
+git commit -m "Describe why this change exists"
+git push -u origin HEAD
+```
+
+On GitHub, open a **Pull request** into `main` / `master` and link the related Issue (for example `Fixes #123`).
+
 ## Author
 
 This project is maintained by **Hải Long**.

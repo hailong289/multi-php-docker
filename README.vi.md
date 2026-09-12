@@ -833,6 +833,57 @@ Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mụ
 └── env.json                 # Cấu hình local, được Git bỏ qua
 ```
 
+## Đóng góp
+
+### Gặp lỗi thì tạo Issue
+
+Khi phát hiện lỗi hoặc hành vi sai, hãy tạo GitHub Issue thay vì chỉ nhắn riêng. Issue giúp theo dõi rõ ràng và người khác dễ tìm lại cùng vấn đề.
+
+1. Vào [Issues](https://github.com/hailong289/multi-php-docker/issues).
+2. Bấm **New issue**.
+3. Đặt tiêu đề ngắn, mô tả đúng lỗi.
+4. Trong nội dung Issue ghi rõ:
+   - Các bước tái hiện
+   - Kết quả mong đợi và kết quả thực tế
+   - Hệ điều hành (Windows / macOS / Linux), phiên bản Docker (`docker --version`), Compose (`docker compose version`)
+   - Log liên quan (`docker compose logs …`, lỗi trên Manager, hoặc file trong `runtime/` / `php-controller-runtime/status/`)
+5. Gửi Issue. Không đưa mật khẩu, token hay đường dẫn dự án riêng tư vào báo cáo.
+
+### Cách tạo nhánh để sửa lỗi hoặc thêm tính năng
+
+Không commit trực tiếp lên `main` / `master`. Tạo nhánh từ nhánh mặc định mới nhất, rồi mở pull request.
+
+```bash
+# Cập nhật nhánh mặc định
+git checkout main   # hoặc: git checkout master
+git pull origin main
+
+# Tạo và chuyển sang nhánh mới
+git checkout -b fix/mo-ta-ngan
+# Ví dụ:
+#   git checkout -b fix/nginx-reload-timeout
+#   git checkout -b feat/add-php-8.6
+```
+
+Gợi ý tiền tố tên nhánh:
+
+| Tiền tố | Dùng khi |
+| --- | --- |
+| `fix/` | Sửa lỗi |
+| `feat/` | Thêm tính năng |
+| `docs/` | Chỉ sửa tài liệu |
+| `chore/` | Build, CI hoặc tooling |
+
+Sau đó commit, push và mở PR:
+
+```bash
+git add .
+git commit -m "Mô tả lý do thay đổi"
+git push -u origin HEAD
+```
+
+Trên GitHub, tạo **Pull request** vào `main` / `master` và gắn Issue liên quan (ví dụ `Fixes #123`).
+
 ## Tác giả
 
 Dự án được duy trì bởi **Hải Long**.
