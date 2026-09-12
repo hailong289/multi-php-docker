@@ -4,6 +4,8 @@ import { apiGet, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
 import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
+import { addToast, toastSeverityFromType } from '../lib/toast'
+import { confirmDialog } from '../lib/confirm'
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
@@ -15,15 +17,12 @@ const reloadMessageKeys = {
 
 const loading = ref(true)
 const fatalError = ref('')
-const toasts = ref([])
 const editingKey = ref(null)
 const fieldErrors = ref({})
 const busy = ref(false)
 const pendingAction = ref(null)
 const modalOpen = ref(false)
 const bootstrapped = ref(false)
-let toastSeq = 0
-const toastTimers = new Map()
 
 const data = reactive({
   servers: {},
@@ -129,21 +128,13 @@ export function useManager() {
     return trKey(payload.key, payload.parameters || {})
   }
 
-  function dismissToast(id) {
-    const timer = toastTimers.get(id)
-    if (timer) {
-      clearTimeout(timer)
-      toastTimers.delete(id)
-    }
-    toasts.value = toasts.value.filter((toast) => toast.id !== id)
-  }
-
   function showToast(type, text) {
     if (!text) return
-    const id = ++toastSeq
-    toasts.value = [...toasts.value, { id, type, text }]
-    const timer = setTimeout(() => dismissToast(id), 4200)
-    toastTimers.set(id, timer)
+    addToast({
+      severity: toastSeverityFromType(type),
+      summary: text,
+      life: 4200,
+    })
   }
 
   function toastFromResult(result) {
@@ -332,7 +323,7 @@ export function useManager() {
   }
 
   async function deleteServer(key, confirmKey = 'confirm.delete') {
-    if (!confirm(t(confirmKey))) return
+    if (!(await confirmDialog(t(confirmKey), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
     try {
@@ -412,7 +403,7 @@ export function useManager() {
       showToast('failure', t('error.hosts_only_delete'))
       return
     }
-    if (!confirm(t('domains.confirm_delete'))) return
+    if (!(await confirmDialog(t('domains.confirm_delete'), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     const domain = String(key).slice('hosts:'.length)
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
@@ -492,28 +483,16 @@ export function useManager() {
   async function phpAction(service, action) {
     const target = data.php_controllers?.targets?.[service]
     if (action === 'delete') {
-      if (
-        !confirm(
-          t('services.delete_confirm', {
+      if (!(await confirmDialog(t('services.delete_confirm', {
             service: target?.label || service,
             container: target?.container || service,
-          }),
-        )
-      ) {
-        return
-      }
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     }
     if (action === 'delete-image') {
-      if (
-        !confirm(
-          t('services.delete_image_confirm', {
+      if (!(await confirmDialog(t('services.delete_image_confirm', {
             service: target?.label || service,
             image: target?.image || service,
-          }),
-        )
-      ) {
-        return
-      }
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     }
     pendingAction.value = { kind: 'php', service, action }
     try {
@@ -555,28 +534,16 @@ export function useManager() {
   async function infraAction(service, action) {
     const target = data.infra_services?.targets?.[service]
     if (action === 'delete') {
-      if (
-        !confirm(
-          t('services.delete_confirm', {
+      if (!(await confirmDialog(t('services.delete_confirm', {
             service: target?.label || service,
             container: target?.container || service,
-          }),
-        )
-      ) {
-        return
-      }
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     }
     if (action === 'delete-image') {
-      if (
-        !confirm(
-          t('services.delete_image_confirm', {
+      if (!(await confirmDialog(t('services.delete_image_confirm', {
             service: target?.label || service,
             image: target?.image || service,
-          }),
-        )
-      ) {
-        return
-      }
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     }
     pendingAction.value = { kind: 'infra', service, action }
     try {
@@ -1161,28 +1128,16 @@ export function useManager() {
     const label = item.compose_services?.[0]?.name || item.name.replace(/\.ya?ml$/i, '')
     const container = item.container || item.compose_services?.[0]?.container || label
     if (action === 'delete') {
-      if (
-        !confirm(
-          t('services.delete_confirm', {
+      if (!(await confirmDialog(t('services.delete_confirm', {
             service: label,
             container,
-          }),
-        )
-      ) {
-        return
-      }
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     }
     if (action === 'delete-image') {
-      if (
-        !confirm(
-          t('services.delete_image_confirm', {
+      if (!(await confirmDialog(t('services.delete_image_confirm', {
             service: label,
             image: item.image || label,
-          }),
-        )
-      ) {
-        return
-      }
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     }
     pendingAction.value = { kind: 'compose-file', name: item.name, action }
     try {
@@ -1302,7 +1257,6 @@ export function useManager() {
   return {
     loading,
     fatalError,
-    toasts,
     editingKey,
     fieldErrors,
     busy,
@@ -1375,7 +1329,6 @@ export function useManager() {
     showComposeCreateHint,
     isPending,
     showToast,
-    dismissToast,
     translateApiError,
   }
 }

@@ -2,6 +2,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import Tag from 'primevue/tag'
+import ToggleSwitch from 'primevue/toggleswitch'
 import { apiGet } from '../api'
 import { useManager } from '../composables/useManager'
 
@@ -15,7 +18,6 @@ const {
   loadBootstrap,
   showToast,
   translateApiError,
-  stateClass,
   stateLabel,
   infraServiceState,
   phpServiceState,
@@ -68,6 +70,14 @@ const state = computed(() => {
 
 const backLabel = computed(() => t('services.back_to_list'))
 
+function stateSeverity(value) {
+  if (value === 'running') return 'success'
+  if (value === 'stopped') return 'secondary'
+  if (value === 'error') return 'danger'
+  if (value === 'busy') return 'warn'
+  return 'contrast'
+}
+
 function isAllowed() {
   if (isPhp.value) {
     if (Object.keys(targets.value).length > 0) {
@@ -116,8 +126,8 @@ async function loadLogs({ quiet = false } = {}) {
   }
 }
 
-function onFollowChange(event) {
-  followLogs.value = !!event.target.checked
+function onFollowChange(value) {
+  followLogs.value = !!value
   stopFollow()
   if (!followLogs.value) return
   followTimer = setInterval(() => {
@@ -164,54 +174,60 @@ onUnmounted(() => {
   <section class="panel service-logs-page" data-tour="service-logs-panel">
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
-        <button
+        <Button
           type="button"
           class="icon-back"
+          icon="pi pi-arrow-left"
+          severity="secondary"
+          text
+          rounded
           :aria-label="backLabel"
           :title="backLabel"
           @click="goBack"
-        >
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-            <path
-              d="M12.5 4.5 7 10l5.5 5.5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
+        />
         <div>
           <h2>{{ title }}</h2>
-          <p>
+          <p class="service-logs-meta">
             <code>{{ container || service || composeName }}</code>
-            ·
-            <span class="state-badge" :class="stateClass(state)">{{ stateLabel(state) }}</span>
+            <Tag :value="stateLabel(state)" :severity="stateSeverity(state)" rounded />
+            <span v-if="logs?.updated_at" class="service-logs-updated">
+              {{ t('services.logs_updated', { at: logs.updated_at }) }}
+            </span>
           </p>
         </div>
       </div>
-      <div class="controller-actions">
-        <label class="follow-toggle">
-          <input type="checkbox" :checked="followLogs" @change="onFollowChange" />
+      <div class="panel-heading-actions">
+        <label class="follow-toggle" for="service-follow-logs">
+          <ToggleSwitch
+            :model-value="followLogs"
+            input-id="service-follow-logs"
+            @update:model-value="onFollowChange"
+          />
           <span>{{ t('services.follow_logs') }}</span>
         </label>
-        <button type="button" :disabled="logsLoading" @click="loadLogs()">
-          {{ t('services.refresh_logs') }}
-        </button>
+        <Button
+          type="button"
+          size="small"
+          :label="t('services.refresh_logs')"
+          :loading="logsLoading"
+          :disabled="logsLoading"
+          @click="loadLogs()"
+        />
       </div>
     </div>
 
-    <div class="panel-body supervisor-logs">
-      <p v-if="logs?.updated_at" class="create-hint">
-        {{ t('services.logs_updated', { at: logs.updated_at }) }}
-      </p>
-      <article class="nginx-log-card">
-        <pre v-if="logsLoading && !logs">{{ t('loading') }}</pre>
-        <pre v-else ref="logPre">{{
-          logs?.available ? logs.content || t('services.logs_empty') : t('services.logs_unavailable')
-        }}</pre>
-      </article>
+    <div class="panel-body service-logs-body">
+      <pre
+        v-if="logsLoading && !logs"
+        class="service-logs-pre"
+      >{{ t('loading') }}</pre>
+      <pre
+        v-else
+        ref="logPre"
+        class="service-logs-pre"
+      >{{
+        logs?.available ? logs.content || t('services.logs_empty') : t('services.logs_unavailable')
+      }}</pre>
     </div>
   </section>
 </template>
