@@ -10,6 +10,7 @@ use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
+use Manager\Support\JsonFile;
 
 final class SupervisorRuntime
 {
@@ -64,15 +65,13 @@ final class SupervisorRuntime
                 'updated_at' => '',
             ];
             $statusFile = $this->basePath . '/status/' . $service . '.json';
-            if (is_file($statusFile) && is_readable($statusFile)) {
-                $decoded = json_decode((string) file_get_contents($statusFile), true);
-                if (
-                    is_array($decoded)
-                    && ($decoded['service'] ?? null) === $service
-                    && in_array(($decoded['state'] ?? null), $allowedStates, true)
-                ) {
-                    $status = array_merge($status, array_intersect_key($decoded, $status));
-                }
+            $decoded = JsonFile::readObject($statusFile);
+            if (
+                is_array($decoded)
+                && ($decoded['service'] ?? null) === $service
+                && in_array(($decoded['state'] ?? null), $allowedStates, true)
+            ) {
+                $status = array_merge($status, array_intersect_key($decoded, $status));
             }
             if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';

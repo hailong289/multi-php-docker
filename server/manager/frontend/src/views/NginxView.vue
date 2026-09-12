@@ -14,6 +14,7 @@ import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
+import PinButton from '../components/PinButton.vue'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
@@ -427,6 +428,7 @@ onUnmounted(() => {
                       :disabled="!enabled('reload')"
                       @click="run('reload', '/api/nginx/reload')"
                     />
+                    <PinButton kind="nginx" id="nginx" />
                   </div>
                 </div>
 
