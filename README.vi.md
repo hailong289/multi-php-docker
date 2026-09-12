@@ -851,12 +851,12 @@ Khi phát hiện lỗi hoặc hành vi sai, hãy tạo GitHub Issue thay vì ch�
 
 ### Cách tạo nhánh để sửa lỗi hoặc thêm tính năng
 
-Không commit trực tiếp lên `main` / `master`. Tạo nhánh từ nhánh mặc định mới nhất, rồi mở pull request.
+Không commit trực tiếp lên `master`. Tạo nhánh từ `master` mới nhất, rồi mở pull request.
 
 ```bash
-# Cập nhật nhánh mặc định
-git checkout main   # hoặc: git checkout master
-git pull origin main
+# Cập nhật master
+git checkout master
+git pull origin master
 
 # Tạo và chuyển sang nhánh mới
 git checkout -b fix/mo-ta-ngan
@@ -882,7 +882,7 @@ git commit -m "Mô tả lý do thay đổi"
 git push -u origin HEAD
 ```
 
-Trên GitHub, tạo **Pull request** vào `main` / `master` và gắn Issue liên quan (ví dụ `Fixes #123`).
+Trên GitHub, tạo **Pull request** vào `master` và gắn Issue liên quan (ví dụ `Fixes #123`).
 
 ## Tác giả
 

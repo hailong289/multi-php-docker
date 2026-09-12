@@ -851,12 +851,12 @@ If something breaks or behaves incorrectly, open a GitHub Issue instead of only 
 
 ### Create a branch for a fix or feature
 
-Do not commit fixes directly on `main` / `master`. Create a branch from the latest default branch, then open a pull request.
+Do not commit fixes directly on `master`. Create a branch from the latest `master`, then open a pull request.
 
 ```bash
-# Update the default branch
-git checkout main   # or: git checkout master
-git pull origin main
+# Update master
+git checkout master
+git pull origin master
 
 # Create and switch to a new branch
 git checkout -b fix/short-description
@@ -882,7 +882,7 @@ git commit -m "Describe why this change exists"
 git push -u origin HEAD
 ```
 
-On GitHub, open a **Pull request** into `main` / `master` and link the related Issue (for example `Fixes #123`).
+On GitHub, open a **Pull request** into `master` and link the related Issue (for example `Fixes #123`).
 
 ## Author
 
