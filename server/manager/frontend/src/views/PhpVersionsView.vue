@@ -3,8 +3,6 @@ import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Column from 'primevue/column'
-import DataTable from 'primevue/datatable'
 import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
 import PinButton from '../components/PinButton.vue'
@@ -84,59 +82,86 @@ onMounted(() => {
       </div>
     </div>
 
-    <DataTable
-      v-if="loading"
-      :value="[{}, {}, {}, {}]"
-      :loading="true"
-    >
-      <Column :header="t('php_controller.version')" />
-      <Column :header="t('php_controller.container')" />
-      <Column :header="t('php_controller.profile')" />
-      <Column :header="t('php_controller.state')" />
-      <Column :header="t('php_controller.actions')" />
-    </DataTable>
-    <div v-else data-tour="php-table">
-      <DataTable :value="phpRows" data-key="service" striped-rows>
-        <Column :header="t('php_controller.version')">
-          <template #body="{ data: row }">
-            {{ row.target.label }}
-          </template>
-        </Column>
-        <Column :header="t('php_controller.container')">
-          <template #body="{ data: row }">
-            <code>{{ row.target.container }}</code>
-          </template>
-        </Column>
-        <Column :header="t('php_controller.profile')">
-          <template #body="{ data: row }">
-            <code>{{ row.target.profile || t('php_controller.default_profile') }}</code>
-          </template>
-        </Column>
-        <Column :header="t('php_controller.state')">
-          <template #body="{ data: row }">
+    <div class="panel-body">
+      <div
+        v-if="loading"
+        class="resource-card-grid"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <div
+          v-for="n in 6"
+          :key="'php-skel-' + n"
+          class="resource-card resource-card-skeleton"
+        >
+          <div class="resource-card-head">
+            <span class="skeleton-line skeleton-w2"></span>
+            <span class="skeleton-line skeleton-tag"></span>
+          </div>
+          <div class="resource-card-meta">
+            <span class="skeleton-line skeleton-w1"></span>
+            <span class="skeleton-line skeleton-w0"></span>
+          </div>
+          <div class="resource-card-footer">
+            <span class="skeleton-line skeleton-w0"></span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else-if="phpRows.length === 0"
+        class="empty"
+        data-tour="php-table"
+      >
+        {{ t('php_controller.subtitle') }}
+      </div>
+
+      <div v-else class="resource-card-grid" data-tour="php-table">
+        <article
+          v-for="row in phpRows"
+          :key="row.service"
+          class="resource-card"
+          :data-state="phpServiceState(row.service)"
+        >
+          <div class="resource-card-head">
+            <div class="resource-card-title">
+              <h3 :title="row.target.label">{{ row.target.label }}</h3>
+            </div>
             <Tag
               :value="stateLabel(phpServiceState(row.service))"
               :severity="stateSeverity(phpServiceState(row.service))"
               rounded
             />
-            <div v-if="showCreateHint(row.service, row.target)" class="create-hint">
-              {{ t('php_controller.create_hint') }}
+          </div>
+
+          <dl class="resource-card-meta">
+            <div>
+              <dt>{{ t('php_controller.container') }}</dt>
+              <dd><code>{{ row.target.container }}</code></dd>
             </div>
-          </template>
-        </Column>
-        <Column
-          :header="t('php_controller.actions')"
-          header-style="width: 1%; white-space: nowrap"
-          style="width: 1%; white-space: nowrap; vertical-align: middle"
-        >
-          <template #body="{ data: row }">
+            <div>
+              <dt>{{ t('php_controller.profile') }}</dt>
+              <dd>
+                <code>{{ row.target.profile || t('php_controller.default_profile') }}</code>
+              </dd>
+            </div>
+          </dl>
+
+          <p
+            v-if="showCreateHint(row.service, row.target)"
+            class="create-hint"
+          >
+            {{ t('php_controller.create_hint') }}
+          </p>
+
+          <div class="resource-card-footer">
             <div class="row-actions">
               <PinButton kind="php" :id="row.service" />
               <ActionMenu :items="phpMenuItems(row.service)" />
             </div>
-          </template>
-        </Column>
-      </DataTable>
+          </div>
+        </article>
+      </div>
     </div>
   </section>
 </template>
