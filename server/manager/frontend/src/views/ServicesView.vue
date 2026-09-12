@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -8,6 +8,7 @@ import DataTable from 'primevue/datatable'
 import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
 import PinButton from '../components/PinButton.vue'
+import ServiceConnectionDialog from '../components/ServiceConnectionDialog.vue'
 import { useManager } from '../composables/useManager'
 import { usePinnedContainers } from '../composables/usePinnedContainers'
 import {
@@ -31,6 +32,10 @@ const {
 } = mgr
 const { isPinned, togglePin } = usePinnedContainers()
 
+const connectionOpen = ref(false)
+const connectionService = ref('')
+const connectionLabel = ref('')
+
 const targets = computed(() => data.infra_services?.targets || {})
 
 function stateSeverity(state) {
@@ -41,7 +46,19 @@ function stateSeverity(state) {
   return 'contrast'
 }
 
-const menuCtx = computed(() => ({ t, router, mgr }))
+function openConnectionDetails(service) {
+  const target = targets.value[service]
+  connectionService.value = service
+  connectionLabel.value = target?.label || service
+  connectionOpen.value = true
+}
+
+const menuCtx = computed(() => ({
+  t,
+  router,
+  mgr,
+  onDetails: openConnectionDetails,
+}))
 
 function pinKindId(row) {
   if (row.kind === 'compose') return { kind: 'compose', id: row.item.name }
@@ -195,5 +212,11 @@ onMounted(() => {
         </Column>
       </DataTable>
     </div>
+
+    <ServiceConnectionDialog
+      v-model:visible="connectionOpen"
+      :service="connectionService"
+      :label="connectionLabel"
+    />
   </section>
 </template>

@@ -3008,6 +3008,75 @@ select:focus:not([class*='p-']) {
   min-height: 2.1rem;
 }
 
+.service-conn-intro {
+  margin: 0 0 1rem;
+  color: var(--muted, #64748b);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.service-conn-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.service-conn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border, rgba(15, 23, 42, 0.1));
+  border-radius: 8px;
+  background: var(--surface-ground, rgba(15, 23, 42, 0.03));
+}
+
+.service-conn-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.service-conn-label {
+  font-size: 0.78rem;
+  color: var(--muted, #64748b);
+}
+
+.service-conn-value {
+  font-size: 0.92rem;
+  word-break: break-all;
+}
+
+.service-conn-note {
+  margin: 0.85rem 0 0;
+}
+
+.service-conn-env {
+  margin-top: 1.1rem;
+}
+
+.service-conn-env-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.service-conn-env-block {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(15, 23, 42, 0.1));
+  background: var(--surface-ground, rgba(15, 23, 42, 0.04));
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
 @media (max-width: 720px) {
   .home-pinned-row {
     grid-template-columns: auto minmax(0, 1fr);

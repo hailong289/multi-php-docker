@@ -1,3 +1,5 @@
+import { hasInfraConnectionDetails } from './infraConnectionDetails'
+
 export function buildPinMenuItem(kind, id, { t, pinned, toggle }) {
   return {
     id: 'pin',
@@ -6,7 +8,7 @@ export function buildPinMenuItem(kind, id, { t, pinned, toggle }) {
   }
 }
 
-export function buildInfraMenuItems(service, { t, router, mgr }) {
+export function buildInfraMenuItems(service, { t, router, mgr, onDetails }) {
   const {
     infraActionEnabled,
     infraAction,
@@ -48,6 +50,12 @@ export function buildInfraMenuItems(service, { t, router, mgr }) {
       label: t('services.view_logs'),
       disabled: infraServiceState(service) === 'not_created',
       run: () => router.push({ name: 'service-logs', params: { service } }),
+    },
+    {
+      id: 'details',
+      label: t('services.connection_details'),
+      disabled: !hasInfraConnectionDetails(service) || typeof onDetails !== 'function',
+      run: () => onDetails?.(service),
     },
     {
       id: 'delete',

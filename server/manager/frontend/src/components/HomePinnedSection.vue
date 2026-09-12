@@ -6,6 +6,7 @@ import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import ActionMenu from './ActionMenu.vue'
 import PinButton from './PinButton.vue'
+import ServiceConnectionDialog from './ServiceConnectionDialog.vue'
 import { apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { usePinnedContainers } from '../composables/usePinnedContainers'
@@ -33,8 +34,23 @@ const { pins, movePin, reorderPins } = usePinnedContainers()
 
 const nginxPending = ref('')
 const dragKey = ref('')
+const connectionOpen = ref(false)
+const connectionService = ref('')
+const connectionLabel = ref('')
 
-const menuCtx = computed(() => ({ t, router, mgr }))
+function openConnectionDetails(service) {
+  const target = data.infra_services?.targets?.[service]
+  connectionService.value = service
+  connectionLabel.value = target?.label || service
+  connectionOpen.value = true
+}
+
+const menuCtx = computed(() => ({
+  t,
+  router,
+  mgr,
+  onDetails: openConnectionDetails,
+}))
 
 function stateSeverity(state) {
   if (state === 'running') return 'success'
@@ -258,5 +274,11 @@ function onDrop(toIndex) {
         </li>
       </ul>
     </div>
+
+    <ServiceConnectionDialog
+      v-model:visible="connectionOpen"
+      :service="connectionService"
+      :label="connectionLabel"
+    />
   </section>
 </template>
