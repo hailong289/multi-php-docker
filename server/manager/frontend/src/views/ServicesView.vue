@@ -3,8 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
-import Column from 'primevue/column'
-import DataTable from 'primevue/datatable'
 import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
 import PinButton from '../components/PinButton.vue'
@@ -16,6 +14,7 @@ import {
   buildInfraMenuItems,
   buildPinMenuItem,
 } from '../lib/containerMenus'
+import { getInfraWebUrl, openInfraWeb } from '../lib/infraConnectionDetails'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -122,6 +121,15 @@ function showCreateHint(row) {
   return showComposeCreateHint(row.item)
 }
 
+function rowWebUrl(row) {
+  if (row.kind !== 'infra') return null
+  return getInfraWebUrl(row.service)
+}
+
+function canOpenWeb(row) {
+  return !!rowWebUrl(row) && rowState(row) === 'running'
+}
+
 onMounted(() => {
   loadBootstrap()
 })
@@ -146,61 +154,105 @@ onMounted(() => {
       </div>
     </div>
 
-    <DataTable
-      v-if="loading"
-      :value="[{}, {}, {}, {}]"
-      :loading="true"
-    >
-      <Column :header="t('services.service')" />
-      <Column :header="t('services.container')" />
-      <Column :header="t('services.profile')" />
-      <Column :header="t('services.state')" />
-      <Column :header="t('services.actions')" />
-    </DataTable>
-    <div v-else data-tour="services-table">
-      <DataTable :value="serviceRows" data-key="key" striped-rows>
-        <Column :header="t('services.service')">
-          <template #body="{ data: row }">
-            <div>{{ row.label }}</div>
-            <div v-if="row.kind === 'infra'" class="create-hint">
-              {{ t('services.ports') }}: {{ row.ports }}
+    <div class="panel-body">
+      <div
+        v-if="loading"
+        class="resource-card-grid"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <div
+          v-for="n in 6"
+          :key="'svc-skel-' + n"
+          class="resource-card resource-card-skeleton"
+        >
+          <div class="resource-card-head">
+            <span class="skeleton-line skeleton-w2"></span>
+            <span class="skeleton-line skeleton-tag"></span>
+          </div>
+          <div class="resource-card-meta">
+            <span class="skeleton-line skeleton-w1"></span>
+            <span class="skeleton-line skeleton-w0"></span>
+          </div>
+          <div class="resource-card-footer">
+            <span class="skeleton-line skeleton-w0"></span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else-if="serviceRows.length === 0"
+        class="empty"
+        data-tour="services-table"
+      >
+        {{ t('services.subtitle') }}
+      </div>
+
+      <div v-else class="resource-card-grid" data-tour="services-table">
+        <article
+          v-for="row in serviceRows"
+          :key="row.key"
+          class="resource-card"
+          :data-state="rowState(row)"
+        >
+          <div class="resource-card-head">
+            <div class="resource-card-title">
+              <h3 :title="row.label">{{ row.label }}</h3>
+              <Tag
+                v-if="row.kind === 'compose'"
+                :value="t('pin.kind_compose')"
+                severity="secondary"
+                rounded
+              />
             </div>
-            <div v-else class="create-hint">
-              <code>{{ row.ports }}</code>
-              <span v-if="!row.item.included" class="status-line warn">
-                · {{ t('services.compose_not_included') }}
-              </span>
-            </div>
-          </template>
-        </Column>
-        <Column :header="t('services.container')">
-          <template #body="{ data: row }">
-            <code>{{ row.container }}</code>
-          </template>
-        </Column>
-        <Column :header="t('services.profile')">
-          <template #body="{ data: row }">
-            <code>{{ row.profile }}</code>
-          </template>
-        </Column>
-        <Column :header="t('services.state')">
-          <template #body="{ data: row }">
             <Tag
               :value="stateLabel(rowState(row))"
               :severity="stateSeverity(rowState(row))"
               rounded
             />
-            <div v-if="showCreateHint(row)" class="create-hint">
-              {{ t('services.create_hint') }}
+          </div>
+
+          <dl class="resource-card-meta">
+            <div>
+              <dt>{{ t('services.container') }}</dt>
+              <dd><code>{{ row.container }}</code></dd>
             </div>
-          </template>
-        </Column>
-        <Column
-          :header="t('services.actions')"
-          header-style="width: 1%; white-space: nowrap"
-          style="width: 1%; white-space: nowrap; vertical-align: middle"
-        >
-          <template #body="{ data: row }">
+            <div>
+              <dt>{{ t('services.profile') }}</dt>
+              <dd><code>{{ row.profile }}</code></dd>
+            </div>
+            <div v-if="row.kind === 'infra'">
+              <dt>{{ t('services.ports') }}</dt>
+              <dd>{{ row.ports }}</dd>
+            </div>
+            <div v-else>
+              <dt>{{ t('pin.kind_compose') }}</dt>
+              <dd>
+                <code>{{ row.ports }}</code>
+                <span v-if="!row.item.included" class="status-line warn">
+                  · {{ t('services.compose_not_included') }}
+                </span>
+              </dd>
+            </div>
+          </dl>
+
+          <p v-if="showCreateHint(row)" class="create-hint">
+            {{ t('services.create_hint') }}
+          </p>
+
+          <div class="resource-card-footer">
+            <Button
+              v-if="rowWebUrl(row)"
+              type="button"
+              size="small"
+              outlined
+              icon="pi pi-external-link"
+              :label="t('services.open_web')"
+              :disabled="!canOpenWeb(row)"
+              :title="rowWebUrl(row)"
+              data-tour="service-open-web"
+              @click="openInfraWeb(row.service)"
+            />
             <div class="row-actions">
               <PinButton
                 :kind="pinKindId(row).kind"
@@ -208,9 +260,9 @@ onMounted(() => {
               />
               <ActionMenu :items="rowMenuItems(row)" />
             </div>
-          </template>
-        </Column>
-      </DataTable>
+          </div>
+        </article>
+      </div>
     </div>
 
     <ServiceConnectionDialog
