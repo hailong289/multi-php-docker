@@ -2147,6 +2147,14 @@ select:focus:not([class*='p-']) {
   padding-top: 8px;
 }
 
+.php-run-page .panel-heading p {
+  margin: 0.35rem 0 0;
+  color: var(--p-text-muted-color, var(--muted));
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .php-run-layout {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -2168,6 +2176,10 @@ select:focus:not([class*='p-']) {
   position: sticky;
   top: 0;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 12px 14px 10px;
   color: var(--muted);
   font-size: 12px;
@@ -2178,6 +2190,21 @@ select:focus:not([class*='p-']) {
   border-bottom: 1px solid var(--line);
 }
 
+.php-run-sessions-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .php-run-sessions ul {
   list-style: none;
   margin: 0;
@@ -2186,10 +2213,10 @@ select:focus:not([class*='p-']) {
 
 .php-run-sessions li {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 12px 10px 12px 14px;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
 }
@@ -2204,6 +2231,7 @@ select:focus:not([class*='p-']) {
 
 .php-run-session-copy {
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .php-run-session-copy strong {
@@ -2223,28 +2251,41 @@ select:focus:not([class*='p-']) {
 
 .php-run-session-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.55;
 }
 
-.php-run-session-actions button {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 32px;
-  padding: 5px 10px;
-  font-size: 12px;
+.php-run-sessions li:hover .php-run-session-actions,
+.php-run-sessions li.is-selected .php-run-session-actions {
+  opacity: 1;
+}
+
+.php-run-session-actions .p-button {
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0;
 }
 
 .php-run-editor-pane {
   min-width: 0;
 }
 
-.php-run-editor-pane .php-ext-warn {
-  margin-top: 0;
+.php-run-editor-pane .php-run-need-running {
+  margin: 0 0 12px;
 }
 
 .php-run-editor-pane .nginx-template-editor-head {
   margin-bottom: 12px;
+}
+
+.php-run-editor-pane .nginx-template-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(100%, 36rem);
 }
 
 @media (max-width: 900px) {
@@ -2255,7 +2296,7 @@ select:focus:not([class*='p-']) {
   .php-run-sessions {
     border-right: none;
     border-bottom: 1px solid var(--line);
-    max-height: 280px;
+    max-height: 220px;
   }
 }
 
