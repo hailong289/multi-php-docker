@@ -111,6 +111,30 @@ const DETAILS = {
     ].join('\n'),
     notes: ['services.conn.mailpit_note'],
   },
+  minio: {
+    fields: [
+      { labelKey: 'services.conn.host_docker', value: 'minio' },
+      { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
+      { labelKey: 'services.conn.port_api', value: '9000' },
+      { labelKey: 'services.conn.port_console', value: '9001' },
+      { labelKey: 'services.conn.user', value: 'minioadmin' },
+      { labelKey: 'services.conn.password', value: 'minioadmin' },
+      {
+        labelKey: 'services.conn.web_url',
+        value: 'http://localhost:9001',
+        web: true,
+      },
+    ],
+    env: [
+      'AWS_ACCESS_KEY_ID=minioadmin',
+      'AWS_SECRET_ACCESS_KEY=minioadmin',
+      'AWS_DEFAULT_REGION=us-east-1',
+      'AWS_BUCKET=local',
+      'AWS_ENDPOINT=http://minio:9000',
+      'AWS_USE_PATH_STYLE_ENDPOINT=true',
+    ].join('\n'),
+    notes: ['services.conn.minio_note'],
+  },
 }
 
 /** @returns {ConnectionDetails | null} */

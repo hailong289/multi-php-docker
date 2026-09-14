@@ -53,6 +53,13 @@ final class ComposeInclude
                 $content,
                 1,
             );
+        } elseif (preg_match('/^  - path: compose\/minio\.yml\s*$/m', $content)) {
+            $content = preg_replace(
+                '/^  - path: compose\/minio\.yml\s*$/m',
+                rtrim($entry) . "\n  - path: compose/minio.yml",
+                $content,
+                1,
+            );
         } elseif (preg_match('/^  - path: compose\/mailpit\.yml\s*$/m', $content)) {
             $content = preg_replace(
                 '/^  - path: compose\/mailpit\.yml\s*$/m',

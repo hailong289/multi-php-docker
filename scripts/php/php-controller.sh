@@ -30,6 +30,7 @@ container_for_service() {
         rabbitmq) printf '%s' 'rabbitmq_container' ;;
         kafka) printf '%s' 'kafka_container' ;;
         mailpit) printf '%s' 'mailpit_container' ;;
+        minio) printf '%s' 'minio_container' ;;
         supervisor) printf '%s' 'supervisor_container' ;;
         supervisor-*)
             # supervisor-8.1 → supervisor81_container
@@ -48,7 +49,7 @@ container_for_service() {
 profile_for_service() {
     case "$1" in
         php-8.5) return 1 ;;
-        mysql|postgres|redis|rabbitmq|kafka|mailpit|supervisor)
+        mysql|postgres|redis|rabbitmq|kafka|mailpit|minio|supervisor)
             printf '%s' "$1"
             ;;
         supervisor-*)
@@ -63,7 +64,7 @@ profile_for_service() {
 
 is_infra_service() {
     case "$1" in
-        mysql|postgres|redis|rabbitmq|kafka|mailpit) return 0 ;;
+        mysql|postgres|redis|rabbitmq|kafka|mailpit|minio) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -86,7 +87,7 @@ list_php_services() {
 }
 
 list_infra_services() {
-    printf '%s\n' mysql postgres redis rabbitmq kafka mailpit
+    printf '%s\n' mysql postgres redis rabbitmq kafka mailpit minio
 }
 
 list_supervisor_services() {
@@ -692,7 +693,7 @@ parse_request_fields() {
     printf '%s' "$request_id" | grep -Eq '^[0-9a-f]{32}$' || return 1
     case "$service" in
         nginx) ;;
-        mysql|postgres|redis|rabbitmq|kafka|mailpit) ;;
+        mysql|postgres|redis|rabbitmq|kafka|mailpit|minio) ;;
         supervisor) ;;
         supervisor-*)
             printf '%s' "$service" | grep -Eq '^supervisor-[0-9]+(\.[0-9]+)+(-alpine|-trixie)?$' || return 1

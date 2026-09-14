@@ -150,7 +150,7 @@ assert_true(
 @rmdir($staleDir);
 
 $infraTargets = InfraRuntime::targets();
-assert_true(isset($infraTargets['mysql'], $infraTargets['postgres'], $infraTargets['redis'], $infraTargets['rabbitmq'], $infraTargets['kafka'], $infraTargets['mailpit']), 'infra targets');
+assert_true(isset($infraTargets['mysql'], $infraTargets['postgres'], $infraTargets['redis'], $infraTargets['rabbitmq'], $infraTargets['kafka'], $infraTargets['mailpit'], $infraTargets['minio']), 'infra targets');
 assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
 assert_true($infraTargets['postgres']['profile'] === 'postgres', 'postgres profile');
 assert_true($infraTargets['postgres']['container'] === 'postgres_container', 'postgres container');
@@ -164,6 +164,9 @@ assert_true($infraTargets['kafka']['compose_file'] === 'compose/kafka.yml', 'kaf
 assert_true($infraTargets['mailpit']['profile'] === 'mailpit', 'mailpit profile');
 assert_true($infraTargets['mailpit']['container'] === 'mailpit_container', 'mailpit container');
 assert_true($infraTargets['mailpit']['compose_file'] === 'compose/mailpit.yml', 'mailpit compose file');
+assert_true($infraTargets['minio']['profile'] === 'minio', 'minio profile');
+assert_true($infraTargets['minio']['container'] === 'minio_container', 'minio container');
+assert_true($infraTargets['minio']['compose_file'] === 'compose/minio.yml', 'minio compose file');
 
 $runningDaemon = new PhpControllerDaemon(static fn (): string => 'running');
 $stoppedDaemon = new PhpControllerDaemon(static fn (): string => 'stopped');
@@ -212,6 +215,7 @@ assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
 assert_true($compose->isCoreFile('postgres.yml'), 'postgres is core');
 assert_true($compose->isCoreFile('kafka.yml'), 'kafka is core');
 assert_true($compose->isCoreFile('mailpit.yml'), 'mailpit is core');
+assert_true($compose->isCoreFile('minio.yml'), 'minio is core');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {
     $compose->deleteFile('mysql.yml');
@@ -287,7 +291,14 @@ services:
     image: minio/minio:latest
     container_name: minio_container
 YAML;
-$customCtx = (new InfraCompose($composeProj))->actionContextForFile('minio.yml', $minioYaml);
+$customYaml = <<<'YAML'
+services:
+  meilisearch:
+    profiles: ["meilisearch"]
+    image: getmeili/meilisearch:latest
+    container_name: meilisearch_container
+YAML;
+$customCtx = (new InfraCompose($composeProj))->actionContextForFile('meilisearch.yml', $customYaml);
 assert_true(($customCtx['runtime'] ?? '') === 'compose', 'custom compose runtime');
 assert_true(($customCtx['has_build'] ?? true) === false, 'custom compose no build');
 $kafkaInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('kafka.yml');
@@ -298,7 +309,11 @@ $mailpitInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('mailp
 assert_true(($mailpitInfraCtx['runtime'] ?? '') === 'infra', 'mailpit compose runtime');
 assert_true(($mailpitInfraCtx['service'] ?? '') === 'mailpit', 'mailpit compose service');
 assert_true(($mailpitInfraCtx['pull_recreate'] ?? false) === true, 'mailpit compose pull recreate');
-file_put_contents($composeProj . '/compose/minio.yml', $minioYaml);
+$minioInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('minio.yml', $minioYaml);
+assert_true(($minioInfraCtx['runtime'] ?? '') === 'infra', 'minio compose runtime');
+assert_true(($minioInfraCtx['service'] ?? '') === 'minio', 'minio compose service');
+assert_true(($minioInfraCtx['pull_recreate'] ?? false) === true, 'minio compose pull recreate');
+file_put_contents($composeProj . '/compose/meilisearch.yml', $customYaml);
 $composeProjDocker = sys_get_temp_dir() . '/compose-include-' . bin2hex(random_bytes(4));
 mkdir($composeProjDocker . '/compose', 0775, true);
 file_put_contents(
@@ -306,20 +321,20 @@ file_put_contents(
     "include:\n  - path: compose/redis.yml\n    project_directory: .\n\nservices: {}\n",
 );
 $composeInclude = new ComposeInclude($composeProjDocker);
-$composeInclude->ensureIncluded('minio.yml');
-assert_true($composeInclude->isIncluded('minio.yml'), 'minio included in docker-compose');
+$composeInclude->ensureIncluded('meilisearch.yml');
+assert_true($composeInclude->isIncluded('meilisearch.yml'), 'meilisearch included in docker-compose');
 $composeFileRuntime = new ComposeFileRuntime($infraTmp, $composeProj, $runningDaemon);
-$composeReq = $composeFileRuntime->request('minio.yml', 'create');
+$composeReq = $composeFileRuntime->request('meilisearch.yml', 'create');
 assert_true(strlen($composeReq) === 32, 'compose file create request id');
-assert_true($composeFileRuntime->hasBlockingRequests('minio.yml'), 'compose file blocking create');
+assert_true($composeFileRuntime->hasBlockingRequests('meilisearch.yml'), 'compose file blocking create');
 
 $logDir = $infraTmp . '/status';
-file_put_contents($logDir . '/compose-file__minio.yml.last-create.log', "create ok\n");
+file_put_contents($logDir . '/compose-file__meilisearch.yml.last-create.log', "create ok\n");
 file_put_contents(
-    $logDir . '/compose-file__minio.yml.json',
-    '{"compose_file":"minio.yml","queue_key":"compose-file__minio.yml","state":"error","message_key":"php_controller.action_failed","request_id":"a","updated_at":"2026-08-28T10:00:00Z"}' . "\n",
+    $logDir . '/compose-file__meilisearch.yml.json',
+    '{"compose_file":"meilisearch.yml","queue_key":"compose-file__meilisearch.yml","state":"error","message_key":"php_controller.action_failed","request_id":"a","updated_at":"2026-08-28T10:00:00Z"}' . "\n",
 );
-$actionLogs = $composeFileRuntime->actionLogs('minio.yml');
+$actionLogs = $composeFileRuntime->actionLogs('meilisearch.yml');
 assert_true(($actionLogs['state'] ?? '') === 'error', 'compose action logs state');
 assert_true(str_contains((string) ($actionLogs['content'] ?? ''), 'create ok'), 'compose action logs content');
 $pullId = (new InfraRuntime($infraTmp, $runningDaemon))->request('redis', 'pull-recreate');

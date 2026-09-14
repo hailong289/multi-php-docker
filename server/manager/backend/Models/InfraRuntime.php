@@ -52,6 +52,12 @@ final class InfraRuntime
             'profile' => 'mailpit',
             'ports' => '1025, 8025',
         ],
+        'minio' => [
+            'label' => 'MinIO',
+            'container' => 'minio_container',
+            'profile' => 'minio',
+            'ports' => '9000, 9001',
+        ],
     ];
 
     private readonly string $basePath;

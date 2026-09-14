@@ -25,6 +25,8 @@ include:
     project_directory: .
   - path: compose/mailpit.yml
     project_directory: .
+  - path: compose/minio.yml
+    project_directory: .
 
 services:
   env-init:

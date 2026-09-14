@@ -210,6 +210,9 @@ services:
       mailpit:
         condition: service_started
         required: false
+      minio:
+        condition: service_started
+        required: false
     networks:
       - app-network
 
