@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import { getInfraConnectionDetails } from '../lib/infraConnectionDetails'
+import { getInfraConnectionDetails, getInfraWebUrl, openInfraWeb } from '../lib/infraConnectionDetails'
 import { addToast } from '../lib/toast'
 
 const props = defineProps({
@@ -18,6 +18,7 @@ const { t } = useI18n()
 const copiedKey = ref('')
 
 const details = computed(() => getInfraConnectionDetails(props.service))
+const webUrl = computed(() => getInfraWebUrl(props.service))
 
 const title = computed(() =>
   t('services.connection_title', { service: props.label || props.service }),
@@ -99,6 +100,14 @@ async function copyText(text, key) {
     </div>
 
     <template #footer>
+      <Button
+        v-if="webUrl"
+        type="button"
+        outlined
+        icon="pi pi-external-link"
+        :label="t('services.open_web')"
+        @click="openInfraWeb(service)"
+      />
       <Button type="button" :label="t('action.ok')" @click="close" />
     </template>
   </Dialog>

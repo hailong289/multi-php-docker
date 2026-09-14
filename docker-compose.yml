@@ -99,12 +99,6 @@ services:
 
   manager:
     image: long301001/multi-php-docker:manager
-    build:
-      context: .
-      dockerfile: ./docker_files/manager.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: manager_container
     ports:
       - "127.0.0.1:8080:8080"

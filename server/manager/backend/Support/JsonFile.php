@@ -6,7 +6,7 @@ namespace Manager\Support;
 
 /**
  * Read JSON object files without emitting warnings on missing/racy paths.
- * Status files under runtime/*/status/ can disappear between is_file() and read.
+ * Status files under runtime/.../status/ can vanish between is_file() and read.
  */
 final class JsonFile
 {

@@ -2,7 +2,7 @@
 
 /**
  * @typedef {{ labelKey: string, value: string }} ConnectionField
- * @typedef {{ fields: ConnectionField[], env: string, notes?: string[] }} ConnectionDetails
+ * @typedef {{ fields: ConnectionField[], env: string, notes?: string[], webUrl?: string }} ConnectionDetails
  */
 
 /** @type {Record<string, ConnectionDetails>} */
@@ -65,6 +65,7 @@ const DETAILS = {
       'RABBITMQ_USER=admin',
       'RABBITMQ_PASSWORD=admin',
     ].join('\n'),
+    webUrl: 'http://localhost:15672',
   },
   kafka: {
     fields: [
@@ -83,4 +84,27 @@ export function getInfraConnectionDetails(service) {
 
 export function hasInfraConnectionDetails(service) {
   return Boolean(DETAILS[service])
+}
+
+/** @returns {string | null} */
+export function getInfraWebUrl(service) {
+  const details = DETAILS[service]
+  if (!details) return null
+  if (typeof details.webUrl === 'string' && details.webUrl) return details.webUrl
+  const field = details.fields?.find(
+    (entry) =>
+      entry.labelKey === 'services.conn.mgmt_url' ||
+      /^https?:\/\//i.test(entry.value || ''),
+  )
+  return field?.value || null
+}
+
+export function hasInfraWebAccess(service) {
+  return Boolean(getInfraWebUrl(service))
+}
+
+export function openInfraWeb(service) {
+  const url = getInfraWebUrl(service)
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
