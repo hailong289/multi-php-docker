@@ -18,9 +18,10 @@ import {
   getServiceRowWebUrl,
   openInfraWeb,
 } from '../lib/infraConnectionDetails'
+import { infraServiceDescriptionKey } from '../lib/infraServiceDescriptions'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, te } = useI18n()
 const mgr = useManager()
 const {
   loading,
@@ -132,6 +133,16 @@ function canOpenWeb(row) {
   return !!rowWebUrl(row) && rowState(row) === 'running'
 }
 
+function rowDescription(row) {
+  const service = row.kind === 'infra' ? row.service : row.item?.service
+  const key = infraServiceDescriptionKey(service)
+  if (key && te(key)) return t(key)
+  if (row.kind === 'compose' && te('services.desc.compose_custom')) {
+    return t('services.desc.compose_custom')
+  }
+  return ''
+}
+
 onMounted(() => {
   loadBootstrap()
 })
@@ -213,6 +224,10 @@ onMounted(() => {
               rounded
             />
           </div>
+
+          <p v-if="rowDescription(row)" class="resource-card-desc">
+            {{ rowDescription(row) }}
+          </p>
 
           <dl class="resource-card-meta">
             <div>

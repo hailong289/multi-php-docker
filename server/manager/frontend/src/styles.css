@@ -2970,6 +2970,24 @@ select:focus:not([class*='p-']) {
   color: var(--code);
 }
 
+.resource-card-desc {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--p-text-color, var(--text)) 72%, transparent);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.service-conn-desc {
+  margin: 0 0 0.65rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--p-text-color, var(--text)) 78%, transparent);
+}
+
 .resource-card .create-hint {
   margin: 0;
   display: -webkit-box;

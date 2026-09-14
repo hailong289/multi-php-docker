@@ -376,6 +376,22 @@ export const vi = {
   'error.hosts_only_delete': 'Chỉ xóa được domain chỉ-hosts tại đây. Xóa máy chủ ở Trang chủ.',
   'services.title': 'Dịch vụ',
   'services.subtitle': 'Cài đặt container MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit và MinIO tùy chọn, rồi khởi động, dừng hoặc khởi động lại. Image được pull khi cài đặt — không build.',
+  'services.desc.mysql':
+    'Cơ sở dữ liệu quan hệ cho dữ liệu ứng dụng — user, đơn hàng, nội dung và migration.',
+  'services.desc.postgres':
+    'Cơ sở dữ liệu SQL mạnh, hỗ trợ JSON và nhiều extension hữu ích.',
+  'services.desc.redis':
+    'Bộ nhớ in-memory cho cache, session, giới hạn tần suất và pub/sub nhẹ.',
+  'services.desc.rabbitmq':
+    'Message broker cho job nền và tách producer khỏi worker.',
+  'services.desc.kafka':
+    'Event streaming cho log, sự kiện nghiệp vụ và pipeline bất đồng bộ throughput cao.',
+  'services.desc.mailpit':
+    'Bắt SMTP cục bộ để test luồng email mà không gửi mail thật.',
+  'services.desc.minio':
+    'Object storage tương thích S3 cho upload/media — không cần tài khoản AWS.',
+  'services.desc.compose_custom':
+    'Dịch vụ Compose tùy chỉnh — cài và khởi động khi project cần stack này.',
   'services.service': 'Dịch vụ',
   'services.container': 'Container',
   'services.profile': 'Profile',

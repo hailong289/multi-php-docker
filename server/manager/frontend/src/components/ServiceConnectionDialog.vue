@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import { getInfraConnectionDetails, getInfraWebUrl, openInfraWeb } from '../lib/infraConnectionDetails'
+import { infraServiceDescriptionKey } from '../lib/infraServiceDescriptions'
 import { addToast } from '../lib/toast'
 
 const props = defineProps({
@@ -14,11 +15,16 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible'])
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const copiedKey = ref('')
 
 const details = computed(() => getInfraConnectionDetails(props.service))
 const webUrl = computed(() => getInfraWebUrl(props.service))
+const serviceDescription = computed(() => {
+  const key = infraServiceDescriptionKey(props.service)
+  if (!key || !te(key)) return ''
+  return t(key)
+})
 
 const title = computed(() =>
   t('services.connection_title', { service: props.label || props.service }),
@@ -54,6 +60,7 @@ async function copyText(text, key) {
     @update:visible="(v) => { if (!v) close() }"
   >
     <div v-if="details" class="service-conn" data-tour="service-connection-dialog">
+      <p v-if="serviceDescription" class="service-conn-desc">{{ serviceDescription }}</p>
       <p class="service-conn-intro">{{ t('services.connection_intro') }}</p>
 
       <div class="service-conn-fields">

@@ -376,6 +376,22 @@ export const en = {
   'error.hosts_only_delete': 'Only hosts-only domains can be deleted here. Remove servers on Home.',
   'services.title': 'Services',
   'services.subtitle': 'Install optional MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO containers, then start, stop, or restart them. Images are pulled when installed — not built.',
+  'services.desc.mysql':
+    'Relational database for application data — users, orders, content, and migrations.',
+  'services.desc.postgres':
+    'Advanced SQL database with strong typing, JSON support, and useful extensions.',
+  'services.desc.redis':
+    'In-memory store for cache, sessions, rate limits, and lightweight pub/sub.',
+  'services.desc.rabbitmq':
+    'Message broker for background jobs and decoupling producers from workers.',
+  'services.desc.kafka':
+    'Event streaming for high-volume logs, domain events, and async pipelines.',
+  'services.desc.mailpit':
+    'Captures outbound SMTP locally so you can test email flows without real delivery.',
+  'services.desc.minio':
+    'S3-compatible object storage for uploads and media — no AWS account required.',
+  'services.desc.compose_custom':
+    'Custom Compose service — install and start when your project needs this stack.',
   'services.service': 'Service',
   'services.container': 'Container',
   'services.profile': 'Profile',
