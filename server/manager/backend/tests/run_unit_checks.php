@@ -150,7 +150,7 @@ assert_true(
 @rmdir($staleDir);
 
 $infraTargets = InfraRuntime::targets();
-assert_true(isset($infraTargets['mysql'], $infraTargets['postgres'], $infraTargets['redis'], $infraTargets['rabbitmq'], $infraTargets['kafka']), 'infra targets');
+assert_true(isset($infraTargets['mysql'], $infraTargets['postgres'], $infraTargets['redis'], $infraTargets['rabbitmq'], $infraTargets['kafka'], $infraTargets['mailpit']), 'infra targets');
 assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
 assert_true($infraTargets['postgres']['profile'] === 'postgres', 'postgres profile');
 assert_true($infraTargets['postgres']['container'] === 'postgres_container', 'postgres container');
@@ -161,6 +161,9 @@ assert_true(str_contains($infraTargets['rabbitmq']['create_command'], '--profile
 assert_true($infraTargets['kafka']['profile'] === 'kafka', 'kafka profile');
 assert_true($infraTargets['kafka']['container'] === 'kafka_container', 'kafka container');
 assert_true($infraTargets['kafka']['compose_file'] === 'compose/kafka.yml', 'kafka compose file');
+assert_true($infraTargets['mailpit']['profile'] === 'mailpit', 'mailpit profile');
+assert_true($infraTargets['mailpit']['container'] === 'mailpit_container', 'mailpit container');
+assert_true($infraTargets['mailpit']['compose_file'] === 'compose/mailpit.yml', 'mailpit compose file');
 
 $runningDaemon = new PhpControllerDaemon(static fn (): string => 'running');
 $stoppedDaemon = new PhpControllerDaemon(static fn (): string => 'stopped');
@@ -208,6 +211,7 @@ assert_true(!in_array('mysql.yml', $phpListedNames, true), 'mysql hidden from ph
 assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
 assert_true($compose->isCoreFile('postgres.yml'), 'postgres is core');
 assert_true($compose->isCoreFile('kafka.yml'), 'kafka is core');
+assert_true($compose->isCoreFile('mailpit.yml'), 'mailpit is core');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {
     $compose->deleteFile('mysql.yml');
@@ -290,6 +294,10 @@ $kafkaInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('kafka.y
 assert_true(($kafkaInfraCtx['runtime'] ?? '') === 'infra', 'kafka compose runtime');
 assert_true(($kafkaInfraCtx['service'] ?? '') === 'kafka', 'kafka compose service');
 assert_true(($kafkaInfraCtx['pull_recreate'] ?? false) === true, 'kafka compose pull recreate');
+$mailpitInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('mailpit.yml');
+assert_true(($mailpitInfraCtx['runtime'] ?? '') === 'infra', 'mailpit compose runtime');
+assert_true(($mailpitInfraCtx['service'] ?? '') === 'mailpit', 'mailpit compose service');
+assert_true(($mailpitInfraCtx['pull_recreate'] ?? false) === true, 'mailpit compose pull recreate');
 file_put_contents($composeProj . '/compose/minio.yml', $minioYaml);
 $composeProjDocker = sys_get_temp_dir() . '/compose-include-' . bin2hex(random_bytes(4));
 mkdir($composeProjDocker . '/compose', 0775, true);

@@ -8,7 +8,7 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import { apiGet } from '../api'
 import { useManager } from '../composables/useManager'
 
-const INFRA_ALLOWED = ['mysql', 'postgres', 'redis', 'rabbitmq', 'kafka']
+const INFRA_ALLOWED = ['mysql', 'postgres', 'redis', 'rabbitmq', 'kafka', 'mailpit']
 
 const route = useRoute()
 const router = useRouter()

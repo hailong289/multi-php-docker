@@ -23,6 +23,8 @@ include:
     project_directory: .
   - path: compose/kafka.yml
     project_directory: .
+  - path: compose/mailpit.yml
+    project_directory: .
 
 services:
   env-init:

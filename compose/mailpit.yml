@@ -1,0 +1,21 @@
+services:
+  mailpit:
+    image: long301001/multi-php-docker:mailpit
+    profiles: ["mailpit"]
+    build:
+      context: .
+      dockerfile: ./docker_files/mailpit.Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: mailpit_container
+    hostname: mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

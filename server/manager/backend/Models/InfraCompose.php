@@ -11,14 +11,14 @@ use Manager\Support\DockerLiveState;
 
 /**
  * List/read/write/delete *.yml|*.yaml under compose/.
- * Core service files (mysql|postgres|redis|rabbitmq|kafka).yml cannot be deleted.
+ * Core service files (mysql|postgres|redis|rabbitmq|kafka|mailpit).yml cannot be deleted.
  */
 final class InfraCompose
 {
     private const MAX_BYTES = 524288;
 
     /** @var list<string> */
-    public const CORE_FILES = ['mysql.yml', 'postgres.yml', 'redis.yml', 'rabbitmq.yml', 'kafka.yml'];
+    public const CORE_FILES = ['mysql.yml', 'postgres.yml', 'redis.yml', 'rabbitmq.yml', 'kafka.yml', 'mailpit.yml'];
 
     private readonly string $projectPath;
 
@@ -87,7 +87,7 @@ final class InfraCompose
         }
         $service = $m[1];
 
-        if (preg_match('/^(mysql|postgres|redis|rabbitmq|kafka)$/i', $service)) {
+        if (preg_match('/^(mysql|postgres|redis|rabbitmq|kafka|mailpit)$/i', $service)) {
             return $this->enrichWithComposeServices([
                 'runtime' => 'infra',
                 'service' => strtolower($service),

@@ -207,6 +207,9 @@ services:
       kafka:
         condition: service_started
         required: false
+      mailpit:
+        condition: service_started
+        required: false
     networks:
       - app-network
 

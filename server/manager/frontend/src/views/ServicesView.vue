@@ -14,7 +14,10 @@ import {
   buildInfraMenuItems,
   buildPinMenuItem,
 } from '../lib/containerMenus'
-import { getInfraWebUrl, openInfraWeb } from '../lib/infraConnectionDetails'
+import {
+  getServiceRowWebUrl,
+  openInfraWeb,
+} from '../lib/infraConnectionDetails'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -122,8 +125,7 @@ function showCreateHint(row) {
 }
 
 function rowWebUrl(row) {
-  if (row.kind !== 'infra') return null
-  return getInfraWebUrl(row.service)
+  return getServiceRowWebUrl(row)
 }
 
 function canOpenWeb(row) {
@@ -251,7 +253,7 @@ onMounted(() => {
               :disabled="!canOpenWeb(row)"
               :title="rowWebUrl(row)"
               data-tour="service-open-web"
-              @click="openInfraWeb(row.service)"
+              @click="openInfraWeb(row.kind === 'infra' ? row.service : row.item?.service)"
             />
             <div class="row-actions">
               <PinButton

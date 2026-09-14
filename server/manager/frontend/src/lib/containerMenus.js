@@ -96,6 +96,8 @@ export function buildComposeMenuItems(item, { t, router, mgr }) {
     composeFileState,
     isPending,
   } = mgr
+  const composeService = typeof item.service === 'string' ? item.service : ''
+  const webUrl = composeService ? getInfraWebUrl(composeService) : null
   return [
     {
       id: 'create',
@@ -131,6 +133,13 @@ export function buildComposeMenuItems(item, { t, router, mgr }) {
       label: t('services.view_logs'),
       disabled: composeFileState(item) === 'not_created',
       run: () => router.push({ name: 'compose-file-logs', params: { name: item.name } }),
+    },
+    {
+      id: 'open-web',
+      label: t('services.open_web'),
+      hidden: !webUrl,
+      disabled: !webUrl || composeFileState(item) !== 'running',
+      run: () => openInfraWeb(composeService),
     },
     {
       id: 'delete',
