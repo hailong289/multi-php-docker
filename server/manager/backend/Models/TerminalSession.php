@@ -281,7 +281,7 @@ final class TerminalSession
                 flush();
                 $lastPing = time();
             }
-            usleep(30000);
+            usleep(20000);
         }
     }
 
