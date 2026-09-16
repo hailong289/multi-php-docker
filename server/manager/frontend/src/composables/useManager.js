@@ -1,11 +1,20 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiGet, apiSend, setCsrfToken } from '../api'
+import { apiGet, apiRelativeUrl, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
 import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 import { addToast, toastSeverityFromType } from '../lib/toast'
 import { confirmDialog } from '../lib/confirm'
+
+const STATUS_STREAM_PATH = '/api/status/stream'
+const STATUS_STREAM_EVENTS = ['servers', 'nginx', 'hosts', 'php', 'infra', 'supervisor']
+const STATUS_FALLBACK_MS = 5000
+
+/** @type {EventSource|null} */
+let statusStreamSource = null
+let statusStreamsWanted = false
+let statusFallbackTimer = null
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
@@ -161,24 +170,118 @@ export function useManager() {
   }
 
   function applyBootstrap(payload) {
-    data.servers = payload.servers || {}
-    data.php_versions = payload.php_versions || {}
-    data.apply_command = payload.apply_command || ''
-    data.nginx_status = payload.nginx_status || null
-    data.nginx_management = payload.nginx_management || null
-    data.hosts_status = payload.hosts_status || null
-    data.hosts_extras = payload.hosts_extras || []
-    data.hosts_write_enabled = payload.hosts_write_enabled !== false
-    data.pending_sync = !!payload.pending_sync
-    data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
-    data.infra_services = payload.infra_services || { targets: {}, statuses: {}, compose_files: [] }
-    data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
-    data.php_controller_daemon = payload.php_controller_daemon || {
-      container: 'php_controller_container',
-      state: 'running',
-      start_available: false,
-    }
+    applySubsystem('servers', payload)
+    applySubsystem('nginx', payload)
+    applySubsystem('hosts', payload)
+    applySubsystem('php', payload)
+    applySubsystem('infra', payload)
+    applySubsystem('supervisor', payload)
+    if (payload.profiles !== undefined) data.profiles = payload.profiles
     if (payload.csrf_token) setCsrfToken(payload.csrf_token)
+  }
+
+  function applySubsystem(id, payload) {
+    if (!payload || typeof payload !== 'object') return
+    switch (id) {
+      case 'servers':
+        if (payload.servers) data.servers = payload.servers
+        if (payload.php_versions) data.php_versions = payload.php_versions
+        if (payload.profiles !== undefined) data.profiles = payload.profiles
+        if (payload.apply_command !== undefined) data.apply_command = payload.apply_command || ''
+        break
+      case 'nginx':
+        if (payload.nginx_status !== undefined) data.nginx_status = payload.nginx_status
+        if (payload.nginx_management !== undefined) {
+          const next = payload.nginx_management
+          data.nginx_management = {
+            ...(data.nginx_management || {}),
+            ...next,
+            logs: next.logs
+              ? {
+                  ...(data.nginx_management?.logs || {}),
+                  ...next.logs,
+                }
+              : data.nginx_management?.logs,
+          }
+        }
+        break
+      case 'hosts':
+        if (payload.hosts_status !== undefined) data.hosts_status = payload.hosts_status
+        if (payload.hosts_extras !== undefined) data.hosts_extras = payload.hosts_extras
+        if (payload.hosts_write_enabled !== undefined) {
+          data.hosts_write_enabled = payload.hosts_write_enabled !== false
+        }
+        if (payload.pending_sync !== undefined) data.pending_sync = !!payload.pending_sync
+        break
+      case 'php':
+        if (payload.php_controllers) data.php_controllers = payload.php_controllers
+        if (payload.php_controller_daemon) data.php_controller_daemon = payload.php_controller_daemon
+        break
+      case 'infra':
+        if (payload.infra_services) data.infra_services = payload.infra_services
+        break
+      case 'supervisor':
+        if (payload.supervisor_services) data.supervisor_services = payload.supervisor_services
+        break
+      default:
+        break
+    }
+  }
+
+  function stopStatusFallback() {
+    if (statusFallbackTimer) {
+      clearInterval(statusFallbackTimer)
+      statusFallbackTimer = null
+    }
+  }
+
+  function startStatusFallback() {
+    if (statusFallbackTimer || !statusStreamsWanted) return
+    statusFallbackTimer = setInterval(() => {
+      if (statusStreamsWanted) loadBootstrap({ silent: true })
+    }, STATUS_FALLBACK_MS)
+  }
+
+  function closeStatusStream() {
+    if (statusStreamSource) {
+      statusStreamSource.close()
+      statusStreamSource = null
+    }
+  }
+
+  function openStatusStream() {
+    closeStatusStream()
+    if (!statusStreamsWanted) return
+    const es = new EventSource(apiRelativeUrl(STATUS_STREAM_PATH), { withCredentials: true })
+    for (const id of STATUS_STREAM_EVENTS) {
+      es.addEventListener(id, (ev) => {
+        try {
+          applySubsystem(id, JSON.parse(ev.data))
+          stopStatusFallback()
+        } catch (_) {}
+      })
+    }
+    es.addEventListener('reconnect', () => {
+      closeStatusStream()
+      if (statusStreamsWanted) openStatusStream()
+    })
+    es.onerror = () => {
+      startStatusFallback()
+    }
+    statusStreamSource = es
+  }
+
+  function startStatusStreams() {
+    if (statusStreamsWanted) return
+    statusStreamsWanted = true
+    stopStatusFallback()
+    openStatusStream()
+  }
+
+  function stopStatusStreams() {
+    statusStreamsWanted = false
+    closeStatusStream()
+    stopStatusFallback()
   }
 
   function versionFromContainer(container) {
@@ -285,6 +388,7 @@ export function useManager() {
       hosts_write_enabled: authState.hosts_write_enabled,
     })
     bootstrapped.value = false
+    stopStatusStreams()
     const { default: router } = await import('../router')
     await router.push({ name: 'login' })
   }
@@ -1281,6 +1385,8 @@ export function useManager() {
     domainEntries,
     versionLabel,
     loadBootstrap,
+    startStatusStreams,
+    stopStatusStreams,
     logout,
     openAddModal,
     openHostsDomainAdd,

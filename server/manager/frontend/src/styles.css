@@ -1758,6 +1758,23 @@ select:focus:not([class*='p-']) {
   margin: 0;
 }
 
+.nginx-start-failure {
+  margin: 0;
+}
+
+.nginx-start-failure-detail {
+  margin-top: 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nginx-start-failure-hint {
+  margin-top: 0.35rem;
+  opacity: 0.9;
+}
+
 .nginx-templates-hints {
   display: grid;
   gap: 0.55rem;
@@ -1808,7 +1825,7 @@ select:focus:not([class*='p-']) {
 
 .nginx-log-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.85rem;
 }
 
@@ -1818,6 +1835,11 @@ select:focus:not([class*='p-']) {
   background: var(--p-card-background, var(--panel));
   border: 1px solid var(--p-content-border-color, var(--line));
   border-radius: calc(var(--p-card-border-radius, 12px) - 2px);
+}
+
+.nginx-log-card-alert {
+  border-color: color-mix(in srgb, var(--p-red-500, #ef4444) 55%, var(--p-content-border-color, var(--line)));
+  background: color-mix(in srgb, var(--p-red-500, #ef4444) 8%, var(--p-card-background, var(--panel)));
 }
 
 .nginx-log-card h3 {
@@ -3185,10 +3207,10 @@ select:focus:not([class*='p-']) {
 
 .home-pinned-actions {
   display: grid;
-  grid-template-columns: auto minmax(5.75rem, max-content) auto;
+  grid-template-columns: auto auto auto;
   align-items: center;
   justify-items: end;
-  column-gap: 0.2rem;
+  column-gap: 0.25rem;
   width: max-content;
   min-height: 2.1rem;
   justify-self: end;
@@ -3196,6 +3218,7 @@ select:focus:not([class*='p-']) {
 
 .home-pinned-actions .action-menu .p-button,
 .home-pinned-actions .pin-button.p-button,
+.home-pinned-actions .home-pinned-quick .p-button,
 .home-pinned-reorder .p-button {
   height: 2.1rem;
   min-width: 2.1rem;
@@ -3216,6 +3239,22 @@ select:focus:not([class*='p-']) {
   align-items: center;
   justify-content: flex-end;
   min-height: 2.1rem;
+}
+
+.home-pinned-quick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.home-pinned-quick .action-menu .p-button {
+  min-width: auto;
+  padding-inline: 0.65rem;
+}
+
+.home-pinned-quick .home-pinned-act.p-button {
+  width: 2.1rem;
+  padding: 0;
 }
 
 .service-conn-intro {

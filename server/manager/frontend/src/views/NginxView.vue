@@ -51,6 +51,20 @@ const STATUS_POLL_BUSY_MS = 2000
 
 const stateLabel = computed(() => t(`nginx.state_${nginx.value.state || 'not_created'}`))
 const dirty = computed(() => draft.value !== original.value)
+const actionLogExcerpt = computed(() => {
+  const content = nginx.value.logs?.action?.content || ''
+  if (!content) return ''
+  const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  const emerg = [...lines].reverse().find((l) => /\[emerg\]|\[alert\]|\[crit\]|error:/i.test(l))
+  return emerg || lines[lines.length - 1] || ''
+})
+const showStartFailureHint = computed(
+  () =>
+    !pending.value &&
+    (nginx.value.state === 'stopped' || nginx.value.state === 'error') &&
+    !!actionLogExcerpt.value &&
+    /\[emerg\]|host not found|failed/i.test(actionLogExcerpt.value),
+)
 
 function stateSeverity(state) {
   if (state === 'running') return 'success'
@@ -79,6 +93,22 @@ function formatTime(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
 }
 
+function applyManagement(next) {
+  if (!next || typeof next !== 'object') return
+  nginx.value = {
+    ...nginx.value,
+    ...next,
+    logs: next.logs
+      ? {
+          ...(nginx.value.logs || {}),
+          ...next.logs,
+        }
+      : nginx.value.logs || {},
+    test_status: next.test_status !== undefined ? next.test_status : nginx.value.test_status,
+    reload_status: next.reload_status !== undefined ? next.reload_status : nginx.value.reload_status,
+  }
+}
+
 function stopStatusPoll() {
   if (statusPollTimer) {
     clearInterval(statusPollTimer)
@@ -88,16 +118,21 @@ function stopStatusPoll() {
 
 function startStatusPoll() {
   stopStatusPoll()
+  // Control tab is fed by /api/status/stream (full nginx_management). Poll only
+  // for templates / domain-logs which are not in that stream.
+  if (tab.value === 'control') return
   const ms = dockerStatusBusy.value || nginx.value.state === 'busy' ? STATUS_POLL_BUSY_MS : STATUS_POLL_IDLE_MS
   statusPollTimer = setInterval(() => {
-    if (document.visibilityState !== 'visible' || pending.value) return
+    if (document.visibilityState !== 'visible') return
     if (tab.value === 'domain-logs') {
+      if (pending.value) return
       loadDomainLogList({ silent: true })
       if (selectedDomain.value) openDomainLogs(selectedDomain.value, { silent: true })
       return
     }
-    load({ silent: true })
-    if (tab.value === 'templates') loadTemplates({ silent: true })
+    if (tab.value === 'templates' && !pending.value) {
+      loadTemplates({ silent: true })
+    }
   }, ms)
 }
 
@@ -105,12 +140,49 @@ async function load({ silent = false } = {}) {
   if (!silent) loading.value = true
   try {
     const result = await apiGet('/api/nginx/management')
-    nginx.value = result.nginx_management
+    applyManagement(result.nginx_management)
+    if (result.nginx_management) {
+      data.nginx_management = {
+        ...(data.nginx_management || {}),
+        ...result.nginx_management,
+      }
+    }
   } catch (error) {
     if (!silent) showToast('failure', translateApiError(error))
   } finally {
     if (!silent) loading.value = false
   }
+}
+
+/** Wait for SSE/bootstrap-driven nginx state instead of re-fetching /management. */
+function waitForManagement(predicate, timeoutMs = 45000) {
+  return new Promise((resolve) => {
+    const started = Date.now()
+    let done = false
+    const finish = (ok) => {
+      if (done) return
+      done = true
+      stopWatch()
+      clearInterval(tick)
+      resolve(ok)
+    }
+    const check = () => {
+      if (predicate()) finish(true)
+      else if (Date.now() - started > timeoutMs) finish(false)
+    }
+    const stopWatch = watch(
+      () => [
+        nginx.value.state,
+        nginx.value.reload_status?.updated_at,
+        nginx.value.test_status?.updated_at,
+        nginx.value.logs?.action?.updated_at,
+      ],
+      check,
+      { flush: 'post' },
+    )
+    const tick = setInterval(check, 300)
+    check()
+  })
 }
 
 async function loadTemplates({ silent = false } = {}) {
@@ -238,53 +310,79 @@ async function saveTemplate() {
 
 async function run(action, path) {
   pending.value = action
+  const previousReloadAt = nginx.value.reload_status?.updated_at || ''
+  const previousTestAt = nginx.value.test_status?.updated_at || ''
+  const previousActionAt = nginx.value.logs?.action?.updated_at || ''
   try {
     const result = await apiSend('POST', path, {})
-    showToast('success', t(result.message_key || 'nginx.requested'))
     if (result.nginx_management) {
-      nginx.value = result.nginx_management
+      applyManagement(result.nginx_management)
       data.nginx_management = {
-        state: result.nginx_management.state,
-        container: result.nginx_management.container,
-        message_key: result.nginx_management.message_key,
-        request_id: result.nginx_management.request_id,
-        updated_at: result.nginx_management.updated_at,
-        service: result.nginx_management.service,
+        ...(data.nginx_management || {}),
+        ...result.nginx_management,
       }
     }
-    // For reload action: keep pending until result arrives via poll
-    if (action === 'reload') {
-      const previousUpdatedAt = nginx.value.reload_status?.updated_at || ''
-      showToast('success', t('reload.waiting'))
-      const POLL_INTERVAL = 1500
-      const POLL_TIMEOUT = 30000
-      const started = Date.now()
-      const poll = setInterval(async () => {
-        try {
-          await load({ silent: true })
-          const rs = nginx.value.reload_status
-          if (rs && rs.updated_at && rs.updated_at !== previousUpdatedAt) {
-            clearInterval(poll)
-            const msg = statusText(rs)
-            const ok = rs.status === 'success'
-            showToast(ok ? 'success' : 'failure', msg)
-            pending.value = ''
-            if (ok) loadTemplates({ silent: true }).catch(() => {})
-          } else if (Date.now() - started > POLL_TIMEOUT) {
-            clearInterval(poll)
-            showToast('failure', t('reload.timeout'))
-            pending.value = ''
-          }
-        } catch (_) {
-          // ignore transient poll errors
-        }
-      }, POLL_INTERVAL)
+    if (action === 'reload' || action === 'test') {
+      showToast('success', t(action === 'reload' ? 'reload.waiting' : 'nginx.test_requested'))
+      const prev = action === 'reload' ? previousReloadAt : previousTestAt
+      const okWait = await waitForManagement(() => {
+        const rs = action === 'reload' ? nginx.value.reload_status : nginx.value.test_status
+        return !!(rs && rs.updated_at && rs.updated_at !== prev)
+      }, 30000)
+      if (!okWait) {
+        showToast('failure', t(action === 'reload' ? 'reload.timeout' : 'nginx.no_result'))
+        return
+      }
+      const rs = action === 'reload' ? nginx.value.reload_status : nginx.value.test_status
+      const msg = statusText(rs)
+      const ok = rs?.status === 'success'
+      showToast(ok ? 'success' : 'failure', msg)
+      if (ok && action === 'reload') loadTemplates({ silent: true }).catch(() => {})
       return
     }
+    if (action === 'start' || action === 'stop' || action === 'restart') {
+      showToast('success', t('nginx.action_requested'))
+      const minSettleAt = Date.now() + 900
+      const settled = await waitForManagement(() => {
+        if (nginx.value.state === 'busy') return false
+        if (Date.now() < minSettleAt) return false
+        const actionAt = nginx.value.logs?.action?.updated_at || ''
+        const logUpdated = !previousActionAt || actionAt !== previousActionAt
+        // Prefer updated action log; otherwise accept settled non-busy after a short grace.
+        return logUpdated || Date.now() - minSettleAt > 2000
+      }, 45000)
+      if (!settled && nginx.value.state === 'busy') {
+        showToast('failure', t('nginx.action_timeout'))
+        return
+      }
+      const state = nginx.value.state
+      if (action === 'start' && state !== 'running') {
+        const excerpt = actionLogExcerpt.value
+        showToast(
+          'failure',
+          excerpt ? t('nginx.start_failed_detail', { detail: excerpt }) : t('nginx.start_failed'),
+        )
+      } else if (action === 'restart' && state !== 'running') {
+        const excerpt = actionLogExcerpt.value
+        showToast(
+          'failure',
+          excerpt
+            ? t('nginx.restart_failed_detail', { detail: excerpt })
+            : t('nginx.restart_failed'),
+        )
+      } else if (action === 'stop' && state === 'running') {
+        showToast('failure', t('nginx.stop_failed'))
+      } else {
+        showToast('success', t(`nginx.${action}_ok`))
+      }
+      return
+    }
+    showToast('success', t(result.message_key || 'nginx.requested'))
   } catch (error) {
     showToast('failure', translateApiError(error))
+    pending.value = ''
   } finally {
-    if (pending.value !== 'reload') pending.value = ''
+    pending.value = ''
   }
 }
 
@@ -319,16 +417,8 @@ watch(tab, (next) => {
 
 watch(
   () => data.nginx_management,
-  (next) => {
-    if (!next || typeof next !== 'object') return
-    nginx.value = {
-      ...nginx.value,
-      ...next,
-      logs: nginx.value.logs || {},
-      test_status: nginx.value.test_status,
-      reload_status: nginx.value.reload_status,
-    }
-  },
+  (next) => applyManagement(next),
+  { deep: true },
 )
 
 watch(
@@ -337,7 +427,13 @@ watch(
 )
 
 onMounted(() => {
-  load()
+  // Prefer bootstrap/SSE snapshot; only hit /management when nothing is loaded yet.
+  if (data.nginx_management?.state) {
+    applyManagement(data.nginx_management)
+    loading.value = false
+  } else {
+    load()
+  }
   startStatusPoll()
 })
 
@@ -436,6 +532,17 @@ onUnmounted(() => {
                   {{ t('nginx.apply_reload_hint') }}
                 </Message>
 
+                <Message
+                  v-if="showStartFailureHint"
+                  severity="error"
+                  :closable="false"
+                  class="nginx-start-failure"
+                >
+                  <strong>{{ t('nginx.start_failed') }}</strong>
+                  <div class="nginx-start-failure-detail">{{ actionLogExcerpt }}</div>
+                  <div class="nginx-start-failure-hint">{{ t('nginx.start_failed_hint') }}</div>
+                </Message>
+
                 <div class="nginx-results">
                   <Message
                     :severity="resultSeverity(nginx.test_status)"
@@ -463,9 +570,10 @@ onUnmounted(() => {
 
                 <div class="nginx-log-grid" data-tour="nginx-logs">
                   <article
-                    v-for="name in ['operation', 'error', 'access']"
+                    v-for="name in ['action', 'operation', 'error', 'access']"
                     :key="name"
                     class="nginx-log-card"
+                    :class="{ 'nginx-log-card-alert': name === 'action' && showStartFailureHint }"
                   >
                     <div class="nginx-log-card-head">
                       <h3>{{ t(`nginx.log_${name}`) }}</h3>
