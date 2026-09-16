@@ -1,9 +1,20 @@
 /** Connection presets for managed infra services (matches README defaults). */
 
+const HTTP_URL = /^https?:\/\//i
+
 /**
- * @typedef {{ labelKey: string, value: string }} ConnectionField
+ * @typedef {{ labelKey: string, value: string, web?: boolean }} ConnectionField
  * @typedef {{ fields: ConnectionField[], env: string, notes?: string[], webUrl?: string }} ConnectionDetails
  */
+
+/** @param {ConnectionField[] | undefined} fields */
+function webUrlFromFields(fields) {
+  if (!fields?.length) return null
+  const marked = fields.find((entry) => entry.web && HTTP_URL.test(entry.value || ''))
+  if (marked?.value) return marked.value
+  const withUrl = fields.find((entry) => HTTP_URL.test(entry.value || ''))
+  return withUrl?.value || null
+}
 
 /** @type {Record<string, ConnectionDetails>} */
 const DETAILS = {
@@ -57,7 +68,11 @@ const DETAILS = {
       { labelKey: 'services.conn.port_mgmt', value: '15672' },
       { labelKey: 'services.conn.user', value: 'admin' },
       { labelKey: 'services.conn.password', value: 'admin' },
-      { labelKey: 'services.conn.mgmt_url', value: 'http://localhost:15672' },
+      {
+        labelKey: 'services.conn.web_url',
+        value: 'http://localhost:15672',
+        web: true,
+      },
     ],
     env: [
       'RABBITMQ_HOST=rabbitmq',
@@ -65,7 +80,6 @@ const DETAILS = {
       'RABBITMQ_USER=admin',
       'RABBITMQ_PASSWORD=admin',
     ].join('\n'),
-    webUrl: 'http://localhost:15672',
   },
   kafka: {
     fields: [
@@ -74,6 +88,52 @@ const DETAILS = {
     ],
     env: ['KAFKA_BROKERS=kafka:29092'].join('\n'),
     notes: ['services.conn.kafka_note'],
+  },
+  mailpit: {
+    fields: [
+      { labelKey: 'services.conn.host_docker', value: 'mailpit' },
+      { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
+      { labelKey: 'services.conn.port_smtp', value: '1025' },
+      { labelKey: 'services.conn.port_web', value: '8025' },
+      {
+        labelKey: 'services.conn.web_url',
+        value: 'http://localhost:8025',
+        web: true,
+      },
+    ],
+    env: [
+      'MAIL_MAILER=smtp',
+      'MAIL_HOST=mailpit',
+      'MAIL_PORT=1025',
+      'MAIL_USERNAME=null',
+      'MAIL_PASSWORD=null',
+      'MAIL_ENCRYPTION=null',
+    ].join('\n'),
+    notes: ['services.conn.mailpit_note'],
+  },
+  minio: {
+    fields: [
+      { labelKey: 'services.conn.host_docker', value: 'minio' },
+      { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
+      { labelKey: 'services.conn.port_api', value: '9000' },
+      { labelKey: 'services.conn.port_console', value: '9001' },
+      { labelKey: 'services.conn.user', value: 'minioadmin' },
+      { labelKey: 'services.conn.password', value: 'minioadmin' },
+      {
+        labelKey: 'services.conn.web_url',
+        value: 'http://localhost:9001',
+        web: true,
+      },
+    ],
+    env: [
+      'AWS_ACCESS_KEY_ID=minioadmin',
+      'AWS_SECRET_ACCESS_KEY=minioadmin',
+      'AWS_DEFAULT_REGION=us-east-1',
+      'AWS_BUCKET=local',
+      'AWS_ENDPOINT=http://minio:9000',
+      'AWS_USE_PATH_STYLE_ENDPOINT=true',
+    ].join('\n'),
+    notes: ['services.conn.minio_note'],
   },
 }
 
@@ -88,15 +148,29 @@ export function hasInfraConnectionDetails(service) {
 
 /** @returns {string | null} */
 export function getInfraWebUrl(service) {
+  if (!service) return null
   const details = DETAILS[service]
   if (!details) return null
   if (typeof details.webUrl === 'string' && details.webUrl) return details.webUrl
-  const field = details.fields?.find(
-    (entry) =>
-      entry.labelKey === 'services.conn.mgmt_url' ||
-      /^https?:\/\//i.test(entry.value || ''),
-  )
-  return field?.value || null
+  return webUrlFromFields(details.fields)
+}
+
+/**
+ * Web UI for a Services card row (core infra or custom compose with matching service id).
+ * @param {{ kind: 'infra' | 'compose', service?: string, item?: { service?: string | null } }} row
+ * @returns {string | null}
+ */
+export function getServiceRowWebUrl(row) {
+  if (row.kind === 'infra') return getInfraWebUrl(row.service)
+  if (row.kind === 'compose') {
+    const id = row.item?.service
+    if (typeof id === 'string' && id) return getInfraWebUrl(id)
+  }
+  return null
+}
+
+export function hasServiceRowWebAccess(row) {
+  return Boolean(getServiceRowWebUrl(row))
 }
 
 export function hasInfraWebAccess(service) {
