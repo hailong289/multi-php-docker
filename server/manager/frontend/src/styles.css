@@ -438,7 +438,7 @@ code {
   font-size: 13px;
 }
 
-tr.is-disabled td {
+tr.is-disabled td:not(:has(.actions)) {
   opacity: 0.62;
 }
 
