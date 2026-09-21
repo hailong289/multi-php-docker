@@ -26,7 +26,11 @@ final class Kernel
 
         // Terminal I/O is chatty; holding the session file lock serializes
         // input POSTs behind output polls on php -S / file sessions.
-        if (str_starts_with($request->path(), '/terminal/') && session_status() === PHP_SESSION_ACTIVE) {
+        $path = $request->path();
+        if (
+            session_status() === PHP_SESSION_ACTIVE
+            && (str_starts_with($path, '/terminal/') || str_starts_with($path, '/status/'))
+        ) {
             session_write_close();
         }
 

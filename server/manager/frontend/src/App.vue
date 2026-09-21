@@ -20,9 +20,10 @@ const route = useRoute()
 const {
   fatalError,
   loadBootstrap,
+  startStatusStreams,
+  stopStatusStreams,
   bootstrapped,
   logout,
-  dockerStatusBusy,
   data,
   stateLabel,
   startPhpControllerDaemon,
@@ -111,11 +112,6 @@ const navItems = computed(() => [
   },
 ])
 
-let statusPollTimer = null
-
-const STATUS_POLL_IDLE_MS = 5000
-const STATUS_POLL_BUSY_MS = 2000
-
 function onSystemThemeChange() {
   if (readStoredThemeMode() === 'system') applyThemeMode('system')
 }
@@ -134,25 +130,13 @@ function updateTitle() {
   document.title = pageKey ? `${t(pageKey)} · ${t('page.title')}` : t('page.title')
 }
 
-function shouldPollStatus() {
+function shouldStreamStatus() {
   return document.visibilityState === 'visible' && bootstrapped.value && showChrome.value
 }
 
-function pollStatusOnce() {
-  if (shouldPollStatus()) loadBootstrap({ silent: true })
-}
-
-function stopStatusPoll() {
-  if (statusPollTimer) {
-    clearInterval(statusPollTimer)
-    statusPollTimer = null
-  }
-}
-
-function startStatusPoll() {
-  stopStatusPoll()
-  const ms = dockerStatusBusy.value ? STATUS_POLL_BUSY_MS : STATUS_POLL_IDLE_MS
-  statusPollTimer = setInterval(pollStatusOnce, ms)
+function syncStatusTransport() {
+  if (shouldStreamStatus()) startStatusStreams()
+  else stopStatusStreams()
 }
 
 onMounted(async () => {
@@ -163,21 +147,26 @@ onMounted(async () => {
     await loadBootstrap()
   }
   document.addEventListener('visibilitychange', onVisibilityRefresh)
-  startStatusPoll()
+  syncStatusTransport()
 })
 
 onUnmounted(() => {
   matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', onSystemThemeChange)
   document.removeEventListener('visibilitychange', onVisibilityRefresh)
-  stopStatusPoll()
+  stopStatusStreams()
 })
 
 function onVisibilityRefresh() {
-  if (shouldPollStatus()) loadBootstrap({ silent: true })
+  if (shouldStreamStatus()) {
+    loadBootstrap({ silent: true })
+    startStatusStreams()
+  } else {
+    stopStatusStreams()
+  }
 }
 
-watch(dockerStatusBusy, () => {
-  startStatusPoll()
+watch([bootstrapped, showChrome], () => {
+  syncStatusTransport()
 })
 
 watch(locale, () => {

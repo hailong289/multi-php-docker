@@ -11,6 +11,7 @@ use Manager\Controllers\NginxController;
 use Manager\Controllers\PhpControllerController;
 use Manager\Controllers\ServerController;
 use Manager\Controllers\SessionController;
+use Manager\Controllers\StatusController;
 use Manager\Controllers\SupervisorController;
 use Manager\Controllers\TerminalController;
 
@@ -19,6 +20,13 @@ return [
     ['POST', '/login', [AuthController::class, 'login']],
     ['POST', '/logout', [AuthController::class, 'logout']],
     ['GET', '/bootstrap', [BootstrapController::class, 'show']],
+    ['GET', '/status/stream', [StatusController::class, 'stream']],
+    ['GET', '/status/servers/stream', [StatusController::class, 'streamServers']],
+    ['GET', '/status/nginx/stream', [StatusController::class, 'streamNginx']],
+    ['GET', '/status/hosts/stream', [StatusController::class, 'streamHosts']],
+    ['GET', '/status/php/stream', [StatusController::class, 'streamPhp']],
+    ['GET', '/status/infra/stream', [StatusController::class, 'streamInfra']],
+    ['GET', '/status/supervisor/stream', [StatusController::class, 'streamSupervisor']],
     ['GET', '/nginx/status', [NginxController::class, 'status']],
     ['GET', '/nginx/management', [NginxController::class, 'management']],
     ['GET', '/nginx/templates', [NginxController::class, 'templates']],
