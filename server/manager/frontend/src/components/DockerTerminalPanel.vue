@@ -3,7 +3,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { apiGet, apiSend } from '../api'
+import { apiRelativeUrl, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { terminalThemeFromDocument } from '../lib/monaco'
 import Button from 'primevue/button'
@@ -29,10 +29,12 @@ let closed = false
 let resizeTimer = null
 let hostObserver = null
 let themeObserver = null
-let idleTimer = 0
 let inputBuf = ''
 let inputFlushTimer = 0
 let inputInFlight = null
+let eventSource = null
+let writeQueue = []
+let writeFrame = 0
 
 function statusSeverity() {
   if (status.value === 'ready') return 'success'
@@ -72,10 +74,6 @@ function stringToBase64(str) {
   return bytesToBase64(new TextEncoder().encode(str))
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 function helperTextarea(host) {
   return host?.querySelector?.('.xterm-helper-textarea') || host?.querySelector?.('textarea') || null
 }
@@ -104,57 +102,84 @@ function applyEnglishImeAttrs(host) {
   ta.style.setProperty('ime-mode', 'disabled')
 }
 
+function flushWriteQueue() {
+  writeFrame = 0
+  if (!term || !writeQueue.length) return
+  let total = 0
+  for (const chunk of writeQueue) total += chunk.length
+  const merged = new Uint8Array(total)
+  let at = 0
+  for (const chunk of writeQueue) {
+    merged.set(chunk, at)
+    at += chunk.length
+  }
+  writeQueue = []
+  term.write(merged)
+}
+
+function queueTerminalWrite(bytes) {
+  if (!bytes.length || !term) return
+  writeQueue.push(bytes)
+  if (!writeFrame) {
+    writeFrame = requestAnimationFrame(flushWriteQueue)
+  }
+}
+
 function applyOutput(data) {
   if (!data || typeof data !== 'object') return false
-  if (typeof data.offset === 'number') offset = data.offset
   if (data.data) {
     const bytes = base64ToUint8(data.data)
-    if (bytes.length && term) term.write(bytes)
+    if (bytes.length) queueTerminalWrite(bytes)
   }
+  if (typeof data.offset === 'number') offset = data.offset
   if (data.closed) {
     status.value = 'disconnected'
-    stopIdle()
+    stopOutputStream()
     return true
   }
   return false
 }
 
-function stopIdle() {
-  if (idleTimer) {
-    clearTimeout(idleTimer)
-    idleTimer = 0
+function stopOutputStream() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
   }
 }
 
-function scheduleIdle() {
-  stopIdle()
-  if (closed || status.value !== 'ready') return
-  idleTimer = window.setTimeout(() => {
-    idleTimer = 0
-    pullOutput().then((ended) => {
-      if (!ended) scheduleIdle()
-    })
-  }, 2000)
-}
-
-async function pullOutput() {
-  if (!sessionId.value || closed) return true
-  try {
-    const data = await apiGet(`/api/terminal/sessions/${sessionId.value}/output?since=${offset}`)
-    return applyOutput(data)
-  } catch (_) {
-    return false
+function startOutputStream() {
+  stopOutputStream()
+  if (closed || !sessionId.value || status.value !== 'ready') return
+  const url = apiRelativeUrl(
+    `/api/terminal/sessions/${sessionId.value}/stream?since=${offset}`,
+  )
+  eventSource = new EventSource(url, { withCredentials: true })
+  eventSource.onmessage = (ev) => {
+    try {
+      applyOutput(JSON.parse(ev.data))
+    } catch (_) {}
   }
+  eventSource.addEventListener('closed', () => {
+    status.value = 'disconnected'
+    stopOutputStream()
+  })
+  eventSource.addEventListener('gone', () => {
+    status.value = 'disconnected'
+    stopOutputStream()
+  })
+  eventSource.addEventListener('reconnect', () => {
+    stopOutputStream()
+    if (!closed && sessionId.value) startOutputStream()
+  })
 }
 
 async function postInput(data) {
   if (!sessionId.value || closed || status.value !== 'ready') return
   try {
-    const result = await apiSend('POST', `/api/terminal/sessions/${sessionId.value}/input`, {
+    await apiSend('POST', `/api/terminal/sessions/${sessionId.value}/input`, {
       data: stringToBase64(data),
       since: offset,
     })
-    applyOutput(result)
   } catch (_) {}
 }
 
@@ -238,17 +263,6 @@ function onHostKeyDown(ev) {
   queueInput(ch)
 }
 
-async function drainAfterCommand() {
-  for (let i = 0; i < 12; i += 1) {
-    if (closed || status.value !== 'ready') return
-    await sleep(40)
-    const before = offset
-    const ended = await pullOutput()
-    if (ended) return
-    if (offset === before && i >= 2) break
-  }
-}
-
 async function flushInput() {
   if (inputFlushTimer) {
     clearTimeout(inputFlushTimer)
@@ -258,15 +272,11 @@ async function flushInput() {
   if (!inputBuf) return
   const data = inputBuf
   inputBuf = ''
-  const urgent = shouldFlushNow(data)
-  stopIdle()
   inputInFlight = postInput(data).finally(() => {
     inputInFlight = null
   })
   await inputInFlight
-  if (urgent) await drainAfterCommand()
   if (inputBuf) queueInput('')
-  else scheduleIdle()
 }
 
 function queueInput(data) {
@@ -304,7 +314,12 @@ function onWinResize() {
 
 function teardownIo() {
   closed = true
-  stopIdle()
+  stopOutputStream()
+  if (writeFrame) {
+    cancelAnimationFrame(writeFrame)
+    writeFrame = 0
+  }
+  writeQueue = []
   if (resizeTimer) clearTimeout(resizeTimer)
   if (inputFlushTimer) clearTimeout(inputFlushTimer)
   hostObserver?.disconnect()
@@ -376,8 +391,7 @@ onMounted(async () => {
       attributeFilter: ['data-theme', 'data-surface', 'data-primary', 'style'],
     })
     await sendResize()
-    await pullOutput()
-    scheduleIdle()
+    startOutputStream()
   } catch (err) {
     status.value = 'error'
     showToast('failure', translateApiError(err))

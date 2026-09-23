@@ -59,7 +59,8 @@ final class TerminalController extends Controller
         }
         TerminalSession::writeInput($id, $raw);
         $since = (int) $request->input('since', 0);
-        $result = TerminalSession::readOutputWait($id, $since, 80);
+        // Output is pushed over SSE; avoid blocking stdin on PTY echo.
+        $result = TerminalSession::readOutput($id, $since);
 
         return Response::json([
             'ok' => true,
