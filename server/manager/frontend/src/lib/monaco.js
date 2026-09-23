@@ -23,10 +23,33 @@ export function monacoThemeFromDocument() {
 /** Register Aura-aligned Monaco themes once monaco module is loaded. */
 export function registerManagerMonacoThemes(monaco) {
   if (!monaco || themesRegistered) return
+
+  // Soften PHP delimiters — default VS theme paints <?php bright red and looks like an error.
+  const phpLightRules = [
+    { token: 'delimiter.bracket.php', foreground: '0969da' },
+    { token: 'metatag.php', foreground: '8250df' },
+    { token: 'keyword.php', foreground: 'cf222e' },
+    { token: 'type.php', foreground: '953800' },
+    { token: 'number.php', foreground: '0550ae' },
+    { token: 'string.php', foreground: '0a3069' },
+    { token: 'variable.php', foreground: '953800' },
+    { token: 'comment.php', foreground: '6e7781' },
+  ]
+  const phpDarkRules = [
+    { token: 'delimiter.bracket.php', foreground: '79c0ff' },
+    { token: 'metatag.php', foreground: 'd2a8ff' },
+    { token: 'keyword.php', foreground: 'ff7b72' },
+    { token: 'type.php', foreground: 'ffa657' },
+    { token: 'number.php', foreground: '79c0ff' },
+    { token: 'string.php', foreground: 'a5d6ff' },
+    { token: 'variable.php', foreground: 'ffa657' },
+    { token: 'comment.php', foreground: '8b949e' },
+  ]
+
   monaco.editor.defineTheme('manager-dark', {
     base: 'vs-dark',
     inherit: true,
-    rules: [],
+    rules: phpDarkRules,
     colors: {
       'editor.background': '#0b1220',
       'editor.foreground': '#e8eef8',
@@ -46,7 +69,7 @@ export function registerManagerMonacoThemes(monaco) {
   monaco.editor.defineTheme('manager-light', {
     base: 'vs',
     inherit: true,
-    rules: [],
+    rules: phpLightRules,
     colors: {
       'editor.background': '#ffffff',
       'editor.foreground': '#172033',

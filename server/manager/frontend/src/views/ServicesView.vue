@@ -14,10 +14,14 @@ import {
   buildInfraMenuItems,
   buildPinMenuItem,
 } from '../lib/containerMenus'
-import { getInfraWebUrl, openInfraWeb } from '../lib/infraConnectionDetails'
+import {
+  getServiceRowWebUrl,
+  openInfraWeb,
+} from '../lib/infraConnectionDetails'
+import { infraServiceDescriptionKey } from '../lib/infraServiceDescriptions'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, te } = useI18n()
 const mgr = useManager()
 const {
   loading,
@@ -122,12 +126,21 @@ function showCreateHint(row) {
 }
 
 function rowWebUrl(row) {
-  if (row.kind !== 'infra') return null
-  return getInfraWebUrl(row.service)
+  return getServiceRowWebUrl(row)
 }
 
 function canOpenWeb(row) {
   return !!rowWebUrl(row) && rowState(row) === 'running'
+}
+
+function rowDescription(row) {
+  const service = row.kind === 'infra' ? row.service : row.item?.service
+  const key = infraServiceDescriptionKey(service)
+  if (key && te(key)) return t(key)
+  if (row.kind === 'compose' && te('services.desc.compose_custom')) {
+    return t('services.desc.compose_custom')
+  }
+  return ''
 }
 
 onMounted(() => {
@@ -212,6 +225,10 @@ onMounted(() => {
             />
           </div>
 
+          <p v-if="rowDescription(row)" class="resource-card-desc">
+            {{ rowDescription(row) }}
+          </p>
+
           <dl class="resource-card-meta">
             <div>
               <dt>{{ t('services.container') }}</dt>
@@ -251,7 +268,7 @@ onMounted(() => {
               :disabled="!canOpenWeb(row)"
               :title="rowWebUrl(row)"
               data-tour="service-open-web"
-              @click="openInfraWeb(row.service)"
+              @click="openInfraWeb(row.kind === 'infra' ? row.service : row.item?.service)"
             />
             <div class="row-actions">
               <PinButton

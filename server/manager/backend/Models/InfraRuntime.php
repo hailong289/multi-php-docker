@@ -46,6 +46,18 @@ final class InfraRuntime
             'profile' => 'kafka',
             'ports' => '9092',
         ],
+        'mailpit' => [
+            'label' => 'Mailpit',
+            'container' => 'mailpit_container',
+            'profile' => 'mailpit',
+            'ports' => '1025, 8025',
+        ],
+        'minio' => [
+            'label' => 'MinIO',
+            'container' => 'minio_container',
+            'profile' => 'minio',
+            'ports' => '9000, 9001',
+        ],
     ];
 
     private readonly string $basePath;
