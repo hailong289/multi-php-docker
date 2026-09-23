@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -64,6 +64,49 @@ function nginxState() {
   return data.nginx_management?.state || 'not_created'
 }
 
+function nginxActionLogExcerpt() {
+  const content = data.nginx_management?.logs?.action?.content || ''
+  if (!content) return ''
+  const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  const emerg = [...lines].reverse().find((l) => /\[emerg\]|\[alert\]|\[crit\]|error:/i.test(l))
+  return emerg || lines[lines.length - 1] || ''
+}
+
+function nginxStatusText(status) {
+  if (!status) return t('nginx.no_result')
+  return status.message_key ? t(status.message_key) : status.message || t('nginx.no_result')
+}
+
+function waitForNginx(predicate, timeoutMs = 45000) {
+  return new Promise((resolve) => {
+    const started = Date.now()
+    let done = false
+    const finish = (ok) => {
+      if (done) return
+      done = true
+      stopWatch()
+      clearInterval(tick)
+      resolve(ok)
+    }
+    const check = () => {
+      if (predicate()) finish(true)
+      else if (Date.now() - started > timeoutMs) finish(false)
+    }
+    const stopWatch = watch(
+      () => [
+        data.nginx_management?.state,
+        data.nginx_management?.reload_status?.updated_at,
+        data.nginx_management?.test_status?.updated_at,
+        data.nginx_management?.logs?.action?.updated_at,
+      ],
+      check,
+      { flush: 'post' },
+    )
+    const tick = setInterval(check, 300)
+    check()
+  })
+}
+
 function nginxEnabled(action) {
   if (data.php_controller_daemon?.state !== 'running') return false
   const state = nginxState()
@@ -83,15 +126,85 @@ async function nginxRun(action) {
   const path = paths[action]
   if (!path) return
   nginxPending.value = action
+  const previousReloadAt = data.nginx_management?.reload_status?.updated_at || ''
+  const previousTestAt = data.nginx_management?.test_status?.updated_at || ''
+  const previousActionAt = data.nginx_management?.logs?.action?.updated_at || ''
   try {
     const result = await apiSend('POST', path, {})
     if (result.nginx_management) {
       data.nginx_management = {
         ...(data.nginx_management || {}),
         ...result.nginx_management,
+        logs: result.nginx_management.logs
+          ? {
+              ...(data.nginx_management?.logs || {}),
+              ...result.nginx_management.logs,
+            }
+          : data.nginx_management?.logs,
       }
     }
-    showToast('success', t(result.message_key || (action === 'reload' ? 'reload.waiting' : 'nginx.requested')))
+
+    if (action === 'reload' || action === 'test') {
+      showToast('success', t(action === 'reload' ? 'reload.waiting' : 'nginx.test_requested'))
+      const prev = action === 'reload' ? previousReloadAt : previousTestAt
+      const okWait = await waitForNginx(() => {
+        const rs =
+          action === 'reload'
+            ? data.nginx_management?.reload_status
+            : data.nginx_management?.test_status
+        return !!(rs && rs.updated_at && rs.updated_at !== prev)
+      }, 30000)
+      if (!okWait) {
+        showToast('failure', t(action === 'reload' ? 'reload.timeout' : 'nginx.no_result'))
+        return
+      }
+      const rs =
+        action === 'reload'
+          ? data.nginx_management?.reload_status
+          : data.nginx_management?.test_status
+      const ok = rs?.status === 'success'
+      showToast(ok ? 'success' : 'failure', nginxStatusText(rs))
+      return
+    }
+
+    if (action === 'start' || action === 'stop' || action === 'restart') {
+      showToast('success', t('nginx.action_requested'))
+      const minSettleAt = Date.now() + 900
+      const settled = await waitForNginx(() => {
+        if (nginxState() === 'busy') return false
+        if (Date.now() < minSettleAt) return false
+        const actionAt = data.nginx_management?.logs?.action?.updated_at || ''
+        const logUpdated = !previousActionAt || actionAt !== previousActionAt
+        return logUpdated || Date.now() - minSettleAt > 2000
+      }, 45000)
+      if (!settled && nginxState() === 'busy') {
+        showToast('failure', t('nginx.action_timeout'))
+        return
+      }
+      const state = nginxState()
+      if (action === 'start' && state !== 'running') {
+        const excerpt = nginxActionLogExcerpt()
+        showToast(
+          'failure',
+          excerpt ? t('nginx.start_failed_detail', { detail: excerpt }) : t('nginx.start_failed'),
+        )
+      } else if (action === 'restart' && state !== 'running') {
+        const excerpt = nginxActionLogExcerpt()
+        showToast(
+          'failure',
+          excerpt
+            ? t('nginx.restart_failed_detail', { detail: excerpt })
+            : t('nginx.restart_failed'),
+        )
+      } else if (action === 'stop' && state === 'running') {
+        showToast('failure', t('nginx.stop_failed'))
+      } else {
+        showToast('success', t(`nginx.${action}_ok`))
+      }
+      return
+    }
+
+    showToast('success', t(result.message_key || 'nginx.requested'))
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -162,6 +275,29 @@ function menuItems(row) {
   if (row.kind === 'infra') return buildInfraMenuItems(row.id, menuCtx.value)
   if (row.kind === 'php') return buildPhpMenuItems(row.id, menuCtx.value)
   return buildComposeMenuItems(row.item, menuCtx.value)
+}
+
+const QUICK_ACTION_IDS = new Set(['start', 'stop', 'restart'])
+
+function rowActions(row) {
+  const items = menuItems(row).filter((item) => item && item.hidden !== true)
+  const byId = Object.fromEntries(items.map((item) => [item.id, item]))
+  return {
+    start: byId.start || null,
+    stop: byId.stop || null,
+    restart: byId.restart || null,
+    more: items.filter((item) => !QUICK_ACTION_IDS.has(item.id)),
+  }
+}
+
+/** Show quick icon only when the action applies (or is in-flight). */
+function showQuick(item) {
+  return !!(item && (!item.disabled || item.loading))
+}
+
+function runQuick(item) {
+  if (!item || item.disabled || item.loading) return
+  item.run?.()
 }
 
 function onDragStart(row, event) {
@@ -266,8 +402,61 @@ function onDrop(toIndex) {
                 @click="movePin(row.kind, row.id, index + 1)"
               />
             </div>
-            <div class="home-pinned-menu">
-              <ActionMenu v-if="row.available" :items="menuItems(row)" />
+            <div class="home-pinned-menu" v-if="row.available">
+              <div
+                v-for="qa in [rowActions(row)]"
+                :key="`${row.key}-qa`"
+                class="home-pinned-quick"
+              >
+                <Button
+                  v-if="showQuick(qa.start)"
+                  type="button"
+                  icon="pi pi-play"
+                  class="home-pinned-act home-pinned-act-start"
+                  rounded
+                  size="small"
+                  severity="success"
+                  :aria-label="qa.start.label"
+                  :title="qa.start.label"
+                  :loading="!!qa.start.loading"
+                  :disabled="!!qa.start.disabled"
+                  @click="runQuick(qa.start)"
+                />
+                <Button
+                  v-if="showQuick(qa.stop)"
+                  type="button"
+                  icon="pi pi-stop"
+                  class="home-pinned-act home-pinned-act-stop"
+                  rounded
+                  size="small"
+                  severity="danger"
+                  :aria-label="qa.stop.label"
+                  :title="qa.stop.label"
+                  :loading="!!qa.stop.loading"
+                  :disabled="!!qa.stop.disabled"
+                  @click="runQuick(qa.stop)"
+                />
+                <Button
+                  v-if="showQuick(qa.restart)"
+                  type="button"
+                  icon="pi pi-refresh"
+                  class="home-pinned-act home-pinned-act-restart"
+                  rounded
+                  size="small"
+                  severity="warn"
+                  :aria-label="qa.restart.label"
+                  :title="qa.restart.label"
+                  :loading="!!qa.restart.loading"
+                  :disabled="!!qa.restart.disabled"
+                  @click="runQuick(qa.restart)"
+                />
+                <ActionMenu
+                  v-if="qa.more.length"
+                  class="home-pinned-act home-pinned-act-details"
+                  :items="qa.more"
+                  :label="t('pin.details')"
+                />
+              </div>
             </div>
             <PinButton :kind="row.kind" :id="row.id" />
           </div>
