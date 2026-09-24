@@ -142,9 +142,14 @@ final class PhpVersionId
         return 'php-' . $m[1];
     }
 
+    /** Shared host directory for every PHP version. */
     public static function sourceDirName(string $service): string
     {
-        return 'source_php' . self::minorFromService($service) . self::pathSuffix($service);
+        if (!self::isValidService($service)) {
+            throw new HttpException('php_controller.invalid_service', 400);
+        }
+
+        return 'source';
     }
 
     public static function sourcePrefix(string $service): string

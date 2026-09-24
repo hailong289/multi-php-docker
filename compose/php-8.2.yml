@@ -10,11 +10,11 @@ services:
         - "linux/arm64"
     container_name: php8.2_container
     volumes:
-      - ./server/source_php8.2:/var/www/source_php8.2
+      - ./server/source:/var/www/source
       - ./scripts:/var/scripts
       - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf
-    working_dir: /var/www/source_php8.2
+    working_dir: /var/www/source
     networks:
       - app-network
 
@@ -23,13 +23,13 @@ services:
     image: long301001/multi-php-docker:php-8.2
     container_name: supervisor82_container
     volumes:
-      - ./server/source_php8.2:/var/www/source_php8.2
+      - ./server/source:/var/www/source
       - ./scripts:/var/scripts
       - ./configs/php8/php.ini:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf:ro
       - ./configs/supervisor.d/php8.2:/etc/supervisor/conf.d:ro
       - ./logs/supervisor-8.2:/var/log/supervisor
-    working_dir: /var/www/source_php8.2
+    working_dir: /var/www/source
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       mysql:
