@@ -85,33 +85,21 @@ cd <repository-folder>
 
 `env.json` là cấu hình riêng của từng máy và không được push lên Git. Chỉ `env.example.json` được commit làm mẫu. Khi chạy Compose lần đầu, `env-init` copy `env.example.json` thành `env.json` nếu file chưa có; file đã tồn tại không bị ghi đè. Sau khi stack chạy, thêm và sửa project trong Server Manager thay vì sửa `env.json` bằng tay.
 
-### 2. Đặt source code vào đúng thư mục
+### 2. Đặt source code vào `server/source`
 
-- PHP 8.5: `server/source_php8.5/<project-name>`
-- PHP 8.4: `server/source_php8.4/<project-name>`
-- PHP 8.3: `server/source_php8.3/<project-name>`
-- PHP 8.2: `server/source_php8.2/<project-name>`
-- PHP 8.1: `server/source_php8.1/<project-name>`
-- PHP 8.0: `server/source_php8.0/<project-name>`
-- PHP 7.4: `server/source_php7.4/<project-name>`
+Mọi phiên bản PHP mount chung một thư mục trên host:
 
-Các thư mục được mount vào container tại `/var/www/source_php<version>` tương ứng.
+```text
+server/source/<project-name>
+```
+
+Trong mỗi container PHP và Supervisor, thư mục đó là `/var/www/source`. Chọn phiên bản PHP cho từng site trong Server Manager; đổi version không chuyển file. Checkout cũ còn `server/source_php*` thì chạy `./scripts/migrate-source-path.sh` một lần trước khi tạo lại container.
 
 ```text
 server/
-├── source_php8.5/
-│   └── my-php85-app/
-├── source_php8.4/
-│   └── my-php84-app/
-├── source_php8.3/
-│   └── my-php83-app/
-├── source_php8.2/
-│   └── my-php82-app/
-├── source_php8.1/
-│   └── my-php81-app/
-├── source_php8.0/
-│   └── my-php80-app/
-└── source_php7.4/
+└── source/
+    ├── my-php85-app/
+    ├── my-php80-app/
     └── my-php7-app/
 ```
 
@@ -258,25 +246,25 @@ Mỗi project tương ứng với một mục `SERVER_NAME<N>`:
   "SERVER_NAME1": {
     "APP_NAME": "my-php80-app",
     "DOMAIN_NAME": "my-php80-app.test",
-    "SERVER_PATH": "/var/www/source_php8.0/my-php80-app/public",
+    "SERVER_PATH": "/var/www/source/my-php80-app/public",
     "CONTAINER_PHP_VERSION": "php8.0_container"
   },
   "SERVER_NAME2": {
     "APP_NAME": "my-php81-app",
     "DOMAIN_NAME": "my-php81-app.test",
-    "SERVER_PATH": "/var/www/source_php8.1/my-php81-app/public",
+    "SERVER_PATH": "/var/www/source/my-php81-app/public",
     "CONTAINER_PHP_VERSION": "php8.1_container"
   },
   "SERVER_NAME3": {
     "APP_NAME": "my-php82-app",
     "DOMAIN_NAME": "my-php82-app.test",
-    "SERVER_PATH": "/var/www/source_php8.2/my-php82-app/public",
+    "SERVER_PATH": "/var/www/source/my-php82-app/public",
     "CONTAINER_PHP_VERSION": "php8.2_container"
   },
   "SERVER_NAME4": {
     "APP_NAME": "my-php7-app",
     "DOMAIN_NAME": "my-php7-app.test",
-    "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
+    "SERVER_PATH": "/var/www/source/my-php7-app/public",
     "CONTAINER_PHP_VERSION": "php7.4_container"
   }
 }
@@ -470,7 +458,7 @@ Tên service hợp lệ: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `
 
 ## Chạy background worker với Supervisor
 
-Hai service `php-8.5` và `supervisor-8.5` cùng dùng image có sẵn `long301001/multi-php-docker:php-8.5`. Hai service cũng mount chung source tại `server/source_php8.5` và `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
+Hai service `php-8.5` và `supervisor-8.5` cùng dùng image có sẵn `long301001/multi-php-docker:php-8.5`. Hai service cũng mount chung source tại `server/source` (`/var/www/source` trong container) và cùng `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
 
 ### Tạo cấu hình worker
 
@@ -484,7 +472,7 @@ Sửa `directory` và `command` trong `worker.conf` cho đúng project. Ví dụ
 
 ```ini
 [program:app_worker]
-directory=/var/www/source_php8.5/my-project
+directory=/var/www/source/my-project
 command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
 numprocs=1
 autostart=true
@@ -641,7 +629,7 @@ RabbitMQ Management UI: [http://localhost:15672](http://localhost:15672).
 
 ## Thêm hoặc thay đổi project
 
-1. Đặt source vào thư mục PHP phù hợp.
+1. Đặt source vào `server/source/<project-name>`.
 2. Trong Server Manager, thêm hoặc sửa server, ghi hosts nếu domain mới, rồi **Apply & Reload Nginx**.
 
 Cách CLI (không dùng UI):
@@ -667,10 +655,10 @@ cp docker_files/php8.5.Dockerfile docker_files/php8.6.Dockerfile
 
 Đổi base image trong Dockerfile (ví dụ `FROM php:8.6-fpm`). Giữ hoặc điều chỉnh package/extension; các bản 8.x hiện có thường gồm `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl` và Redis. Cài `pdo_pgsql` / `pgsql` từ Server Manager khi project dùng PostgreSQL.
 
-### 2. Tạo cấu hình PHP, source và Supervisor
+### 2. Tạo cấu hình PHP và Supervisor
 
 ```bash
-mkdir -p configs/php8.6 server/source_php8.6 configs/supervisor.d/php8.6 logs/supervisor-8.6
+mkdir -p configs/php8.6 configs/supervisor.d/php8.6 logs/supervisor-8.6
 cp configs/php8.5/php.ini configs/php8.6/php.ini
 cp configs/supervisor.d/worker.conf.example configs/supervisor.d/php8.6/worker.conf
 ```
@@ -842,13 +830,7 @@ Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mụ
 │   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
 │   ├── manager/             # Source Manager (UI nằm trong image manager)
-│   ├── source_php7.4/       # Source chạy PHP 7.4
-│   ├── source_php8.0/       # Source chạy PHP 8.0
-│   ├── source_php8.1/       # Source chạy PHP 8.1
-│   ├── source_php8.2/       # Source chạy PHP 8.2
-│   ├── source_php8.3/       # Source chạy PHP 8.3
-│   ├── source_php8.4/       # Source chạy PHP 8.4
-│   └── source_php8.5/       # Source chạy PHP 8.5
+│   └── source/              # Project cho mọi phiên bản PHP
 ├── docker-compose.yml       # Root: include + nginx/manager/php-controller/env-init
 ├── env.example.json         # Cấu hình project/domain mẫu được commit
 └── env.json                 # Cấu hình local, được Git bỏ qua

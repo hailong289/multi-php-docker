@@ -85,33 +85,21 @@ cd <repository-folder>
 
 `env.json` is machine-specific and must not be pushed to Git. Only `env.example.json` is committed as the template. On the first Compose run, `env-init` copies `env.example.json` to `env.json` if the file is missing; an existing file is never overwritten. After the stack is up, add and edit projects in Server Manager instead of editing `env.json` by hand.
 
-### 2. Place the source code in the correct directory
+### 2. Place the source code in `server/source`
 
-- PHP 8.5: `server/source_php8.5/<project-name>`
-- PHP 8.4: `server/source_php8.4/<project-name>`
-- PHP 8.3: `server/source_php8.3/<project-name>`
-- PHP 8.2: `server/source_php8.2/<project-name>`
-- PHP 8.1: `server/source_php8.1/<project-name>`
-- PHP 8.0: `server/source_php8.0/<project-name>`
-- PHP 7.4: `server/source_php7.4/<project-name>`
+Every PHP version mounts the same host directory:
 
-Each directory is mounted at the matching `/var/www/source_php<version>` path inside its container.
+```text
+server/source/<project-name>
+```
+
+Inside each PHP and Supervisor container that directory is `/var/www/source`. Pick the PHP version per site in Server Manager; changing the version does not move the files. For an existing checkout that still uses `server/source_php*`, run `./scripts/migrate-source-path.sh` once before recreating the containers.
 
 ```text
 server/
-├── source_php8.5/
-│   └── my-php85-app/
-├── source_php8.4/
-│   └── my-php84-app/
-├── source_php8.3/
-│   └── my-php83-app/
-├── source_php8.2/
-│   └── my-php82-app/
-├── source_php8.1/
-│   └── my-php81-app/
-├── source_php8.0/
-│   └── my-php80-app/
-└── source_php7.4/
+└── source/
+    ├── my-php85-app/
+    ├── my-php80-app/
     └── my-php7-app/
 ```
 
@@ -258,25 +246,25 @@ Each project uses one `SERVER_NAME<N>` entry:
   "SERVER_NAME1": {
     "APP_NAME": "my-php80-app",
     "DOMAIN_NAME": "my-php80-app.test",
-    "SERVER_PATH": "/var/www/source_php8.0/my-php80-app/public",
+    "SERVER_PATH": "/var/www/source/my-php80-app/public",
     "CONTAINER_PHP_VERSION": "php8.0_container"
   },
   "SERVER_NAME2": {
     "APP_NAME": "my-php81-app",
     "DOMAIN_NAME": "my-php81-app.test",
-    "SERVER_PATH": "/var/www/source_php8.1/my-php81-app/public",
+    "SERVER_PATH": "/var/www/source/my-php81-app/public",
     "CONTAINER_PHP_VERSION": "php8.1_container"
   },
   "SERVER_NAME3": {
     "APP_NAME": "my-php82-app",
     "DOMAIN_NAME": "my-php82-app.test",
-    "SERVER_PATH": "/var/www/source_php8.2/my-php82-app/public",
+    "SERVER_PATH": "/var/www/source/my-php82-app/public",
     "CONTAINER_PHP_VERSION": "php8.2_container"
   },
   "SERVER_NAME4": {
     "APP_NAME": "my-php7-app",
     "DOMAIN_NAME": "my-php7-app.test",
-    "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
+    "SERVER_PATH": "/var/www/source/my-php7-app/public",
     "CONTAINER_PHP_VERSION": "php7.4_container"
   }
 }
@@ -470,7 +458,7 @@ Valid service names: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-
 
 ## Running background workers with Supervisor
 
-The `php-8.5` and `supervisor-8.5` services both use the provided `long301001/multi-php-docker:php-8.5` image. They also mount the same source directory at `server/source_php8.5` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
+The `php-8.5` and `supervisor-8.5` services both use the provided `long301001/multi-php-docker:php-8.5` image. They also mount the shared source directory at `server/source` (`/var/www/source` in the container) and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
 
 ### Create a worker configuration
 
@@ -484,7 +472,7 @@ Update `directory` and `command` in `worker.conf` for the project. Laravel examp
 
 ```ini
 [program:app_worker]
-directory=/var/www/source_php8.5/my-project
+directory=/var/www/source/my-project
 command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
 numprocs=1
 autostart=true
@@ -641,7 +629,7 @@ Applications running directly on the host should use `127.0.0.1` and the host po
 
 ## Adding or changing a project
 
-1. Place the source code in the appropriate PHP directory.
+1. Place the source code in `server/source/<project-name>`.
 2. In Server Manager, add or edit the server, write hosts if the domain is new, then **Apply & Reload Nginx**.
 
 CLI alternative (without the UI):
@@ -667,10 +655,10 @@ cp docker_files/php8.5.Dockerfile docker_files/php8.6.Dockerfile
 
 Change the base image (for example `FROM php:8.6-fpm`). Keep or adjust packages and extensions; current 8.x images typically include `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl`, and Redis. Install `pdo_pgsql` / `pgsql` from Server Manager when the project uses PostgreSQL.
 
-### 2. Create PHP config, source, and Supervisor dirs
+### 2. Create PHP config and Supervisor dirs
 
 ```bash
-mkdir -p configs/php8.6 server/source_php8.6 configs/supervisor.d/php8.6 logs/supervisor-8.6
+mkdir -p configs/php8.6 configs/supervisor.d/php8.6 logs/supervisor-8.6
 cp configs/php8.5/php.ini configs/php8.6/php.ini
 cp configs/supervisor.d/worker.conf.example configs/supervisor.d/php8.6/worker.conf
 ```
@@ -960,13 +948,7 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 │   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
 │   ├── manager/             # Manager source (UI is baked into the manager image)
-│   ├── source_php7.4/       # PHP 7.4 projects
-│   ├── source_php8.0/       # PHP 8.0 projects
-│   ├── source_php8.1/       # PHP 8.1 projects
-│   ├── source_php8.2/       # PHP 8.2 projects
-│   ├── source_php8.3/       # PHP 8.3 projects
-│   ├── source_php8.4/       # PHP 8.4 projects
-│   └── source_php8.5/       # PHP 8.5 projects
+│   └── source/              # Projects for every PHP version
 ├── docker-compose.yml       # Root: include + nginx/manager/php-controller/env-init
 ├── env.example.json         # Committed project/domain template
 └── env.json                 # Local configuration ignored by Git

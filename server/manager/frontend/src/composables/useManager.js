@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiGet, apiRelativeUrl, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
@@ -6,6 +6,7 @@ import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtoc
 import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 import { addToast, toastSeverityFromType } from '../lib/toast'
 import { confirmDialog } from '../lib/confirm'
+import { SOURCE_PREFIX } from '../lib/frameworkPaths'
 
 const STATUS_STREAM_PATH = '/api/status/stream'
 const STATUS_STREAM_EVENTS = ['servers', 'nginx', 'hosts', 'php', 'infra', 'supervisor']
@@ -56,7 +57,7 @@ const data = reactive({
 const form = reactive({
   app_name: '',
   domain_name: '',
-  server_path: '/var/www/source_php8.5/',
+  server_path: `${SOURCE_PREFIX}/`,
   php_version: 'php-8.5',
   enabled: true,
   ssl_enabled: false,
@@ -300,9 +301,7 @@ export function useManager() {
     fieldErrors.value = {}
     form.app_name = ''
     form.domain_name = ''
-    form.server_path = data.php_versions['php-8.5']?.source_prefix
-      ? `${data.php_versions['php-8.5'].source_prefix}/`
-      : '/var/www/source_php8.5/'
+    form.server_path = `${SOURCE_PREFIX}/`
     form.php_version = 'php-8.5'
     form.enabled = true
     form.ssl_enabled = false
@@ -1346,17 +1345,6 @@ export function useManager() {
     const state = composeFileState(item)
     return state === 'not_created' || state === 'error'
   }
-
-  watch(
-    () => form.php_version,
-    (version) => {
-      const prefix = data.php_versions[version]?.source_prefix
-      if (!prefix || editingKey.value) return
-      if (!form.server_path || form.server_path.startsWith('/var/www/source_php')) {
-        form.server_path = `${prefix}/`
-      }
-    },
-  )
 
   return {
     loading,

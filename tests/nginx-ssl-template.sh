@@ -14,7 +14,7 @@ cat > "$TMP/env.json" <<'EOF'
   "SERVER_NAME1": {
     "APP_NAME": "ssl-app",
     "DOMAIN_NAME": "ssl-app.test",
-    "SERVER_PATH": "/var/www/source_php8.5/ssl-app/public",
+    "SERVER_PATH": "/var/www/source/ssl-app/public",
     "CONTAINER_PHP_VERSION": "php8.5_container",
     "ENABLED": true,
     "SSL_ENABLED": true,
@@ -23,7 +23,7 @@ cat > "$TMP/env.json" <<'EOF'
   "SERVER_NAME2": {
     "APP_NAME": "http-only",
     "DOMAIN_NAME": "http-only.test",
-    "SERVER_PATH": "/var/www/source_php8.5/http-only/public",
+    "SERVER_PATH": "/var/www/source/http-only/public",
     "CONTAINER_PHP_VERSION": "php8.5_container",
     "ENABLED": true,
     "SSL_ENABLED": false
@@ -31,7 +31,7 @@ cat > "$TMP/env.json" <<'EOF'
   "SERVER_NAME3": {
     "APP_NAME": "ssl-missing",
     "DOMAIN_NAME": "ssl-missing.test",
-    "SERVER_PATH": "/var/www/source_php8.5/ssl-missing/public",
+    "SERVER_PATH": "/var/www/source/ssl-missing/public",
     "CONTAINER_PHP_VERSION": "php8.5_container",
     "ENABLED": true,
     "SSL_ENABLED": true
@@ -88,7 +88,7 @@ cat > "$PROJ/env.json" <<'EOF'
   "SERVER_NAME1": {
     "APP_NAME": "proj-app",
     "DOMAIN_NAME": "proj-app.test",
-    "SERVER_PATH": "/var/www/source_php8.5/proj-app/public",
+    "SERVER_PATH": "/var/www/source/proj-app/public",
     "CONTAINER_PHP_VERSION": "php8.5_container",
     "ENABLED": true,
     "SSL_ENABLED": true,

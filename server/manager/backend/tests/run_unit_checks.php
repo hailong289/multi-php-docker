@@ -412,24 +412,31 @@ assert_true(isset($allowed['php8.5_container']), 'default php container allowlis
 assert_true(!isset($allowed['nginx_container']), 'nginx not allowlisted');
 
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/spa-fnb-retail/public')
-        === '/var/www/source_php8.5/spa-fnb-retail',
+    TerminalSession::projectDirFromServerPath('/var/www/source/spa-fnb-retail/public')
+        === '/var/www/source/spa-fnb-retail',
     'terminal cwd strips /public',
 );
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/posapp-yii-backend/web')
-        === '/var/www/source_php8.5/posapp-yii-backend',
+    TerminalSession::projectDirFromServerPath('/var/www/source/posapp-yii-backend/web')
+        === '/var/www/source/posapp-yii-backend',
     'terminal cwd strips /web',
 );
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php7.4/app/webroot')
-        === '/var/www/source_php7.4/app',
+    TerminalSession::projectDirFromServerPath('/var/www/source/app/webroot')
+        === '/var/www/source/app',
     'terminal cwd strips /webroot',
 );
 assert_true(
     TerminalSession::projectDirFromServerPath('/tmp/evil') === '',
     'terminal cwd rejects non-source paths',
 );
+assert_true(
+    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/app/public') === '',
+    'terminal cwd rejects legacy version path',
+);
+assert_true(PhpVersionId::sourcePrefix('php-8.5') === '/var/www/source', 'shared source prefix 8.5');
+assert_true(PhpVersionId::sourcePrefix('php-7.4') === '/var/www/source', 'shared source prefix 7.4');
+assert_true(PhpVersionId::sourceDirName('php-8.4-alpine') === 'source', 'variant shares source dir');
 
 use Manager\Models\DockerHubPhpTags;
 
@@ -614,7 +621,7 @@ $envSsl = new EnvConfig($tmpEnv);
 $vOff = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
 ], []);
 assert_true(($vOff['server']['SSL_ENABLED'] ?? true) === false, 'validate default ssl off');
@@ -623,7 +630,7 @@ assert_true(!isset($vOff['server']['SSL_MODE']), 'no ssl mode when off');
 $vOn = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
 ], []);
@@ -633,7 +640,7 @@ assert_true(($vOn['server']['SSL_MODE'] ?? '') === 'generated', 'default mode ge
 $vUp = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
     'ssl_certificate' => 'x',
@@ -644,7 +651,7 @@ assert_true(($vUp['server']['SSL_MODE'] ?? '') === 'uploaded', 'both pems set up
 $vOne = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
     'ssl_certificate' => 'x',
@@ -655,7 +662,7 @@ $existing = ['SERVER_NAME1' => $vOn['server']];
 $vKeep = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'enabled' => false,
 ], $existing, 'SERVER_NAME1');
@@ -670,7 +677,7 @@ $sslC = new SslCertificates($proj);
 $validated = $envC->validate([
     'app_name' => 'ctrl-app',
     'domain_name' => 'ctrl.test',
-    'server_path' => '/var/www/source_php8.5/ctrl-app/public',
+    'server_path' => '/var/www/source/ctrl-app/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
 ], []);

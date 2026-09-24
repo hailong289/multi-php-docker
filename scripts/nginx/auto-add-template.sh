@@ -61,7 +61,7 @@ current_domain_from_template() {
     sed -n 's/^[[:space:]]*server_name[[:space:]]\{1,\}\([^;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
 
-# "    root /var/www/source_php8.2/app/public;" → path
+# "    root /var/www/source/app/public;" → path
 current_root_from_template() {
     sed -n 's/^[[:space:]]*root[[:space:]]\{1,\}\([^;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
