@@ -336,11 +336,6 @@ export function useManager() {
   }
 
   async function loadBootstrap({ silent = false } = {}) {
-    if (authState.remote && (!authState.authenticated || authState.locked)) {
-      bootstrapped.value = false
-      if (!silent) loading.value = false
-      return
-    }
     if (!silent) {
       loading.value = true
       fatalError.value = ''
@@ -350,18 +345,6 @@ export function useManager() {
       applyBootstrap(payload)
       bootstrapped.value = true
     } catch (error) {
-      if (error?.status === 401 && authState.remote) {
-        applySessionPayload({
-          remote: true,
-          authenticated: false,
-          locked: authState.locked,
-          domain: authState.domain,
-        })
-        bootstrapped.value = false
-        const { default: router } = await import('../router')
-        await router.push({ name: 'login' })
-        return
-      }
       if (!silent) {
         fatalError.value = translateApiError(error)
       }
@@ -370,26 +353,6 @@ export function useManager() {
         loading.value = false
       }
     }
-  }
-
-  async function logout() {
-    try {
-      const result = await apiSend('POST', '/api/logout', {})
-      if (result.csrf_token) setCsrfToken(result.csrf_token)
-    } catch (_) {
-      /* still clear local auth */
-    }
-    applySessionPayload({
-      remote: authState.remote,
-      authenticated: false,
-      locked: authState.locked,
-      domain: authState.domain,
-      hosts_write_enabled: authState.hosts_write_enabled,
-    })
-    bootstrapped.value = false
-    stopStatusStreams()
-    const { default: router } = await import('../router')
-    await router.push({ name: 'login' })
   }
 
   async function saveServer() {
@@ -1021,10 +984,6 @@ export function useManager() {
   }
 
   async function writeDomainHostsAdmin(domainName) {
-    if (!data.hosts_write_enabled) {
-      showToast('failure', t('error.hosts_write_disabled_remote'))
-      return
-    }
     const domain = String(domainName || '').toLowerCase()
     if (!domain) return
     busy.value = true
@@ -1375,7 +1334,6 @@ export function useManager() {
     loadBootstrap,
     startStatusStreams,
     stopStatusStreams,
-    logout,
     openAddModal,
     openHostsDomainAdd,
     closeModal,

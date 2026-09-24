@@ -217,11 +217,11 @@ Then refresh Server Manager to use the controls. The controller accepts PHP 8.5�
 
 The PHP version **Details** page can enable/disable `extension=` lines in the mounted `configs/php*/php.ini` and install a curated set of extensions into a *running* container via `php-controller`. Runtime installs do **not** survive container recreate; bake permanent extensions into a custom image/Dockerfile instead.
 
-The `php-controller` service publishes no ports and mounts `/var/run/docker.sock` to run allowlisted Compose actions. Server Manager may also mount the Docker socket **read-only** for live container status. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source and never expose Manager without authentication and HTTPS.
+The `php-controller` service publishes no ports and mounts `/var/run/docker.sock` to run allowlisted Compose actions. Server Manager may also mount the Docker socket **read-only** for live container status. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source. Manager listens on `127.0.0.1:8080` only.
 
 PHP and Nginx container **actions** still go through a fixed allowlist in `php-controller` via a shared runtime directory. When **Apply & Reload Nginx** is clicked, the UI writes a signal file to `runtime/`; a watcher inside the Nginx container regenerates templates, runs `nginx -t`, and reloads only when the configuration is valid. If validation fails, the previous configuration is restored.
 
-By default the UI is published only on `127.0.0.1:8080` (CSRF protection, no login). For optional remote access on a primary server, see **Remote Server Manager** below.
+The UI is published only on `127.0.0.1:8080` (CSRF protection, no login).
 
 After adding, editing, or deleting a server, click **Apply & Reload Nginx**. PHP 8.5 does not need a container restart. If the server uses an optional PHP version, **Create** and **Start** that version in the UI first (or run the profile command the UI shows). Refresh the page to see the latest result below the button. Detailed errors are written to `runtime/nginx.reload.log`; `runtime/` contains temporary data and is ignored by Git.
 
@@ -357,35 +357,6 @@ docker compose --profile supervisor-7.4 up -d supervisor-7.4
 ```
 
 The UI supports Create / Start / Stop / Restart and live log viewing under `logs/supervisor*` (manual refresh or Follow).
-
-## Remote Server Manager (opt-in)
-
-By default Manager listens on `127.0.0.1:8080` without login (CSRF only).
-
-To use Manager on a primary server behind Nginx:
-
-1. Copy [`.env.example`](.env.example) to `.env` and set:
-   - `MANAGER_REMOTE=1`
-   - `MANAGER_USERNAME` / `MANAGER_PASSWORD` (use a strong password)
-   - `MANAGER_DOMAIN` (DNS A/AAAA record pointing at the server)
-2. Terminate TLS for that domain (certificate on Nginx, a reverse proxy, or a tunnel). The generated vhost listens on port 80 and proxies to `manager:8080` on the Docker network — put HTTPS in front.
-3. Recreate services so env is applied:
-
-```bash
-docker compose up -d nginx manager
-```
-
-4. Open `https://MANAGER_DOMAIN/server-manage` and sign in.
-
-If `MANAGER_DOMAIN` is a bare server IP and that IP is also a site in `env.json`, `/` keeps serving the site and Manager is only at `/server-manage`.
-
-Fail-closed: if `MANAGER_REMOTE=1` but username/password/domain are incomplete, Nginx does **not** write `manager.template`, and the API returns locked/unauthorized for protected routes.
-
-Security notes:
-
-- Remote Manager can control containers and may have read-only Docker socket status — treat credentials like root access.
-- Prefer firewall / IP allowlists in addition to login.
-- Do **not** publish host port `0.0.0.0:8080`; keep the loopback mapping unless you intentionally add a hardened edge.
 
 ## Common commands
 
