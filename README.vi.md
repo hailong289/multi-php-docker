@@ -217,11 +217,11 @@ Sau đó làm mới Server Manager để dùng các nút điều khiển. Contro
 
 Trang **Chi tiết** của từng phiên bản PHP có thể bật/tắt dòng `extension=` trong `configs/php*/php.ini` đã mount và cài một tập extension curated vào container *đang chạy* qua `php-controller`. Extension cài lúc runtime **không** tồn tại sau khi recreate container; muốn bền vững hãy bake vào Dockerfile/image tùy chỉnh.
 
-Service `php-controller` không public cổng và mount `/var/run/docker.sock` để chạy thao tác Compose trong allowlist. Server Manager cũng có thể mount Docker socket **read-only** để lấy trạng thái container trực tiếp. Docker socket tương đương quyền root trên Docker host, vì vậy chỉ chạy stack từ source tin cậy và không mở Manager ra ngoài khi chưa có HTTPS + đăng nhập.
+Service `php-controller` không public cổng và mount `/var/run/docker.sock` để chạy thao tác Compose trong allowlist. Server Manager cũng có thể mount Docker socket **read-only** để lấy trạng thái container trực tiếp. Docker socket tương đương quyền root trên Docker host, vì vậy chỉ chạy stack từ source tin cậy. Manager chỉ lắng nghe `127.0.0.1:8080`.
 
 Thao tác PHP/Nginx vẫn đi qua allowlist của `php-controller` qua thư mục runtime dùng chung. Khi nhấn **Apply & Reload Nginx**, UI ghi tín hiệu trong `runtime/`; watcher trong Nginx sinh lại template, chạy `nginx -t` và chỉ reload khi hợp lệ. Nếu kiểm tra thất bại, cấu hình trước đó được khôi phục.
 
-Mặc định UI chỉ publish trên `127.0.0.1:8080` (có CSRF, không bắt login). Để dùng từ xa trên server chính, xem mục **Server Manager từ xa** bên dưới.
+UI chỉ publish trên `127.0.0.1:8080` (có CSRF, không bắt login).
 
 Sau khi thêm, sửa hoặc xóa server, nhấn **Apply & Reload Nginx**. PHP 8.5 không cần restart container. Nếu server dùng PHP tùy chọn, **Tạo** rồi **Khởi động** phiên bản đó trong UI trước (hoặc chạy lệnh profile mà UI hiển thị). Kết quả gần nhất hiện ngay dưới nút sau khi tải lại trang. Chi tiết lỗi nằm trong `runtime/nginx.reload.log`; `runtime/` là dữ liệu tạm và đã được Git bỏ qua.
 
@@ -357,35 +357,6 @@ docker compose --profile supervisor-7.4 up -d supervisor-7.4
 ```
 
 Trong UI có thể Tạo / Khởi động / Dừng / Khởi động lại và theo dõi log trong `logs/supervisor*` (làm mới thủ công hoặc bật Follow).
-
-## Server Manager từ xa (opt-in)
-
-Mặc định Manager lắng nghe `127.0.0.1:8080` không bắt login (chỉ CSRF).
-
-Để dùng Manager trên server chính qua Nginx:
-
-1. Sao chép [`.env.example`](.env.example) thành `.env` và đặt:
-   - `MANAGER_REMOTE=1`
-   - `MANAGER_USERNAME` / `MANAGER_PASSWORD` (mật khẩu mạnh)
-   - `MANAGER_DOMAIN` (DNS A/AAAA trỏ về server)
-2. Kết thúc TLS cho domain đó (cert trên Nginx, reverse proxy hoặc tunnel). Vhost được sinh listen cổng 80 và proxy tới `manager:8080` trên Docker network — hãy đặt HTTPS phía trước.
-3. Tạo lại service để nhận env:
-
-```bash
-docker compose up -d nginx manager
-```
-
-4. Mở `https://MANAGER_DOMAIN/server-manage` và đăng nhập.
-
-Nếu `MANAGER_DOMAIN` là IP và IP đó cũng là site trong `env.json`, `/` vẫn phục vụ website; Manager chỉ ở `/server-manage`.
-
-Fail-closed: nếu `MANAGER_REMOTE=1` nhưng thiếu username/password/domain, Nginx **không** ghi `manager.template`, và API trả locked/unauthorized cho route được bảo vệ.
-
-Lưu ý bảo mật:
-
-- Manager từ xa điều khiển được container và có thể đọc Docker socket (ro) — coi credential như quyền root.
-- Nên kèm firewall / IP allowlist ngoài login.
-- **Không** publish cổng host `0.0.0.0:8080`; giữ mapping loopback trừ khi bạn chủ động hardening edge.
 
 ## Lệnh thường dùng
 

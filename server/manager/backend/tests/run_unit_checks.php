@@ -384,26 +384,6 @@ try {
     assert_true($e->errorKey() === 'php_controller.invalid_service', 'invalid php logs service');
 }
 
-use Manager\Support\RemoteAuth;
-
-putenv('MANAGER_REMOTE=0');
-assert_true(RemoteAuth::isRemote() === false, 'remote off by default');
-
-putenv('MANAGER_REMOTE=1');
-putenv('MANAGER_USERNAME=');
-putenv('MANAGER_PASSWORD=');
-assert_true(RemoteAuth::isRemote() === true, 'remote on');
-assert_true(RemoteAuth::isLocked() === true, 'locked without credentials');
-
-putenv('MANAGER_USERNAME=admin');
-putenv('MANAGER_PASSWORD=secret');
-assert_true(RemoteAuth::credentialsConfigured() === true, 'credentials ok');
-assert_true(RemoteAuth::isLocked() === false, 'not locked with credentials');
-
-putenv('MANAGER_REMOTE=0');
-putenv('MANAGER_USERNAME=');
-putenv('MANAGER_PASSWORD=');
-
 use Manager\Models\TerminalSession;
 use Manager\Support\Config;
 
