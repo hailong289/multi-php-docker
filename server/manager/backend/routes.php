@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Manager\Controllers\AuthController;
 use Manager\Controllers\BootstrapController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HostsController;
@@ -17,8 +16,6 @@ use Manager\Controllers\TerminalController;
 
 return [
     ['GET', '/session', [SessionController::class, 'show']],
-    ['POST', '/login', [AuthController::class, 'login']],
-    ['POST', '/logout', [AuthController::class, 'logout']],
     ['GET', '/bootstrap', [BootstrapController::class, 'show']],
     ['GET', '/status/stream', [StatusController::class, 'stream']],
     ['GET', '/status/servers/stream', [StatusController::class, 'streamServers']],

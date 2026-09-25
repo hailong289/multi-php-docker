@@ -4,10 +4,10 @@ services:
     image: long301001/multi-php-docker:php-7.4
     container_name: php7.4_container
     volumes:
-      - ./server/source_php7.4:/var/www/source_php7.4
+      - ./server/source:/var/www/source
       - ./scripts:/var/scripts
       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
-    working_dir: /var/www/source_php7.4
+    working_dir: /var/www/source
     networks:
       - app-network
 
@@ -16,13 +16,13 @@ services:
     image: long301001/multi-php-docker:php-7.4
     container_name: supervisor74_container
     volumes:
-      - ./server/source_php7.4:/var/www/source_php7.4
+      - ./server/source:/var/www/source
       - ./scripts:/var/scripts
       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf:ro
       - ./configs/supervisor.d/php7.4:/etc/supervisor/conf.d:ro
       - ./logs/supervisor-7.4:/var/log/supervisor
-    working_dir: /var/www/source_php7.4
+    working_dir: /var/www/source
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
       mysql:

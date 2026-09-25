@@ -15,6 +15,7 @@ import { useManager } from '../composables/useManager'
 import HomePinnedSection from '../components/HomePinnedSection.vue'
 import {
   FRAMEWORK_PRESETS,
+  SOURCE_PREFIX,
   buildDocRoot,
   buildProjectDir,
   buildServerPath,
@@ -58,9 +59,7 @@ function openTerminal(item) {
   router.push({ name: 'terminal', params: { serverKey: item.key } })
 }
 
-const sourcePrefix = computed(
-  () => data.php_versions?.[form.php_version]?.source_prefix || '/var/www/source_php8.5',
-)
+const sourcePrefix = computed(() => SOURCE_PREFIX)
 
 const nginxReloadAvailable = computed(() => data.nginx_management?.state === 'running')
 

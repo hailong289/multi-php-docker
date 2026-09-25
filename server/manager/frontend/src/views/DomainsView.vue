@@ -102,18 +102,7 @@ async function copyManualLines() {
         {{ loading ? t('loading') : hostsStatusText() }}
       </p>
       <Message
-        v-if="!hostsWriteEnabled"
-        severity="warn"
-        :closable="false"
-        class="domains-status-msg"
-      >
-        {{ t('hosts.remote_disabled') }}
-      </Message>
-      <p v-if="!loading && !hostsProgress && !hostsWriteEnabled" class="status-line">
-        {{ t('hosts.remote_disabled_hint') }}
-      </p>
-      <Message
-        v-else-if="!loading && !hostsProgress && data.pending_sync"
+        v-if="!loading && !hostsProgress && data.pending_sync"
         severity="warn"
         :closable="false"
         class="domains-status-msg"

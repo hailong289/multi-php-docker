@@ -1419,16 +1419,6 @@ button:not([class*='p-']):not(.appearance-swatch):not([class*='driver-']).is-loa
   gap: 0.75rem;
 }
 
-.login-field {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.login-form .p-password,
-.login-form .p-inputtext {
-  width: 100%;
-}
-
 .form-path-hint {
   position: static;
   margin: 6px 0 12px;
@@ -2621,37 +2611,6 @@ select:focus:not([class*='p-']) {
 .manager-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow,
 .manager-tour-popover .driver-popover-arrow-side-bottom.driver-popover-arrow {
   border-color: var(--p-card-background, var(--panel, #111827));
-}
-
-.shell-login {
-  max-width: 420px;
-  margin: 10vh auto;
-}
-
-.login-panel {
-  padding: 1.5rem;
-  background: var(--p-card-background, var(--panel));
-  color: var(--p-card-color, var(--text));
-  border: 1px solid var(--p-content-border-color, var(--line));
-  border-radius: var(--p-card-border-radius, 16px);
-  box-shadow: var(--p-card-shadow, 0 1px 3px rgba(0, 0, 0, 0.1));
-}
-
-.login-panel h2 {
-  margin: 0 0 1rem;
-  font-size: var(--p-card-title-font-size, 1.25rem);
-  font-weight: var(--p-card-title-font-weight, 600);
-}
-
-.login-form {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.login-form label,
-.login-field {
-  display: grid;
-  gap: 0.35rem;
 }
 
 .shell-welcome {
