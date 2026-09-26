@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those PHP images. The Server Manager UI is published as `long301001/multi-php-docker:manager` (frontend is built inside that image). PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO. Development services use local images named `multi-php-local` (Compose builds them from the Dockerfiles in this repo). The Server Manager UI is `multi-php-local:manager` (the frontend is built when that image is built). PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Demo videos
 
@@ -37,27 +37,27 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 
 PHP 8.5 is the default version. `docker compose up -d` starts only PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3, and 8.4 are assigned to separate profiles and remain disabled by default. MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
 
-The following images are provided:
+Local images (`multi-php-local`):
 
 | Service | Image |
 | --- | --- |
-| `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8.0`, `supervisor-8.0` | `long301001/multi-php-docker:php-8.0` |
-| `php-8.1`, `supervisor-8.1` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.5`, `supervisor-8.5` | `long301001/multi-php-docker:php-8.5` |
-| `manager` | `long301001/multi-php-docker:manager` |
-| `php-8.4`, `supervisor-8.4` | `long301001/multi-php-docker:php-8.4` |
-| `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
-| `php-8.2`, `supervisor-8.2` | `long301001/multi-php-docker:php-8.2` |
-| `php-7.4` | `long301001/multi-php-docker:php-7.4` |
+| `nginx` | `multi-php-local:nginx` |
+| `php-8.0`, `supervisor-8.0` | `multi-php-local:php-8.0` |
+| `php-8.1`, `supervisor-8.1` | `multi-php-local:php-8.1` |
+| `php-8.5`, `supervisor-8.5` | `multi-php-local:php-8.5` |
+| `manager` | `multi-php-local:manager` |
+| `php-8.4`, `supervisor-8.4` | `multi-php-local:php-8.4` |
+| `php-8.3`, `supervisor-8.3` | `multi-php-local:php-8.3` |
+| `php-8.2`, `supervisor-8.2` | `multi-php-local:php-8.2` |
+| `php-7.4` | `multi-php-local:php-7.4` |
 | `php-controller` | `docker:cli` |
-| `mysql` | `long301001/multi-php-docker:mysql` |
-| `postgres` | `long301001/multi-php-docker:postgres` |
-| `redis` | `long301001/multi-php-docker:redis-alpine` |
-| `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
-| `kafka` | `long301001/multi-php-docker:kafka` |
-| `mailpit` | `long301001/multi-php-docker:mailpit` |
-| `minio` | `long301001/multi-php-docker:minio` |
+| `mysql` | `multi-php-local:mysql` |
+| `postgres` | `multi-php-local:postgres` |
+| `redis` | `multi-php-local:redis-alpine` |
+| `rabbitmq` | `multi-php-local:rabbitmq-3-management` |
+| `kafka` | `multi-php-local:kafka` |
+| `mailpit` | `multi-php-local:mailpit` |
+| `minio` | `multi-php-local:minio` |
 | `env-init` | `alpine:latest` |
 
 ## Requirements
@@ -103,19 +103,19 @@ server/
     └── my-php7-app/
 ```
 
-### 3. Pull images and start the environment
+### 3. Build local images and start the environment
 
-On the first run, pull the images and start. Zero-config startup does not require a `.env` file:
+On the first run, build the `multi-php-local` images and start. Zero-config startup does not require a `.env` file:
 
 ```powershell
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
 macOS / Linux / WSL:
 
 ```bash
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
@@ -132,7 +132,7 @@ docker compose ps
 
 ### 4. Open Server Manager
 
-The Manager UI is baked into `long301001/multi-php-docker:manager`. Clone and `docker compose pull` is enough — you do not need Node.js or `npm run build` on the host. Built Vite files under `server/manager/public/` are gitignored.
+The Manager UI lives in the local image `multi-php-local:manager`. `docker compose build manager` builds the frontend inside that image — you do not need a separate `npm run build` on the host. Built Vite files under `server/manager/public/` are gitignored.
 
 Open:
 
@@ -386,17 +386,16 @@ docker compose down
 docker compose restart nginx
 ```
 
-### Update images from the registry
+### Rebuild local images
 
 ```bash
-# Pull the newest content for the configured tags
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
-### Build custom images
+### Change an image
 
-To change extensions, packages, or configuration inside an image, change `image` to your own name and add `build` to the corresponding service. Do not keep a `long301001/multi-php-docker:*` name for a custom image.
+Development images are already `multi-php-local:*` and already declare `build`. To change extensions, packages, or configuration, edit the matching Dockerfile and rebuild that service.
 
 Example for a custom PHP 8.5 image:
 
@@ -429,7 +428,7 @@ Valid service names: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-
 
 ## Running background workers with Supervisor
 
-The `php-8.5` and `supervisor-8.5` services both use the provided `long301001/multi-php-docker:php-8.5` image. They also mount the shared source directory at `server/source` (`/var/www/source` in the container) and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
+The `php-8.5` and `supervisor-8.5` services both use the local `multi-php-local:php-8.5` image. They also mount the shared source directory at `server/source` (`/var/www/source` in the container) and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
 
 ### Create a worker configuration
 
@@ -457,7 +456,7 @@ Create multiple `.conf` files in `configs/supervisor.d/php8.5/` to run workers f
 ### Start and manage workers
 
 ```bash
-# Start PHP-FPM and Supervisor from the provided image
+# Start PHP-FPM and Supervisor from the local image
 docker compose --profile supervisor-8.5 up -d supervisor-8.5
 
 # View worker status
@@ -483,12 +482,12 @@ Each Supervisor container contains one PHP runtime. PHP (+ Supervisor) lives in 
 
 | PHP-FPM service | Supervisor service | File | Shared image |
 | --- | --- | --- | --- |
-| `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `long301001/multi-php-docker:php-8.5` |
-| `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `long301001/multi-php-docker:php-8.4` |
-| `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `long301001/multi-php-docker:php-8.3` |
-| `php-8.2` | `supervisor-8.2` | `compose/php-8.2.yml` | `long301001/multi-php-docker:php-8.2` |
-| `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `long301001/multi-php-docker:php-8.0` |
+| `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `multi-php-local:php-8.5` |
+| `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `multi-php-local:php-8.4` |
+| `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `multi-php-local:php-8.3` |
+| `php-8.2` | `supervisor-8.2` | `compose/php-8.2.yml` | `multi-php-local:php-8.2` |
+| `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `multi-php-local:php-8.1` |
+| `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `multi-php-local:php-8.0` |
 | `php-7.4` | `supervisor-7.4` | `compose/php-7.4.yml` | PHP 7.4 image (must include Supervisor) |
 
 Do not add `build` to a Supervisor service. For a custom image, only the matching PHP-FPM service declares `build`; the Supervisor service reuses the same image name to prevent duplicate builds.
@@ -844,7 +843,7 @@ Tham khảo tài liệu chính thức: [Docker Compose Build Specification](http
 
 ### Windows: Install / Create PHP version from Server Manager fails
 
-Bundled PHP versions (`php-7.4` … `php-8.5`) use ready-made Hub images and usually only need **Create** → **Start**. Versions you **Install** from the Manager catalog (exact tags such as alpine/trixie) generate a Dockerfile and must **build** a local image (`multi-php-local:…`) before the container can be created. That build pulls a base image from Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
+Bundled PHP versions (`php-7.4` … `php-8.5`) and versions you **Install** from the Manager catalog both use local images `multi-php-local:…`. The first run must **build** before the container can be created. That build pulls a base image from Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
 
 On **Windows Docker Desktop**, this step sometimes fails even when general internet works. Typical log lines (under `php-controller-runtime/status/`):
 

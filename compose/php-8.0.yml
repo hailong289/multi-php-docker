@@ -1,7 +1,7 @@
 services:
   php-8.0:
     profiles: ["php-8.0"]
-    image: long301001/multi-php-docker:php-8.0
+    image: multi-php-local:php-8.0
     build:
       context: .
       dockerfile: ./docker_files/php8.0.Dockerfile
@@ -20,7 +20,7 @@ services:
 
   supervisor-8.0:
     profiles: ["supervisor-8.0"]
-    image: long301001/multi-php-docker:php-8.0
+    image: multi-php-local:php-8.0
     container_name: supervisor80_container
     volumes:
       - ./server/source:/var/www/source

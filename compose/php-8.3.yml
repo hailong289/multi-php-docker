@@ -7,7 +7,7 @@ services:
       platforms:
         - "linux/amd64"
         - "linux/arm64"
-    image: long301001/multi-php-docker:php-8.3
+    image: multi-php-local:php-8.3
     container_name: php8.3_container
     volumes:
       - ./server/source:/var/www/source
@@ -20,7 +20,7 @@ services:
 
   supervisor-8.3:
     profiles: ["supervisor-8.3"]
-    image: long301001/multi-php-docker:php-8.3
+    image: multi-php-local:php-8.3
     container_name: supervisor83_container
     volumes:
       - ./server/source:/var/www/source

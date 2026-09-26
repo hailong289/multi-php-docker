@@ -1,7 +1,7 @@
 services:
   redis:
     profiles: ["redis"]
-    image: long301001/multi-php-docker:redis-alpine
+    image: multi-php-local:redis-alpine
     build:
       context: .
       dockerfile: ./docker_files/redis.Dockerfile

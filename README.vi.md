@@ -2,7 +2,7 @@
 
 # Môi trường phát triển PHP với Docker
 
-Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit và MinIO. Tất cả PHP 7.4–8.5 dùng image multi-architecture sẵn trên Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` không tự build các image PHP đó. Giao diện Server Manager nằm trong `long301001/multi-php-docker:manager` (frontend được build sẵn trong image). PHP 8.5 chạy mặc định; các bản còn lại dùng Compose profile riêng và mặc định tắt. Dockerfile vẫn có trong repository để tham khảo hoặc tạo image tùy chỉnh. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
+Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit và MinIO. Các service của môi trường phát triển dùng image local `multi-php-local` (Compose build từ Dockerfile trong repo). Giao diện Server Manager nằm trong `multi-php-local:manager` (frontend được build khi build image). PHP 8.5 chạy mặc định; các bản còn lại dùng Compose profile riêng và mặc định tắt. Nginx tự tạo virtual host từ file `env.json` local dựa trên mẫu [`env.example.json`](env.example.json), cho phép chạy nhiều project với domain và phiên bản PHP khác nhau.
 
 ## Video hướng dẫn
 
@@ -37,27 +37,27 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 
 PHP 8.5 là phiên bản mặc định. `docker compose up -d` chỉ khởi động PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3 và 8.4 được đặt trong profile riêng và mặc định không chạy. MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO và Supervisor cũng nằm trong profile riêng: mặc định không khởi động cho đến khi bạn bật profile tương ứng.
 
-Các image được cung cấp sẵn:
+Image local (`multi-php-local`):
 
 | Service | Image |
 | --- | --- |
-| `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8.0`, `supervisor-8.0` | `long301001/multi-php-docker:php-8.0` |
-| `php-8.1`, `supervisor-8.1` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.5`, `supervisor-8.5` | `long301001/multi-php-docker:php-8.5` |
-| `manager` | `long301001/multi-php-docker:manager` |
-| `php-8.4`, `supervisor-8.4` | `long301001/multi-php-docker:php-8.4` |
-| `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
-| `php-8.2`, `supervisor-8.2` | `long301001/multi-php-docker:php-8.2` |
-| `php-7.4` | `long301001/multi-php-docker:php-7.4` |
+| `nginx` | `multi-php-local:nginx` |
+| `php-8.0`, `supervisor-8.0` | `multi-php-local:php-8.0` |
+| `php-8.1`, `supervisor-8.1` | `multi-php-local:php-8.1` |
+| `php-8.5`, `supervisor-8.5` | `multi-php-local:php-8.5` |
+| `manager` | `multi-php-local:manager` |
+| `php-8.4`, `supervisor-8.4` | `multi-php-local:php-8.4` |
+| `php-8.3`, `supervisor-8.3` | `multi-php-local:php-8.3` |
+| `php-8.2`, `supervisor-8.2` | `multi-php-local:php-8.2` |
+| `php-7.4` | `multi-php-local:php-7.4` |
 | `php-controller` | `docker:cli` |
-| `mysql` | `long301001/multi-php-docker:mysql` |
-| `postgres` | `long301001/multi-php-docker:postgres` |
-| `redis` | `long301001/multi-php-docker:redis-alpine` |
-| `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
-| `kafka` | `long301001/multi-php-docker:kafka` |
-| `mailpit` | `long301001/multi-php-docker:mailpit` |
-| `minio` | `long301001/multi-php-docker:minio` |
+| `mysql` | `multi-php-local:mysql` |
+| `postgres` | `multi-php-local:postgres` |
+| `redis` | `multi-php-local:redis-alpine` |
+| `rabbitmq` | `multi-php-local:rabbitmq-3-management` |
+| `kafka` | `multi-php-local:kafka` |
+| `mailpit` | `multi-php-local:mailpit` |
+| `minio` | `multi-php-local:minio` |
 | `env-init` | `alpine:latest` |
 
 ## Yêu cầu
@@ -103,19 +103,19 @@ server/
     └── my-php7-app/
 ```
 
-### 3. Pull image và khởi động
+### 3. Build image local và khởi động
 
-Lần chạy đầu tiên, tải image rồi khởi động. Không cần tạo `.env`:
+Lần chạy đầu tiên, build image `multi-php-local` rồi khởi động. Không cần tạo `.env`:
 
 ```powershell
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
 macOS / Linux / WSL:
 
 ```bash
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
@@ -132,7 +132,7 @@ docker compose ps
 
 ### 4. Mở Server Manager
 
-Giao diện Manager nằm trong image `long301001/multi-php-docker:manager`. Clone rồi `docker compose pull` là đủ — không cần Node.js hay `npm run build` trên máy. File Vite đã build trong `server/manager/public/` được Git bỏ qua.
+Giao diện Manager nằm trong image local `multi-php-local:manager`. `docker compose build manager` build frontend bên trong image — không cần `npm run build` riêng trên máy. File Vite đã build trong `server/manager/public/` được Git bỏ qua.
 
 Mở:
 
@@ -386,17 +386,16 @@ docker compose down
 docker compose restart nginx
 ```
 
-### Cập nhật image từ registry
+### Build lại image local
 
 ```bash
-# Tải phiên bản mới nhất của các tag hiện tại
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
-### Tự build image riêng
+### Tự sửa image
 
-Nếu muốn thay đổi extension, package hoặc cấu hình bên trong image, hãy đổi `image` sang tên riêng và thêm `build` cho service tương ứng. Không nên giữ tên `long301001/multi-php-docker:*` cho image tự build.
+Image môi trường phát triển đã là `multi-php-local:*` và đã có `build`. Muốn đổi extension, package hoặc cấu hình thì sửa Dockerfile tương ứng rồi build lại service đó.
 
 Ví dụ tự build PHP 8.5:
 
@@ -429,7 +428,7 @@ Tên service hợp lệ: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `
 
 ## Chạy background worker với Supervisor
 
-Hai service `php-8.5` và `supervisor-8.5` cùng dùng image có sẵn `long301001/multi-php-docker:php-8.5`. Hai service cũng mount chung source tại `server/source` (`/var/www/source` trong container) và cùng `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
+Hai service `php-8.5` và `supervisor-8.5` cùng dùng image local `multi-php-local:php-8.5`. Hai service cũng mount chung source tại `server/source` (`/var/www/source` trong container) và cùng `php.ini`. Supervisor chạy worker trong container riêng; nó không điều khiển process bên trong container PHP-FPM.
 
 ### Tạo cấu hình worker
 
@@ -457,7 +456,7 @@ Có thể tạo nhiều file `.conf` trong `configs/supervisor.d/php8.5/` để 
 ### Khởi động và quản lý worker
 
 ```bash
-# Khởi động PHP-FPM và Supervisor từ image có sẵn
+# Khởi động PHP-FPM và Supervisor từ image local
 docker compose --profile supervisor-8.5 up -d supervisor-8.5
 
 # Xem trạng thái worker
@@ -483,12 +482,12 @@ Mỗi container Supervisor chỉ có một PHP runtime. PHP (+ Supervisor) nằm
 
 | PHP-FPM service | Supervisor service | File | Image dùng chung |
 | --- | --- | --- | --- |
-| `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `long301001/multi-php-docker:php-8.5` |
-| `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `long301001/multi-php-docker:php-8.4` |
-| `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `long301001/multi-php-docker:php-8.3` |
-| `php-8.2` | `supervisor-8.2` | `compose/php-8.2.yml` | `long301001/multi-php-docker:php-8.2` |
-| `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `long301001/multi-php-docker:php-8.0` |
+| `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `multi-php-local:php-8.5` |
+| `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `multi-php-local:php-8.4` |
+| `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `multi-php-local:php-8.3` |
+| `php-8.2` | `supervisor-8.2` | `compose/php-8.2.yml` | `multi-php-local:php-8.2` |
+| `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `multi-php-local:php-8.1` |
+| `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `multi-php-local:php-8.0` |
 | `php-7.4` | `supervisor-7.4` | `compose/php-7.4.yml` | Image PHP 7.4 (cần có package Supervisor) |
 
 Không khai báo `build` trong service Supervisor. Với image tùy chỉnh, chỉ service PHP-FPM tương ứng khai báo `build`; service Supervisor dùng lại cùng tên image.
@@ -726,7 +725,7 @@ Trong container, dùng hostname `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka
 
 ### Windows: Cài / Tạo phiên bản PHP từ Server Manager thất bại
 
-Các bản PHP kèm sẵn (`php-7.4` … `php-8.5`) dùng image Hub sẵn, thường chỉ cần **Tạo** → **Khởi động**. Các bản bạn **Cài đặt** từ catalog Manager (tag cụ thể như alpine/trixie) sẽ sinh Dockerfile và phải **build** image local (`multi-php-local:…`) trước khi tạo container. Build đó kéo base image từ Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
+Các bản PHP kèm sẵn (`php-7.4` … `php-8.5`) và các bản **Cài đặt** từ catalog Manager đều dùng image local `multi-php-local:…`. Lần đầu cần **build** trước khi tạo container. Build kéo base image từ Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
 
 Trên **Windows Docker Desktop**, bước này đôi khi fail dù máy vẫn lên mạng bình thường. Dòng lỗi thường gặp (trong `php-controller-runtime/status/`):
 

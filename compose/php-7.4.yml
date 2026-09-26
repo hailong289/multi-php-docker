@@ -1,7 +1,7 @@
 services:
   php-7.4:
     profiles: ["php-7.4"]
-    image: long301001/multi-php-docker:php-7.4
+    image: multi-php-local:php-7.4
     build:
       context: .
       dockerfile: ./docker_files/php7.Dockerfile
@@ -19,7 +19,7 @@ services:
 
   supervisor-7.4:
     profiles: ["supervisor-7.4"]
-    image: long301001/multi-php-docker:php-7.4
+    image: multi-php-local:php-7.4
     container_name: supervisor74_container
     volumes:
       - ./server/source:/var/www/source

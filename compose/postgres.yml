@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: long301001/multi-php-docker:postgres
+    image: multi-php-local:postgres
     profiles: ["postgres"]
     build:
       context: .

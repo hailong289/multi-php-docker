@@ -7,7 +7,8 @@ COPY server/manager/frontend/ ./
 # vite.config.js writes to ../public → /public
 RUN npm run build
 
-FROM long301001/multi-php-docker:php-8.5
+ARG PHP_BASE_IMAGE=multi-php-local:php-8.5
+FROM ${PHP_BASE_IMAGE}
 
 WORKDIR /app
 COPY server/manager/backend ./backend

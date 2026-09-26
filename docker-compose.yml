@@ -66,7 +66,7 @@ services:
     restart: "no"
 
   nginx:
-    image: long301001/multi-php-docker:nginx
+    image: multi-php-local:nginx
     build:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
@@ -98,7 +98,14 @@ services:
       - app-network
 
   manager:
-    image: long301001/multi-php-docker:manager
+    image: multi-php-local:manager
+    build:
+      context: .
+      dockerfile: ./docker_files/manager.Dockerfile
+      additional_contexts:
+        php85: service:php-8.5
+      args:
+        PHP_BASE_IMAGE: php85
     container_name: manager_container
     ports:
       - "127.0.0.1:8080:8080"

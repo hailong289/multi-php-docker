@@ -1,6 +1,6 @@
 services:
   mailpit:
-    image: long301001/multi-php-docker:mailpit
+    image: multi-php-local:mailpit
     profiles: ["mailpit"]
     build:
       context: .

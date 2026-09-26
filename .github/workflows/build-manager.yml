@@ -44,6 +44,8 @@ jobs:
           file: ./docker_files/manager.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            PHP_BASE_IMAGE=long301001/multi-php-docker:php-8.5
           tags: |
             long301001/multi-php-docker:manager
           cache-from: type=gha

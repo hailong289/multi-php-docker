@@ -1,6 +1,6 @@
 services:
   minio:
-    image: long301001/multi-php-docker:minio
+    image: multi-php-local:minio
     profiles: ["minio"]
     build:
       context: .

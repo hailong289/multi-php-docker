@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: long301001/multi-php-docker:mysql
+    image: multi-php-local:mysql
     profiles: ["mysql"]
     build:
       context: .
