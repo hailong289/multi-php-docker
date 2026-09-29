@@ -824,6 +824,53 @@ $startOk = $started->start();
 assert_true($startOk['message_key'] === 'php_controller.daemon_started', 'start 204 key');
 assert_true($startOk['php_controller_daemon']['state'] === 'running', 'start 204 reports running');
 assert_true($startOk['php_controller_daemon']['start_available'] === false, 'start 204 not startable');
+assert_true($startOk['php_controller_daemon']['create_available'] === false, 'start 204 not creatable');
+assert_true($runningStatus['create_available'] === false, 'daemon running not creatable');
+assert_true($missingStatus['create_available'] === true, 'daemon missing is creatable');
+
+$createState = 'not_created';
+$createStateful = new PhpControllerDaemon(
+    static function () use (&$createState): string {
+        return $createState;
+    },
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    static function () use (&$createState): bool {
+        $createState = 'running';
+
+        return true;
+    },
+);
+$createOkResult = $createStateful->create();
+assert_true($createOkResult['message_key'] === 'php_controller.daemon_created', 'create ok key');
+assert_true($createOkResult['php_controller_daemon']['state'] === 'running', 'create ok state');
+assert_true($createOkResult['php_controller_daemon']['create_available'] === false, 'create ok not creatable');
+
+$createAlready = new PhpControllerDaemon(static fn (): string => 'stopped');
+$createAlreadyResult = $createAlready->create();
+assert_true($createAlreadyResult['message_key'] === 'php_controller.daemon_already_installed', 'create already key');
+
+$createFail = new PhpControllerDaemon(
+    static fn (): string => 'not_created',
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    static fn (): bool => false,
+);
+try {
+    $createFail->create();
+    assert_true(false, 'create fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_create_failed', 'create fail key');
+    assert_true($e->status() === 502, 'create fail 502');
+}
 
 $started304 = new PhpControllerDaemon(
     static fn (): string => 'stopped',
@@ -853,6 +900,149 @@ try {
 } catch (HttpException $e) {
     assert_true($e->errorKey() === 'php_controller.daemon_start_failed', 'start 500 key');
     assert_true($e->status() === 502, 'start 500 502');
+}
+
+$stopAlready = new PhpControllerDaemon(static fn (): string => 'stopped');
+$stopAlreadyResult = $stopAlready->stop();
+assert_true($stopAlreadyResult['message_key'] === 'php_controller.daemon_already_stopped', 'stop already key');
+assert_true($stopAlreadyResult['php_controller_daemon']['state'] === 'stopped', 'stop already state');
+
+$stopOk = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    static fn (): bool => true,
+);
+$stopOkResult = $stopOk->stop();
+assert_true($stopOkResult['message_key'] === 'php_controller.daemon_stopped', 'stop ok key');
+assert_true($stopOkResult['php_controller_daemon']['state'] === 'stopped', 'stop ok state');
+assert_true($stopOkResult['php_controller_daemon']['start_available'] === true, 'stop ok startable');
+
+$stopFail = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    static fn (): bool => false,
+);
+try {
+    $stopFail->stop();
+    assert_true(false, 'stop fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_stop_failed', 'stop fail key');
+    assert_true($e->status() === 502, 'stop fail 502');
+}
+
+try {
+    $missingDaemon->stop();
+    assert_true(false, 'stop missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'stop missing key');
+}
+
+$restartOk = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    static fn (): bool => true,
+);
+$restartOkResult = $restartOk->restart();
+assert_true($restartOkResult['message_key'] === 'php_controller.daemon_restarted', 'restart ok key');
+assert_true($restartOkResult['php_controller_daemon']['state'] === 'running', 'restart ok state');
+
+$restartFail = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    null,
+    null,
+    static fn (): bool => false,
+);
+try {
+    $restartFail->restart();
+    assert_true(false, 'restart fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_restart_failed', 'restart fail key');
+}
+
+try {
+    $missingDaemon->restart();
+    assert_true(false, 'restart missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'restart missing key');
+}
+
+$removeOk = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    null,
+    null,
+    null,
+    static fn (): bool => true,
+);
+$removeOkResult = $removeOk->remove();
+assert_true($removeOkResult['message_key'] === 'php_controller.daemon_removed', 'remove ok key');
+assert_true($removeOkResult['php_controller_daemon']['state'] === 'not_created', 'remove ok state');
+
+$removeFail = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    null,
+    static fn (): bool => false,
+);
+try {
+    $removeFail->remove();
+    assert_true(false, 'remove fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_remove_failed', 'remove fail key');
+}
+
+try {
+    $missingDaemon->remove();
+    assert_true(false, 'remove missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'remove missing key');
+}
+
+$nullLifecycle = new PhpControllerDaemon(static fn (): ?string => null);
+try {
+    $nullLifecycle->stop();
+    assert_true(false, 'stop probe-null must 503');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_docker_unavailable', 'stop probe-null key');
+    assert_true($e->status() === 503, 'stop probe-null 503');
+}
+
+$detailsDaemon = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    null,
+    null,
+    static fn (): array => [
+        'Config' => ['Image' => 'docker:cli'],
+        'Created' => '2026-01-01T00:00:00Z',
+        'State' => ['StartedAt' => '2026-01-02T00:00:00Z'],
+    ],
+);
+$details = $detailsDaemon->details();
+assert_true($details['image'] === 'docker:cli', 'details image');
+assert_true($details['created'] === '2026-01-01T00:00:00Z', 'details created');
+assert_true($details['started_at'] === '2026-01-02T00:00:00Z', 'details started_at');
+
+$logsDaemon = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    null,
+    null,
+    null,
+    static fn (int $tail): string => "line\n",
+);
+$logs = $logsDaemon->logs(50);
+assert_true($logs['container'] === 'php_controller_container', 'logs container');
+assert_true($logs['content'] === "line\n", 'logs content');
+
+try {
+    $missingDaemon->logs();
+    assert_true(false, 'logs missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'logs missing key');
 }
 
 $phpTmp = sys_get_temp_dir() . '/php-runtime-' . bin2hex(random_bytes(4));
@@ -914,14 +1104,20 @@ $phpStatusesDown = $phpStopped->statuses();
 assert_true(($phpStatusesDown['php-8.5']['state'] ?? '') !== 'busy', 'PHP not busy overlay when daemon down');
 
 $routes = require dirname(__DIR__) . '/routes.php';
-$hasPhpControllerStart = false;
+$phpControllerRouteKeys = [];
 foreach ($routes as $route) {
-    if (($route[0] ?? null) === 'POST' && ($route[1] ?? null) === '/php-controller/start') {
-        $hasPhpControllerStart = true;
-        break;
+    if (($route[1] ?? '') === '/php-controller'
+        || str_starts_with((string) ($route[1] ?? ''), '/php-controller/')) {
+        $phpControllerRouteKeys[] = ($route[0] ?? '') . ' ' . ($route[1] ?? '');
     }
 }
-assert_true($hasPhpControllerStart, 'POST /php-controller/start route registered');
+assert_true(in_array('GET /php-controller', $phpControllerRouteKeys, true), 'GET /php-controller route registered');
+assert_true(in_array('POST /php-controller/create', $phpControllerRouteKeys, true), 'POST /php-controller/create route registered');
+assert_true(in_array('POST /php-controller/start', $phpControllerRouteKeys, true), 'POST /php-controller/start route registered');
+assert_true(in_array('POST /php-controller/stop', $phpControllerRouteKeys, true), 'POST /php-controller/stop route registered');
+assert_true(in_array('POST /php-controller/restart', $phpControllerRouteKeys, true), 'POST /php-controller/restart route registered');
+assert_true(in_array('POST /php-controller/remove', $phpControllerRouteKeys, true), 'POST /php-controller/remove route registered');
+assert_true(in_array('GET /php-controller/logs', $phpControllerRouteKeys, true), 'GET /php-controller/logs route registered');
 
 $bootCtrl = new class extends \Manager\Controllers\Controller {
     public function payload(): array

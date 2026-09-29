@@ -501,6 +501,281 @@ final class DockerExec
         return $restarted && DockerLiveState::stateFor($name) === 'running';
     }
 
+    /**
+     * Inspect a container by name. Returns decoded Engine JSON or null.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function inspectNamedContainer(string $name): ?array
+    {
+        $name = ltrim($name, '/');
+        if ($name === '' || !DockerLiveState::available()) {
+            return null;
+        }
+
+        $id = self::containerIdByName($name);
+        if ($id === null) {
+            return null;
+        }
+
+        $raw = self::httpRequest(
+            'GET',
+            '/containers/' . rawurlencode($id) . '/json',
+            null,
+            null,
+            [200],
+        );
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        try {
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Host path bound into a container mount destination (Engine view).
+     */
+    public static function mountSource(string $containerName, string $destination): ?string
+    {
+        $inspect = self::inspectNamedContainer($containerName);
+        if ($inspect === null) {
+            return null;
+        }
+        $mounts = $inspect['Mounts'] ?? [];
+        if (!is_array($mounts)) {
+            return null;
+        }
+        foreach ($mounts as $mount) {
+            if (!is_array($mount)) {
+                continue;
+            }
+            if (($mount['Destination'] ?? '') !== $destination) {
+                continue;
+            }
+            $src = $mount['Source'] ?? '';
+
+            return is_string($src) && $src !== '' ? $src : null;
+        }
+
+        return null;
+    }
+
+    public static function resolveHostProjectPath(): ?string
+    {
+        $fromMount = self::mountSource('manager_container', '/var/host-project');
+        if ($fromMount !== null) {
+            return $fromMount;
+        }
+
+        $envPath = Config::projectPath() . '/.env';
+        if (!is_file($envPath)) {
+            return null;
+        }
+        $content = (string) @file_get_contents($envPath);
+        if ($content === '') {
+            return null;
+        }
+        if (!preg_match('/^HOST_PROJECT_PATH=(.*)$/m', $content, $m)) {
+            return null;
+        }
+        $value = trim($m[1], " \t\"'");
+        if ($value === '' || $value === '/project' || $value === '.') {
+            return null;
+        }
+
+        return $value;
+    }
+
+    public static function composeProjectName(): string
+    {
+        foreach (['manager_container', 'nginx_container', 'php_controller_container'] as $name) {
+            $inspect = self::inspectNamedContainer($name);
+            if ($inspect === null) {
+                continue;
+            }
+            $labels = is_array($inspect['Config'] ?? null) ? ($inspect['Config']['Labels'] ?? null) : null;
+            if (!is_array($labels)) {
+                continue;
+            }
+            $project = $labels['com.docker.compose.project'] ?? '';
+            if (is_string($project) && $project !== '') {
+                return $project;
+            }
+        }
+
+        $host = self::resolveHostProjectPath();
+
+        return $host !== null ? basename(rtrim($host, '/\\')) : 'web';
+    }
+
+    /**
+     * Create/start a compose service via an ephemeral docker:cli helper
+     * (Manager has the Engine socket but not the Compose CLI).
+     */
+    public static function composeUpService(string $service, int $timeoutSeconds = 120): bool
+    {
+        $service = preg_replace('/[^a-zA-Z0-9._-]/', '', $service) ?? '';
+        if ($service === '' || !DockerLiveState::available()) {
+            return false;
+        }
+
+        $hostProject = self::resolveHostProjectPath();
+        if ($hostProject === null) {
+            return false;
+        }
+
+        $project = self::composeProjectName();
+        // Mirror scripts/php/php-controller.sh prepare_compose_tmp: bind sources must be
+        // host paths. Compose running inside a helper otherwise emits /project/... binds.
+        $script = <<<'SH'
+set -eu
+mkdir -p "${DOCKER_CONFIG:-/tmp/docker-config}"
+host_project="${HOST_PROJECT_PATH:?}"
+tmp_dir="/tmp/compose-up.$$"
+mkdir -p "$tmp_dir/compose"
+rewrite_compose_paths() {
+  sed \
+    -e "s|- \\./|- ${host_project}/|g" \
+    -e 's|project_directory:[[:space:]]*\.[[:space:]]*$|project_directory: /project|' \
+    -e 's|context:[[:space:]]*\.[[:space:]]*$|context: /project|' \
+    -e 's|context:[[:space:]]*"\."[[:space:]]*$|context: /project|' \
+    -e "s|context:[[:space:]]*'\\.'[[:space:]]*$|context: /project|" \
+    -e 's|context:[[:space:]]*\./|context: /project/|g' \
+    "$1"
+}
+rewrite_compose_paths /project/docker-compose.yml > "$tmp_dir/docker-compose.yml"
+for f in /project/compose/*.yml; do
+  [ -f "$f" ] || continue
+  rewrite_compose_paths "$f" > "$tmp_dir/compose/$(basename "$f")"
+done
+cd /project
+set -- docker compose -p "$COMPOSE_PROJECT_NAME"
+if [ -f /project/.env ]; then
+  set -- "$@" --env-file /project/.env
+fi
+set -- "$@" -f "$tmp_dir/docker-compose.yml" --project-directory /project up -d --no-deps "$COMPOSE_SERVICE"
+exec "$@"
+SH;
+
+        $exit = self::runEphemeral([
+            'Image' => 'docker:cli',
+            'Cmd' => ['/bin/sh', '-c', $script],
+            'Env' => [
+                'DOCKER_CONFIG=/tmp/docker-config',
+                'HOST_PROJECT_PATH=' . $hostProject,
+                'COMPOSE_PROJECT_NAME=' . $project,
+                'COMPOSE_SERVICE=' . $service,
+            ],
+            'WorkingDir' => '/project',
+            'HostConfig' => [
+                'Binds' => [
+                    '/var/run/docker.sock:/var/run/docker.sock',
+                    $hostProject . ':/project',
+                ],
+                'AutoRemove' => false,
+            ],
+        ], $timeoutSeconds);
+
+        DockerLiveState::resetCache();
+
+        return $exit === 0;
+    }
+
+    /**
+     * Create + start a one-shot container, wait for exit, remove it.
+     *
+     * @param array<string, mixed> $config Engine container create body
+     */
+    public static function runEphemeral(array $config, int $timeoutSeconds = 120): int
+    {
+        if (!DockerLiveState::available()) {
+            return -1;
+        }
+
+        $timeoutSeconds = max(5, min(300, $timeoutSeconds));
+        try {
+            $body = json_encode($config, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return -1;
+        }
+
+        $created = self::httpRequest(
+            'POST',
+            '/containers/create',
+            $body,
+            'application/json',
+            [201],
+        );
+        if ($created === null) {
+            return -1;
+        }
+        try {
+            $decoded = json_decode($created, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return -1;
+        }
+        $id = is_array($decoded) ? (string) ($decoded['Id'] ?? '') : '';
+        if ($id === '') {
+            return -1;
+        }
+
+        $started = self::httpRequest(
+            'POST',
+            '/containers/' . rawurlencode($id) . '/start',
+            null,
+            null,
+            [204, 304],
+        );
+        if ($started === null) {
+            self::httpRequest('DELETE', '/containers/' . rawurlencode($id) . '?force=1', null, null, [204, 404]);
+
+            return -1;
+        }
+
+        $deadline = microtime(true) + $timeoutSeconds;
+        $exit = -1;
+        while (microtime(true) < $deadline) {
+            $raw = self::httpRequest(
+                'GET',
+                '/containers/' . rawurlencode($id) . '/json',
+                null,
+                null,
+                [200, 404],
+            );
+            if ($raw === null) {
+                usleep(200000);
+                continue;
+            }
+            try {
+                $info = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                usleep(200000);
+                continue;
+            }
+            if (!is_array($info)) {
+                usleep(200000);
+                continue;
+            }
+            $state = is_array($info['State'] ?? null) ? $info['State'] : [];
+            if (!empty($state['Running'])) {
+                usleep(250000);
+                continue;
+            }
+            $exit = (int) ($state['ExitCode'] ?? -1);
+            break;
+        }
+
+        self::httpRequest('DELETE', '/containers/' . rawurlencode($id) . '?force=1', null, null, [204, 404]);
+
+        return $exit;
+    }
+
     public static function imageExists(string $ref): bool
     {
         $ref = trim($ref);

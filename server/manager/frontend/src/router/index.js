@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import DomainsView from '../views/DomainsView.vue'
 import HomeView from '../views/HomeView.vue'
 import PhpVersionsView from '../views/PhpVersionsView.vue'
+import PhpControllerView from '../views/PhpControllerView.vue'
 import PhpVersionCatalogView from '../views/PhpVersionCatalogView.vue'
 import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import PhpRunView from '../views/PhpRunView.vue'
@@ -43,6 +44,12 @@ const router = createRouter({
       name: 'nginx',
       component: NginxView,
       meta: { titleKey: 'nav.nginx', manager: true },
+    },
+    {
+      path: '/php-controller',
+      name: 'php-controller',
+      component: PhpControllerView,
+      meta: { titleKey: 'nav.php_controller', manager: true },
     },
     {
       path: '/services',
