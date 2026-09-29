@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Support;
 
 use Manager\Http\HttpException;
+use Manager\Models\DockerConnection;
 
 /**
  * Docker Engine Exec helpers over the Manager unix socket (TTY attach for terminals).
@@ -66,31 +67,10 @@ final class DockerExec
             return 0;
         }
 
-        $sock = DockerLiveState::socketPath();
-        $fp = @stream_socket_client('unix://' . $sock, $errno, $errstr, 2.0);
-        if ($fp === false) {
-            return 0;
-        }
-
-        stream_set_timeout($fp, 5);
-        $path = '/containers/' . rawurlencode($name) . '/start';
-        $request = "POST {$path} HTTP/1.0\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-        if (fwrite($fp, $request) === false) {
-            fclose($fp);
-
-            return 0;
-        }
-
-        $response = stream_get_contents($fp);
-        fclose($fp);
-        if (!is_string($response) || $response === '') {
-            return 0;
-        }
-        if (!preg_match('/^HTTP\/\d\.\d\s+(\d{3})\b/', $response, $m)) {
-            return 0;
-        }
-
-        return (int) $m[1];
+        return DockerEndpoint::requestStatus(
+            'POST',
+            '/containers/' . rawurlencode($name) . '/start',
+        );
     }
 
     /**
@@ -568,6 +548,11 @@ final class DockerExec
 
     public static function resolveHostProjectPath(): ?string
     {
+        $remote = DockerConnection::projectPathFor(DockerEndpoint::config());
+        if ($remote !== null) {
+            return $remote;
+        }
+
         $fromMount = self::mountSource('manager_container', '/var/host-project');
         if ($fromMount !== null) {
             return $fromMount;
@@ -630,6 +615,10 @@ final class DockerExec
             return false;
         }
 
+        // Local project bind for reading compose files inside the helper.
+        $localProject = self::mountSource('manager_container', '/var/host-project')
+            ?? Config::projectPath();
+
         $project = self::composeProjectName();
         // Mirror scripts/php/php-controller.sh prepare_compose_tmp: bind sources must be
         // host paths. Compose running inside a helper otherwise emits /project/... binds.
@@ -663,21 +652,26 @@ set -- "$@" -f "$tmp_dir/docker-compose.yml" --project-directory /project up -d 
 exec "$@"
 SH;
 
-        $exit = self::runEphemeral([
-            'Image' => 'docker:cli',
-            'Cmd' => ['/bin/sh', '-c', $script],
-            'Env' => [
-                'DOCKER_CONFIG=/tmp/docker-config',
+        $env = array_merge(
+            DockerEndpoint::dockerCliEnv(),
+            [
                 'HOST_PROJECT_PATH=' . $hostProject,
                 'COMPOSE_PROJECT_NAME=' . $project,
                 'COMPOSE_SERVICE=' . $service,
             ],
+        );
+        $binds = array_values(array_unique(array_merge(
+            DockerEndpoint::dockerCliBinds(),
+            [$localProject . ':/project'],
+        )));
+
+        $exit = self::runEphemeral([
+            'Image' => 'docker:cli',
+            'Cmd' => ['/bin/sh', '-c', $script],
+            'Env' => $env,
             'WorkingDir' => '/project',
             'HostConfig' => [
-                'Binds' => [
-                    '/var/run/docker.sock:/var/run/docker.sock',
-                    $hostProject . ':/project',
-                ],
+                'Binds' => $binds,
                 'AutoRemove' => false,
             ],
         ], $timeoutSeconds);
@@ -694,7 +688,7 @@ SH;
      */
     public static function runEphemeral(array $config, int $timeoutSeconds = 120): int
     {
-        if (!DockerLiveState::available()) {
+        if (!file_exists(DockerEndpoint::localSocketPath())) {
             return -1;
         }
 
@@ -705,12 +699,14 @@ SH;
             return -1;
         }
 
-        $created = self::httpRequest(
+        $local = \Manager\Models\DockerConnection::defaults();
+        $created = DockerEndpoint::request(
             'POST',
             '/containers/create',
             $body,
             'application/json',
             [201],
+            $local,
         );
         if ($created === null) {
             return -1;
@@ -725,15 +721,13 @@ SH;
             return -1;
         }
 
-        $started = self::httpRequest(
+        $startCode = DockerEndpoint::requestStatus(
             'POST',
             '/containers/' . rawurlencode($id) . '/start',
-            null,
-            null,
-            [204, 304],
+            $local,
         );
-        if ($started === null) {
-            self::httpRequest('DELETE', '/containers/' . rawurlencode($id) . '?force=1', null, null, [204, 404]);
+        if ($startCode !== 204 && $startCode !== 304) {
+            DockerEndpoint::request('DELETE', '/containers/' . rawurlencode($id) . '?force=1', null, null, [204, 404], $local);
 
             return -1;
         }
@@ -741,12 +735,13 @@ SH;
         $deadline = microtime(true) + $timeoutSeconds;
         $exit = -1;
         while (microtime(true) < $deadline) {
-            $raw = self::httpRequest(
+            $raw = DockerEndpoint::request(
                 'GET',
                 '/containers/' . rawurlencode($id) . '/json',
                 null,
                 null,
                 [200, 404],
+                $local,
             );
             if ($raw === null) {
                 usleep(200000);
@@ -771,7 +766,7 @@ SH;
             break;
         }
 
-        self::httpRequest('DELETE', '/containers/' . rawurlencode($id) . '?force=1', null, null, [204, 404]);
+        DockerEndpoint::request('DELETE', '/containers/' . rawurlencode($id) . '?force=1', null, null, [204, 404], $local);
 
         return $exit;
     }
@@ -902,60 +897,7 @@ SH;
         ?string $contentType = null,
         ?array $okStatuses = null,
     ): ?string {
-        if (!DockerLiveState::available()) {
-            return null;
-        }
-
-        $sock = DockerLiveState::socketPath();
-        $fp = @stream_socket_client('unix://' . $sock, $errno, $errstr, 2.0);
-        if ($fp === false) {
-            return null;
-        }
-
-        stream_set_timeout($fp, 5);
-        $okStatuses ??= [200];
-        $headers = [
-            "{$method} {$path} HTTP/1.0",
-            'Host: localhost',
-            'Connection: close',
-        ];
-        if ($body !== null) {
-            if ($contentType !== null) {
-                $headers[] = 'Content-Type: ' . $contentType;
-            }
-            $headers[] = 'Content-Length: ' . (string) strlen($body);
-        }
-        $request = implode("\r\n", $headers) . "\r\n\r\n" . ($body ?? '');
-        if (fwrite($fp, $request) === false) {
-            fclose($fp);
-
-            return null;
-        }
-
-        $response = stream_get_contents($fp);
-        fclose($fp);
-        if (!is_string($response) || $response === '') {
-            return null;
-        }
-
-        $parts = explode("\r\n\r\n", $response, 2);
-        if (count($parts) < 2) {
-            return null;
-        }
-        if (!preg_match('/^HTTP\/\d\.\d\s+(\d{3})\b/', $parts[0], $m)) {
-            return null;
-        }
-        $code = (int) $m[1];
-        if (!in_array($code, $okStatuses, true)) {
-            return null;
-        }
-
-        $body = $parts[1];
-        if (preg_match('/^Transfer-Encoding:\s*chunked\b/mi', $parts[0])) {
-            $body = self::decodeChunked($body);
-        }
-
-        return $body;
+        return DockerEndpoint::request($method, $path, $body, $contentType, $okStatuses);
     }
 
     private static function decodeChunked(string $body): string

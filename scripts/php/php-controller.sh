@@ -11,6 +11,15 @@ mkdir -p "$REQUEST_DIR" "$STATUS_DIR"
 # php-controller runs with a read-only rootfs; point Docker CLI config at tmpfs.
 mkdir -p "${DOCKER_CONFIG:-/tmp/docker-config}"
 
+# Optional remote Docker endpoint written by Server Manager (Quản lý Docker CLI).
+if [ -f "$BASE_DIR/docker.env" ]; then
+    # shellcheck disable=SC1090
+    set -a
+    # shellcheck disable=SC1091
+    . "$BASE_DIR/docker.env"
+    set +a
+fi
+
 # PID 1 is this shell loop. Without a TERM trap, docker stop waits the default
 # ~10s then SIGKILL (same class of bug as nginx wrapping sh without exec).
 shutdown_controller() {
@@ -20,6 +29,22 @@ shutdown_controller() {
     exit 0
 }
 trap shutdown_controller TERM INT
+
+# If SSH identity was provided for remote Docker, wire OpenSSH defaults.
+if [ -n "${IDENTITY_FILE:-}" ] && [ -f "$IDENTITY_FILE" ]; then
+    mkdir -p /tmp/.ssh-docker
+    cp "$IDENTITY_FILE" /tmp/.ssh-docker/id_rsa
+    chmod 600 /tmp/.ssh-docker/id_rsa
+    printf '%s\n' 'Host *' '  StrictHostKeyChecking accept-new' '  IdentityFile /tmp/.ssh-docker/id_rsa' > /tmp/.ssh-docker/config
+    export GIT_SSH_COMMAND="ssh -F /tmp/.ssh-docker/config"
+    # docker CLI uses ssh from PATH; force config via home override when possible.
+    export HOME=/tmp
+    mkdir -p /tmp/.ssh
+    cp /tmp/.ssh-docker/config /tmp/.ssh/config
+    cp /tmp/.ssh-docker/id_rsa /tmp/.ssh/id_rsa
+    chmod 700 /tmp/.ssh
+    chmod 600 /tmp/.ssh/id_rsa /tmp/.ssh/config
+fi
 
 container_for_service() {
     case "$1" in

@@ -11,6 +11,8 @@
 /.env
 /scripts/macos/
 *.app/
+/.docker-remote/*
+!/.docker-remote/.gitkeep
 /configs/supervisor.d/*
 !/configs/supervisor.d/*.example
 !/configs/supervisor.d/php*/

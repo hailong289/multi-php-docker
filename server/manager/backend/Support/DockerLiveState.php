@@ -18,19 +18,12 @@ final class DockerLiveState
 
     public static function socketPath(): string
     {
-        $configured = getenv('MANAGER_DOCKER_SOCK');
-        if (is_string($configured) && $configured !== '') {
-            return $configured;
-        }
-
-        return '/var/run/docker.sock';
+        return DockerEndpoint::localSocketPath();
     }
 
     public static function available(): bool
     {
-        $sock = self::socketPath();
-
-        return file_exists($sock);
+        return DockerEndpoint::available();
     }
 
     /**
@@ -159,73 +152,6 @@ final class DockerLiveState
 
     private static function httpGet(string $path): ?string
     {
-        $sock = self::socketPath();
-        $fp = @stream_socket_client('unix://' . $sock, $errno, $errstr, 1.5);
-        if ($fp === false) {
-            return null;
-        }
-
-        stream_set_timeout($fp, 2);
-        $request = "GET {$path} HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-        if (fwrite($fp, $request) === false) {
-            fclose($fp);
-
-            return null;
-        }
-
-        $response = stream_get_contents($fp);
-        fclose($fp);
-        if (!is_string($response) || $response === '') {
-            return null;
-        }
-
-        $parts = explode("\r\n\r\n", $response, 2);
-        if (count($parts) < 2) {
-            return null;
-        }
-
-        $headers = $parts[0];
-        if (!preg_match('/^HTTP\/\d\.\d\s+200\b/', $headers)) {
-            return null;
-        }
-
-        $body = $parts[1];
-        if (preg_match('/^Transfer-Encoding:\s*chunked\b/mi', $headers)) {
-            $body = self::decodeChunked($body);
-        }
-
-        return $body;
-    }
-
-    private static function decodeChunked(string $body): string
-    {
-        $out = '';
-        $offset = 0;
-        $len = strlen($body);
-        while ($offset < $len) {
-            $nl = strpos($body, "\r\n", $offset);
-            if ($nl === false) {
-                break;
-            }
-            $sizeLine = substr($body, $offset, $nl - $offset);
-            if (str_contains($sizeLine, ';')) {
-                $sizeLine = explode(';', $sizeLine, 2)[0];
-            }
-            $size = hexdec(trim($sizeLine));
-            $offset = $nl + 2;
-            if ($size === 0) {
-                break;
-            }
-            if ($offset + $size > $len) {
-                break;
-            }
-            $out .= substr($body, $offset, $size);
-            $offset += $size;
-            if (substr($body, $offset, 2) === "\r\n") {
-                $offset += 2;
-            }
-        }
-
-        return $out;
+        return DockerEndpoint::request('GET', $path, null, null, [200], null, 1.5);
     }
 }

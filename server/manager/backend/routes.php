@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Manager\Controllers\BootstrapController;
+use Manager\Controllers\DockerConnectionController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HostsController;
 use Manager\Controllers\InfraController;
@@ -75,6 +76,9 @@ return [
     ['POST', '/php-controller/restart', [PhpControllerController::class, 'restartDaemon']],
     ['POST', '/php-controller/remove', [PhpControllerController::class, 'removeDaemon']],
     ['GET', '/php-controller/logs', [PhpControllerController::class, 'daemonLogs']],
+    ['GET', '/docker-connection', [DockerConnectionController::class, 'show']],
+    ['PUT', '/docker-connection', [DockerConnectionController::class, 'update']],
+    ['POST', '/docker-connection/test', [DockerConnectionController::class, 'test']],
     ['GET', '/php-controllers', [PhpControllerController::class, 'index']],
     ['GET', '/php-controllers/available-versions', [PhpControllerController::class, 'availableVersions']],
     ['POST', '/php-controllers/install-version', [PhpControllerController::class, 'installVersion']],

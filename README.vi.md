@@ -219,6 +219,8 @@ Trang **Chi tiết** của từng phiên bản PHP có thể bật/tắt dòng `
 
 Service `php-controller` không public cổng và mount `/var/run/docker.sock` để chạy thao tác Compose trong allowlist. Server Manager cũng có thể mount Docker socket **read-only** để lấy trạng thái container trực tiếp. Docker socket tương đương quyền root trên Docker host, vì vậy chỉ chạy stack từ source tin cậy. Manager chỉ lắng nghe `127.0.0.1:8080`.
 
+Trang **Quản lý Docker CLI** có thể chuyển endpoint sang **TCP+TLS** hoặc **SSH** (cấu hình lưu trong `runtime/docker-connection.json`, env cho controller trong `php-controller-runtime/docker.env`). Cert/key hoặc identity file nên đặt dưới `.docker-remote/` (đã mount vào controller). Khi dùng remote, **bind mount Compose chạy trên daemon remote** — `remote_project_path` phải tồn tại trên máy remote (cùng layout repo); path chỉ có trên máy local sẽ thất bại. Sau khi Lưu, Manager cố gắng restart `php-controller` để nạp `DOCKER_*`.
+
 Thao tác PHP/Nginx vẫn đi qua allowlist của `php-controller` qua thư mục runtime dùng chung. Khi nhấn **Apply & Reload Nginx**, UI ghi tín hiệu trong `runtime/`; watcher trong Nginx sinh lại template, chạy `nginx -t` và chỉ reload khi hợp lệ. Nếu kiểm tra thất bại, cấu hình trước đó được khôi phục.
 
 UI chỉ publish trên `127.0.0.1:8080` (có CSRF, không bắt login).

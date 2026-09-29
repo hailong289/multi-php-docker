@@ -219,6 +219,8 @@ The PHP version **Details** page can enable/disable `extension=` lines in the mo
 
 The `php-controller` service publishes no ports and mounts `/var/run/docker.sock` to run allowlisted Compose actions. Server Manager may also mount the Docker socket **read-only** for live container status. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source. Manager listens on `127.0.0.1:8080` only.
 
+The **Manage Docker CLI** page can switch the endpoint to **TCP+TLS** or **SSH** (config in `runtime/docker-connection.json`, controller env in `php-controller-runtime/docker.env`). Place cert/key or SSH identity files under `.docker-remote/` (mounted into the controller). With a remote daemon, **Compose bind mounts run on that remote host** — set `remote_project_path` to a path that exists there (same repo layout); local-only paths will fail. After Save, Manager tries to restart `php-controller` so `DOCKER_*` is reloaded.
+
 PHP and Nginx container **actions** still go through a fixed allowlist in `php-controller` via a shared runtime directory. When **Apply & Reload Nginx** is clicked, the UI writes a signal file to `runtime/`; a watcher inside the Nginx container regenerates templates, runs `nginx -t`, and reloads only when the configuration is valid. If validation fails, the previous configuration is restored.
 
 The UI is published only on `127.0.0.1:8080` (CSRF protection, no login).
