@@ -440,6 +440,13 @@ Name the branch with one of these prefixes, then a short description:
 
 Push the branch and open a pull request into `develop`. Link the issue, for example `Fixes #123`.
 
+## A coffee, if you like
+
+Take it and use it. If it helps you out, buy me a coffee — that would mean a lot.
+
+- [Buy Me a Coffee](https://www.buymeacoffee.com/hailong289)
+- [PayPal](https://paypal.me/LongHai2)
+
 ## Author
 
 This project is maintained by **Hải Long**.

@@ -440,6 +440,13 @@ git checkout -b fix/mo-ta-ngan
 
 Push nhánh và mở pull request vào `develop`. Gắn issue, ví dụ `Fixes #123`.
 
+## Mời một ly cà phê
+
+Lấy về dùng thoải mái nhé. Nếu nó giúp được bạn, mời mình một ly cà phê nha.
+
+- [Buy Me a Coffee](https://www.buymeacoffee.com/hailong289)
+- [PayPal](https://paypal.me/LongHai2)
+
 ## Tác giả
 
 Dự án được duy trì bởi **Hải Long**.
