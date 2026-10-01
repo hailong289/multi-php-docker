@@ -48,6 +48,8 @@ const {
   nginxStatusText,
   nginxStatusOk,
   isPending,
+  phpServiceState,
+  stateLabel,
 } = useManager()
 
 const frameworkId = ref('laravel')
@@ -57,6 +59,28 @@ const docRoot = ref('public')
 
 function openTerminal(item) {
   router.push({ name: 'terminal', params: { serverKey: item.key } })
+}
+
+function serverPhpState(server) {
+  const container = server?.CONTAINER_PHP_VERSION || ''
+  if (!container) return 'not_created'
+  const match = Object.entries(data.php_versions || {}).find(
+    ([, config]) => config?.container === container,
+  )
+  if (!match) return 'not_created'
+  return phpServiceState(match[0])
+}
+
+function serverPhpRunning(server) {
+  return serverPhpState(server) === 'running'
+}
+
+function phpStateSeverity(state) {
+  if (state === 'running') return 'success'
+  if (state === 'stopped') return 'secondary'
+  if (state === 'error') return 'danger'
+  if (state === 'busy') return 'warn'
+  return 'contrast'
 }
 
 const sourcePrefix = computed(() => SOURCE_PREFIX)
@@ -287,6 +311,12 @@ function onSubmit() {
         <Column :header="t('table.php')">
           <template #body="{ data: item }">
             <code>{{ item.server.CONTAINER_PHP_VERSION }}</code>
+            <Tag
+              class="home-inline-tag"
+              :value="stateLabel(serverPhpState(item.server))"
+              :severity="phpStateSeverity(serverPhpState(item.server))"
+              rounded
+            />
           </template>
         </Column>
         <Column :header="t('table.document_root')">
@@ -320,7 +350,10 @@ function onSubmit() {
                 type="button"
                 size="small"
                 :label="t('action.terminal')"
-                :disabled="busy"
+                :disabled="busy || !serverPhpRunning(item.server)"
+                :title="
+                  serverPhpRunning(item.server) ? '' : t('terminal.container_not_running')
+                "
                 @click="openTerminal(item)"
               />
               <Button
