@@ -175,6 +175,28 @@ final class EnvConfig
             }
         }
 
+        $frameworkProvided = array_key_exists('framework', $input) || array_key_exists('FRAMEWORK', $input);
+        if ($frameworkProvided) {
+            $framework = strtolower(trim((string) ($input['framework'] ?? $input['FRAMEWORK'] ?? '')));
+        } else {
+            $framework = (string) ($previous['FRAMEWORK'] ?? '');
+        }
+        if ($framework !== '' && !SourceLogs::isFramework($framework)) {
+            $errors['framework'] = ['key' => 'validation.framework'];
+        }
+
+        $logPathProvided = array_key_exists('log_path', $input) || array_key_exists('LOG_PATH', $input);
+        if ($logPathProvided) {
+            $rawLogPath = (string) ($input['log_path'] ?? $input['LOG_PATH'] ?? '');
+        } else {
+            $rawLogPath = (string) ($previous['LOG_PATH'] ?? '');
+        }
+        $logPath = SourceLogs::normalizeRelative($rawLogPath);
+        if ($logPath === null) {
+            $errors['log_path'] = ['key' => 'validation.log_path'];
+            $logPath = '';
+        }
+
         $server = [
             'APP_NAME' => $appName,
             'DOMAIN_NAME' => $domainName,
@@ -185,6 +207,12 @@ final class EnvConfig
         ];
         if ($sslMode !== null) {
             $server['SSL_MODE'] = $sslMode;
+        }
+        if ($framework !== '' && !isset($errors['framework'])) {
+            $server['FRAMEWORK'] = $framework;
+        }
+        if ($logPath !== '' && !isset($errors['log_path'])) {
+            $server['LOG_PATH'] = $logPath;
         }
 
         return [

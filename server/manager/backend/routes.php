@@ -9,6 +9,7 @@ use Manager\Controllers\InfraController;
 use Manager\Controllers\NginxController;
 use Manager\Controllers\PhpControllerController;
 use Manager\Controllers\ServerController;
+use Manager\Controllers\SourceLogController;
 use Manager\Controllers\SessionController;
 use Manager\Controllers\StatusController;
 use Manager\Controllers\SupervisorController;
@@ -87,6 +88,13 @@ return [
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/extensions/(?P<name>[a-z0-9_]+)/uninstall', [PhpControllerController::class, 'uninstallExtension']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/extensions/(?P<name>[a-z0-9_]+)/enable', [PhpControllerController::class, 'enableExtension']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/extensions/(?P<name>[a-z0-9_]+)/disable', [PhpControllerController::class, 'disableExtension']],
+    ['GET', '/sources/logs', [SourceLogController::class, 'index']],
+    ['PUT', '/sources/(?P<key>SERVER_NAME\d+)/log-config', [SourceLogController::class, 'updateConfig']],
+    ['POST', '/sources/(?P<key>SERVER_NAME\d+)/logs/clear', [SourceLogController::class, 'clear']],
+    ['PUT', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'update']],
+    ['DELETE', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'destroy']],
+    ['GET', '/sources/(?P<key>SERVER_NAME\d+)/logs/stream', [SourceLogController::class, 'stream']],
+    ['GET', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'show']],
     ['POST', '/servers', [ServerController::class, 'store']],
     ['PUT', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'update']],
     ['DELETE', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'destroy']],

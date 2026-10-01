@@ -10,6 +10,7 @@ import ServicesView from '../views/ServicesView.vue'
 import ComposeYamlView from '../views/ComposeYamlView.vue'
 import PhpComposeYamlView from '../views/PhpComposeYamlView.vue'
 import ServiceLogsView from '../views/ServiceLogsView.vue'
+import SourceLogsView from '../views/SourceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
 import TerminalView from '../views/TerminalView.vue'
 import { apiGet, setCsrfToken } from '../api'
@@ -37,6 +38,12 @@ const router = createRouter({
       name: 'domains',
       component: DomainsView,
       meta: { titleKey: 'nav.domains', manager: true },
+    },
+    {
+      path: '/source-logs/:serverKey',
+      name: 'source-logs',
+      component: SourceLogsView,
+      meta: { titleKey: 'source_logs.title', manager: true },
     },
     {
       path: '/nginx',

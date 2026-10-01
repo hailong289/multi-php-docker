@@ -355,7 +355,7 @@ export function useManager() {
     }
   }
 
-  async function saveServer() {
+  async function saveServer(extra = {}) {
     busy.value = true
     pendingAction.value = { kind: 'save' }
     fieldErrors.value = {}
@@ -367,6 +367,9 @@ export function useManager() {
         php_version: form.php_version,
         enabled: form.enabled,
         ssl_enabled: !!form.ssl_enabled,
+      }
+      if (!editingKey.value && extra.framework) {
+        body.framework = extra.framework
       }
       if (form.ssl_certificate) body.ssl_certificate = form.ssl_certificate
       if (form.ssl_private_key) body.ssl_private_key = form.ssl_private_key
