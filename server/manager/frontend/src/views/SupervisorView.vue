@@ -17,7 +17,7 @@ import Tabs from 'primevue/tabs'
 import Tag from 'primevue/tag'
 import Textarea from 'primevue/textarea'
 import ToggleSwitch from 'primevue/toggleswitch'
-import { apiGet, apiSend } from '../api'
+import { apiGet, apiRelativeUrl, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
 
@@ -52,7 +52,8 @@ const followLogs = ref(false)
 const clearing = ref(false)
 const details = ref(null)
 const logPre = ref(null)
-let followTimer = null
+/** @type {EventSource|null} */
+let followSource = null
 
 const configs = ref([])
 const confDir = ref('')
@@ -319,30 +320,81 @@ async function clearSelectedLog() {
   }
 }
 
-function onFollowChange(value) {
-  followLogs.value = !!value
+function applyLogFollow(payload, mode) {
+  const previous = String(details.value?.log?.content || '')
+  const content = mode === 'append' ? previous + (payload.content || '') : payload.content || ''
+  details.value = {
+    ...(details.value || {}),
+    log: {
+      ...(details.value?.log || {}),
+      available: true,
+      content,
+      updated_at: payload.updated_at || details.value?.log?.updated_at || '',
+    },
+  }
+  scrollLogToBottom()
 }
 
-function stopFollow() {
-  if (followTimer) {
-    clearInterval(followTimer)
-    followTimer = null
+function stopLogStream() {
+  if (followSource) {
+    followSource.close()
+    followSource = null
   }
 }
 
-function startStatusPoll() {
-  stopFollow()
-  if (!supervisorService.value || tab.value !== 'control') return
-  const busy = currentState.value === 'busy'
-  const ms = followLogs.value ? 3000 : busy ? 2000 : 5000
-  followTimer = setInterval(() => {
-    if (document.visibilityState !== 'visible' || pending.value) return
-    loadDetails({ quiet: true })
-  }, ms)
+function startLogStream() {
+  stopLogStream()
+  if (!followLogs.value || !supervisorService.value || !selectedLog.value || tab.value !== 'control') return
+  const url = apiRelativeUrl(
+    `/api/supervisor/${encodeURIComponent(supervisorService.value)}/logs/stream?log=${encodeURIComponent(selectedLog.value)}`,
+  )
+  const stream = new EventSource(url, { withCredentials: true })
+  followSource = stream
+  const take = (mode) => (event) => {
+    try {
+      applyLogFollow(JSON.parse(event.data), mode)
+    } catch {
+      /* ignore a partial event */
+    }
+  }
+  stream.addEventListener('snapshot', take('replace'))
+  stream.addEventListener('reset', take('replace'))
+  stream.addEventListener('append', take('append'))
+  stream.addEventListener('gone', () => {
+    if (details.value) {
+      details.value = {
+        ...details.value,
+        log: { available: false, content: '', updated_at: '' },
+      }
+    }
+    followLogs.value = false
+    stopLogStream()
+  })
+  stream.addEventListener('reconnect', () => {
+    const still = followLogs.value
+    stopLogStream()
+    if (still) startLogStream()
+  })
 }
 
-function startFollow() {
-  startStatusPoll()
+function onFollowChange(value) {
+  followLogs.value = !!value
+  if (followLogs.value) {
+    startLogStream()
+    scrollLogToBottom()
+  } else {
+    stopLogStream()
+  }
+}
+
+function stopFollow() {
+  stopLogStream()
+}
+
+function onLogFileChange(name) {
+  selectedLog.value = name || ''
+  if (followLogs.value) return
+  loadDetails()
 }
 
 function refreshCurrent() {
@@ -354,12 +406,14 @@ watch(tab, (next) => {
   if (next === 'configs') {
     stopFollow()
     loadConfigs()
-  } else {
-    startFollow()
+  } else if (followLogs.value) {
+    startLogStream()
   }
 })
 
 watch(phpService, async () => {
+  stopLogStream()
+  followLogs.value = false
   selectedLog.value = ''
   details.value = null
   selectedConf.value = ''
@@ -376,19 +430,13 @@ watch(phpService, async () => {
       return
     }
     await loadDetails()
-    startFollow()
   } finally {
     loading.value = false
   }
 })
 
-watch(followLogs, () => {
-  startFollow()
-  if (followLogs.value) scrollLogToBottom()
-})
-
-watch(currentState, () => {
-  if (tab.value === 'control') startStatusPoll()
+watch(selectedLog, () => {
+  if (followLogs.value) startLogStream()
 })
 
 watch(
@@ -409,7 +457,6 @@ onMounted(async () => {
       return
     }
     await loadDetails()
-    startFollow()
   } finally {
     loading.value = false
   }
@@ -514,7 +561,7 @@ onUnmounted(stopFollow)
                         option-value="value"
                         :placeholder="t('supervisor.log_empty')"
                         class="supervisor-log-select"
-                        @update:model-value="(v) => { selectedLog = v; loadDetails() }"
+                        @update:model-value="onLogFileChange"
                       />
                     </label>
                     <span v-if="details.log?.updated_at" class="create-hint">
