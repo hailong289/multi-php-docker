@@ -94,9 +94,9 @@ Cùng giao diện này có thể mở shell trong container PHP của site (cont
 | PostgreSQL | `5432` | User `postgres`, password `1`, database `postgres` |
 | Redis | `6379` | Không mật khẩu |
 | RabbitMQ | `5672`, `15672` | `admin` / `admin`. UI [http://localhost:15672](http://localhost:15672) |
-| Kafka | `9092` | Broker `kafka:29092` (Docker) / `localhost:9092` (host) |
-| Mailpit | `1025`, `8025` | SMTP `mailpit:1025`. UI [http://localhost:8025](http://localhost:8025) |
-| MinIO | `9000`, `9001` | `minioadmin` / `minioadmin`. API `minio:9000`. Console [http://localhost:9001](http://localhost:9001) |
+| Kafka | `9092` | Broker `kafka_container:29092` (Docker) / `localhost:9092` (host) |
+| Mailpit | `1025`, `8025` | SMTP `mailpit_container:1025`. UI [http://localhost:8025](http://localhost:8025) |
+| MinIO | `9000`, `9001` | `minioadmin` / `minioadmin`. API `minio_container:9000`. Console [http://localhost:9001](http://localhost:9001) |
 | Supervisor | Không public | Worker nền, một container mỗi phiên bản PHP, mặc định tắt |
 
 ## Việc hàng ngày
@@ -121,42 +121,42 @@ docker compose stop php-8.3
 
 ### Kết nối từ ứng dụng
 
-Trong container, dùng tên service Docker. Trên host, dùng `127.0.0.1` và cổng host trong bảng phía trên.
+Trong container, dùng tên container: tên service cộng thêm `_container`. Trên host, dùng `127.0.0.1` và cổng host trong bảng phía trên.
 
 ```dotenv
-DB_HOST=mysql
+DB_HOST=mysql_container
 DB_PORT=3306
 DB_USERNAME=root
 DB_PASSWORD=1
 
 # PostgreSQL — dùng khối này khi app dùng Postgres
 # DB_CONNECTION=pgsql
-# DB_HOST=postgres
+# DB_HOST=postgres_container
 # DB_PORT=5432
 # DB_DATABASE=postgres
 # DB_USERNAME=postgres
 # DB_PASSWORD=1
 
-REDIS_HOST=redis
+REDIS_HOST=redis_container
 REDIS_PORT=6379
 
-RABBITMQ_HOST=rabbitmq
+RABBITMQ_HOST=rabbitmq_container
 RABBITMQ_PORT=5672
 RABBITMQ_USER=admin
 RABBITMQ_PASSWORD=admin
 
-# Trong container PHP dùng kafka:29092; trên host dùng localhost:9092
-KAFKA_BROKERS=kafka:29092
+# Trong container PHP dùng kafka_container:29092; trên host dùng localhost:9092
+KAFKA_BROKERS=kafka_container:29092
 
 MAIL_MAILER=smtp
-MAIL_HOST=mailpit
+MAIL_HOST=mailpit_container
 MAIL_PORT=1025
 
 AWS_ACCESS_KEY_ID=minioadmin
 AWS_SECRET_ACCESS_KEY=minioadmin
 AWS_DEFAULT_REGION=us-east-1
 AWS_BUCKET=local
-AWS_ENDPOINT=http://minio:9000
+AWS_ENDPOINT=http://minio_container:9000
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
 
@@ -248,7 +248,7 @@ Tắt tiến trình đang chiếm cổng, hoặc đổi phía host của ánh x�
 
 ### PHP không tới được MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit hoặc MinIO
 
-Dùng hostname của service (`mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, `minio`). Bật profile tương ứng khi `docker compose ps` không liệt kê dịch vụ đó. Từ PHP, broker Kafka là `kafka:29092`.
+Dùng tên container (`mysql_container`, `postgres_container`, `redis_container`, `rabbitmq_container`, `kafka_container`, `mailpit_container`, `minio_container`). Bật profile tương ứng khi `docker compose ps` không liệt kê dịch vụ đó. Từ PHP, broker Kafka là `kafka_container:29092`.
 
 ### Windows: Cài / Tạo phiên bản PHP thất bại
 
@@ -421,7 +421,24 @@ docker compose start mysql
 
 Mở lỗi trên [Issues](https://github.com/hailong289/multi-php-docker/issues) với các bước tái hiện, kết quả mong đợi và kết quả thực tế, hệ điều hành, `docker --version`, `docker compose version`, và log liên quan (`docker compose logs`, UI Manager, hoặc file trong `runtime/` và `php-controller-runtime/status/`). Không đưa mật khẩu, token hay đường dẫn project riêng tư.
 
-Tạo nhánh từ `master` mới nhất (`fix/…`, `feat/…`, `docs/…` hoặc `chore/…`), push, rồi mở pull request vào `master`. Giữ bản sửa ngoài `master`. Gắn issue, ví dụ `Fixes #123`.
+Checkout `develop` mới nhất, tạo nhánh từ đó, rồi làm việc trên nhánh mới:
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b fix/mo-ta-ngan
+```
+
+Đặt tên nhánh bằng một trong các tiền tố sau, rồi thêm mô tả ngắn:
+
+| Tiền tố | Dùng khi |
+| --- | --- |
+| `fix/` | Sửa lỗi. Ví dụ: `fix/nginx-reload-timeout` |
+| `feat/` | Thêm tính năng. Ví dụ: `feat/add-php-8.6` |
+| `docs/` | Chỉ sửa tài liệu. Ví dụ: `docs/readme-hosts` |
+| `chore/` | Sửa build, CI hoặc tooling, không đổi hành vi sản phẩm. Ví dụ: `chore/update-ci` |
+
+Push nhánh và mở pull request vào `develop`. Gắn issue, ví dụ `Fixes #123`.
 
 ## Tác giả
 

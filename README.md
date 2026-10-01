@@ -94,9 +94,9 @@ The same UI can open a shell in that site’s PHP container (the container must 
 | PostgreSQL | `5432` | User `postgres`, password `1`, database `postgres` |
 | Redis | `6379` | No password |
 | RabbitMQ | `5672`, `15672` | `admin` / `admin`. UI [http://localhost:15672](http://localhost:15672) |
-| Kafka | `9092` | Broker `kafka:29092` (Docker) / `localhost:9092` (host) |
-| Mailpit | `1025`, `8025` | SMTP `mailpit:1025`. UI [http://localhost:8025](http://localhost:8025) |
-| MinIO | `9000`, `9001` | `minioadmin` / `minioadmin`. API `minio:9000`. Console [http://localhost:9001](http://localhost:9001) |
+| Kafka | `9092` | Broker `kafka_container:29092` (Docker) / `localhost:9092` (host) |
+| Mailpit | `1025`, `8025` | SMTP `mailpit_container:1025`. UI [http://localhost:8025](http://localhost:8025) |
+| MinIO | `9000`, `9001` | `minioadmin` / `minioadmin`. API `minio_container:9000`. Console [http://localhost:9001](http://localhost:9001) |
 | Supervisor | Not published | Background workers, one container per PHP version, off by default |
 
 ## Daily use
@@ -121,42 +121,42 @@ docker compose stop php-8.3
 
 ### Connect from the application
 
-Inside a container, use the Docker service name. On the host, use `127.0.0.1` and the host ports in the table above.
+Inside a container, use the container name: the service name plus `_container`. On the host, use `127.0.0.1` and the host ports in the table above.
 
 ```dotenv
-DB_HOST=mysql
+DB_HOST=mysql_container
 DB_PORT=3306
 DB_USERNAME=root
 DB_PASSWORD=1
 
 # PostgreSQL — use this block when the app uses Postgres
 # DB_CONNECTION=pgsql
-# DB_HOST=postgres
+# DB_HOST=postgres_container
 # DB_PORT=5432
 # DB_DATABASE=postgres
 # DB_USERNAME=postgres
 # DB_PASSWORD=1
 
-REDIS_HOST=redis
+REDIS_HOST=redis_container
 REDIS_PORT=6379
 
-RABBITMQ_HOST=rabbitmq
+RABBITMQ_HOST=rabbitmq_container
 RABBITMQ_PORT=5672
 RABBITMQ_USER=admin
 RABBITMQ_PASSWORD=admin
 
-# From PHP containers use kafka:29092; from the host use localhost:9092
-KAFKA_BROKERS=kafka:29092
+# From PHP containers use kafka_container:29092; from the host use localhost:9092
+KAFKA_BROKERS=kafka_container:29092
 
 MAIL_MAILER=smtp
-MAIL_HOST=mailpit
+MAIL_HOST=mailpit_container
 MAIL_PORT=1025
 
 AWS_ACCESS_KEY_ID=minioadmin
 AWS_SECRET_ACCESS_KEY=minioadmin
 AWS_DEFAULT_REGION=us-east-1
 AWS_BUCKET=local
-AWS_ENDPOINT=http://minio:9000
+AWS_ENDPOINT=http://minio_container:9000
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
 
@@ -248,7 +248,7 @@ Stop the other process, or change the host side of the port mapping. In `compose
 
 ### PHP cannot reach MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, or MinIO
 
-Use the service hostname (`mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, `minio`). Start the matching profile when `docker compose ps` does not list it. From PHP, the Kafka broker is `kafka:29092`.
+Use the container name (`mysql_container`, `postgres_container`, `redis_container`, `rabbitmq_container`, `kafka_container`, `mailpit_container`, `minio_container`). Start the matching profile when `docker compose ps` does not list it. From PHP, the Kafka broker is `kafka_container:29092`.
 
 ### Windows: Install / Create PHP version fails
 
@@ -421,7 +421,24 @@ docker compose start mysql
 
 Open a bug on [Issues](https://github.com/hailong289/multi-php-docker/issues) with steps to reproduce, expected and actual behavior, your OS, `docker --version`, `docker compose version`, and relevant logs (`docker compose logs`, the Manager UI, or files under `runtime/` and `php-controller-runtime/status/`). Leave out passwords, tokens, and private project paths.
 
-Branch from the latest `master` (`fix/…`, `feat/…`, `docs/…`, or `chore/…`), push, and open a pull request into `master`. Keep fixes off `master` itself. Link the issue, for example `Fixes #123`.
+Check out the latest `develop`, create your branch from it, and do the work on that branch:
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b fix/short-description
+```
+
+Name the branch with one of these prefixes, then a short description:
+
+| Prefix | Use when |
+| --- | --- |
+| `fix/` | You are fixing a bug. Example: `fix/nginx-reload-timeout` |
+| `feat/` | You are adding a feature. Example: `feat/add-php-8.6` |
+| `docs/` | You are changing documentation only. Example: `docs/readme-hosts` |
+| `chore/` | You are changing build, CI, or tooling, with no product behavior change. Example: `chore/update-ci` |
+
+Push the branch and open a pull request into `develop`. Link the issue, for example `Fixes #123`.
 
 ## Author
 
