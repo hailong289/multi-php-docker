@@ -2241,6 +2241,42 @@ select:focus:not([class*='p-']) {
   margin-bottom: 0.9rem;
 }
 
+.source-log-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.source-log-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong, var(--panel));
+}
+
+.source-log-folder-label {
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.source-log-folder code {
+  font-size: 0.95rem;
+}
+
+.source-log-folder-note {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .source-log-config .p-error,
 .source-log-file .p-error {
   margin: 0;

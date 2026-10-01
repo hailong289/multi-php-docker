@@ -47,6 +47,11 @@ const logFiles = computed(() => source.value?.files || [])
 const editorDirty = computed(() => editing.value && editorDraft.value !== editorOriginal.value)
 
 const presetPath = computed(() => LOG_PRESETS[frameworkDraft.value] || '')
+const customPath = computed(() =>
+  String(logPathDraft.value || '')
+    .trim()
+    .replace(/^\/+|\/+$/g, ''),
+)
 
 const pageSubtitle = computed(() => {
   const item = source.value
@@ -337,6 +342,11 @@ async function deleteFile() {
   }
 }
 
+async function useDefaultPath() {
+  logPathDraft.value = ''
+  await saveConfig()
+}
+
 async function saveConfig() {
   if (!source.value) return
   pending.value = 'save'
@@ -344,7 +354,7 @@ async function saveConfig() {
   try {
     const result = await apiSend('PUT', `/api/sources/${encodeURIComponent(source.value.key)}/log-config`, {
       framework: frameworkDraft.value,
-      log_path: logPathDraft.value,
+      log_path: customPath.value,
     })
     showToast('success', t(result.message_key || 'source_logs.config_saved'))
     if (result.source) {
@@ -472,7 +482,7 @@ onUnmounted(() => {
           <label>{{ t('source_logs.path') }}</label>
           <InputText
             v-model="logPathDraft"
-            :placeholder="presetPath || t('source_logs.path_placeholder')"
+            :placeholder="t('source_logs.path_placeholder')"
             autocomplete="off"
             fluid
           />
@@ -484,10 +494,7 @@ onUnmounted(() => {
             }}
           </p>
           <small v-if="fieldErrors.log_path" class="p-error">{{ fieldErrors.log_path }}</small>
-          <p v-if="resolvedPreview" class="form-path-hint">
-            {{ t('source_logs.resolved') }}: <code>{{ resolvedPreview }}</code>
-          </p>
-          <div>
+          <div class="source-log-config-actions">
             <Button
               type="button"
               size="small"
@@ -496,7 +503,32 @@ onUnmounted(() => {
               :disabled="!!pending"
               @click="saveConfig"
             />
+            <Button
+              v-if="customPath || source.log_path"
+              type="button"
+              size="small"
+              severity="secondary"
+              outlined
+              :label="t('source_logs.use_default')"
+              :disabled="!!pending"
+              @click="useDefaultPath"
+            />
           </div>
+        </div>
+
+        <div class="source-log-folder">
+          <span class="source-log-folder-label">{{ t('source_logs.folder') }}</span>
+          <code v-if="resolvedPreview">{{ resolvedPreview }}</code>
+          <span v-else class="nginx-template-meta">{{ t('source_logs.path_unset') }}</span>
+          <span class="source-log-folder-note">
+            {{
+              customPath
+                ? t('source_logs.using_custom')
+                : presetPath
+                  ? t('source_logs.using_default')
+                  : t('source_logs.preset_none')
+            }}
+          </span>
         </div>
 
         <p v-if="source.kind === 'unset'" class="status-line">{{ t('source_logs.unset') }}</p>
