@@ -19,6 +19,11 @@ function withApiPrefix(path) {
   return `${API_PREFIX}${p}`
 }
 
+/** Relative URL for EventSource / fetch streaming (same origin + session cookie). */
+export function apiRelativeUrl(path) {
+  return withApiPrefix(path)
+}
+
 const http = axios.create({
   timeout: API_TIMEOUT_MS,
   withCredentials: true,
@@ -53,12 +58,13 @@ export async function apiGet(path, options = {}) {
   }
 }
 
-export async function apiSend(method, path, body) {
+export async function apiSend(method, path, body, options = {}) {
   try {
     const response = await http.request({
       method,
       url: withApiPrefix(path),
       data: body,
+      timeout: options.timeout ?? API_TIMEOUT_MS,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',

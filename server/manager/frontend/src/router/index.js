@@ -1,12 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DomainsView from '../views/DomainsView.vue'
 import HomeView from '../views/HomeView.vue'
-import LoginView from '../views/LoginView.vue'
 import PhpVersionsView from '../views/PhpVersionsView.vue'
 import PhpVersionCatalogView from '../views/PhpVersionCatalogView.vue'
 import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
+import PhpRunView from '../views/PhpRunView.vue'
 import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
+import ComposeYamlView from '../views/ComposeYamlView.vue'
+import PhpComposeYamlView from '../views/PhpComposeYamlView.vue'
+import ServiceLogsView from '../views/ServiceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
 import TerminalView from '../views/TerminalView.vue'
 import { apiGet, setCsrfToken } from '../api'
@@ -17,12 +20,6 @@ const BASE = '/server-manage/'
 const router = createRouter({
   history: createWebHistory(BASE),
   routes: [
-    {
-      path: '/login',
-      name: 'login',
-      component: LoginView,
-      meta: { public: true, titleKey: 'login.title' },
-    },
     {
       path: '/',
       name: 'home',
@@ -54,10 +51,34 @@ const router = createRouter({
       meta: { titleKey: 'nav.services', manager: true },
     },
     {
+      path: '/services/compose',
+      name: 'compose-yaml',
+      component: ComposeYamlView,
+      meta: { titleKey: 'services.manage_compose_yaml', manager: true },
+    },
+    {
+      path: '/services/compose-files/:name/logs',
+      name: 'compose-file-logs',
+      component: ServiceLogsView,
+      meta: { titleKey: 'services.logs_page_title', manager: true, logsKind: 'compose' },
+    },
+    {
+      path: '/services/:service/logs',
+      name: 'service-logs',
+      component: ServiceLogsView,
+      meta: { titleKey: 'services.logs_page_title', manager: true, logsKind: 'infra' },
+    },
+    {
       path: '/php-versions',
       name: 'php-versions',
       component: PhpVersionsView,
       meta: { titleKey: 'nav.php_versions', manager: true },
+    },
+    {
+      path: '/php-versions/compose',
+      name: 'php-compose-yaml',
+      component: PhpComposeYamlView,
+      meta: { titleKey: 'php_controller.manage_yaml', manager: true },
     },
     {
       path: '/php-versions/catalog',
@@ -72,6 +93,18 @@ const router = createRouter({
       meta: { titleKey: 'supervisor.title', manager: true },
     },
     {
+      path: '/php-versions/:service/run',
+      name: 'php-version-run',
+      component: PhpRunView,
+      meta: { titleKey: 'php_controller.run_page_title', manager: true },
+    },
+    {
+      path: '/php-versions/:service/logs',
+      name: 'php-version-logs',
+      component: ServiceLogsView,
+      meta: { titleKey: 'php_controller.logs_page_title', manager: true, logsKind: 'php' },
+    },
+    {
       path: '/php-versions/:service',
       name: 'php-version-detail',
       component: PhpVersionDetailView,
@@ -80,6 +113,10 @@ const router = createRouter({
     {
       path: '/supervisor',
       redirect: '/php-versions',
+    },
+    {
+      path: '/compose',
+      redirect: '/services/compose',
     },
     {
       path: '/:pathMatch(.*)*',
@@ -99,19 +136,7 @@ router.beforeEach(async (to) => {
   try {
     await ensureSession()
   } catch (_) {
-    applySessionPayload({
-      remote: false,
-      authenticated: true,
-      locked: false,
-      domain: '',
-    })
-  }
-
-  if (authState.remote && (!authState.authenticated || authState.locked) && !to.meta.public) {
-    return { name: 'login' }
-  }
-  if (authState.remote && authState.authenticated && !authState.locked && to.name === 'login') {
-    return { name: 'home' }
+    applySessionPayload({})
   }
 
   return true

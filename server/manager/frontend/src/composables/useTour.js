@@ -17,10 +17,13 @@ const PAGE_READY = {
   domains: '[data-tour="domains-panel"]',
   nginx: '[data-tour="nginx-panel"]',
   services: '[data-tour="services-panel"]',
+  'service-logs': '[data-tour="service-logs-panel"]',
   'php-versions': '[data-tour="php-panel"]',
+  'php-version-logs': '[data-tour="service-logs-panel"]',
   'php-version-detail': '[data-tour="php-detail-panel"]',
   'php-version-catalog': '[data-tour="php-catalog-panel"]',
   'php-version-supervisor': '[data-tour="supervisor-panel"]',
+  'php-version-run': '[data-tour="php-run-sessions"]',
   terminal: '[data-tour="terminal-panel"]',
 }
 
@@ -161,6 +164,7 @@ export function useTour() {
       'php-versions',
       'php-version-detail',
       'php-version-supervisor',
+      'php-version-run',
     ].includes(tourId)
   }
 

@@ -7,10 +7,13 @@ namespace Manager\Controllers;
 use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\PhpControllerDaemon;
 use Manager\Models\PhpDetails;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 use Manager\Models\PhpRuntime;
+use Manager\Models\PhpScratchPad;
+use Manager\Models\PhpSnippetRunner;
 use Manager\Models\DockerHubPhpTags;
 use Manager\Models\PhpVersionInstaller;
 
@@ -78,13 +81,48 @@ final class PhpControllerController extends Controller
     {
         $service = (string) ($params['service'] ?? '');
         $action = (string) ($params['action'] ?? '');
+        $runtime = new PhpRuntime();
+        $targets = PhpRuntime::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('php_controller.invalid_service', 400);
+        }
+        $target = $targets[$service];
+
+        if ($action === 'delete') {
+            $runtime->deleteContainer($service);
+
+            return Response::json([
+                'message_key' => 'services.deleted',
+                'message_parameters' => [
+                    'service' => $target['label'],
+                ],
+                'php_controllers' => [
+                    'targets' => PhpRuntime::targets(),
+                    'statuses' => $runtime->statuses(),
+                ],
+            ]);
+        }
+
+        if ($action === 'delete-image') {
+            $runtime->deleteImage($service);
+
+            return Response::json([
+                'message_key' => 'services.image_deleted',
+                'message_parameters' => [
+                    'service' => $target['label'],
+                ],
+                'php_controllers' => [
+                    'targets' => PhpRuntime::targets(),
+                    'statuses' => $runtime->statuses(),
+                ],
+            ]);
+        }
+
         if ($action === 'create') {
             // Repair missing include after a partial install (files written, queue failed).
             (new PhpVersionInstaller())->repairComposeInclude($service);
         }
-        $runtime = new PhpRuntime();
         $requestId = $runtime->request($service, $action);
-        $target = PhpRuntime::targets()[$service];
 
         return Response::json([
             'request_id' => $requestId,
@@ -109,6 +147,25 @@ final class PhpControllerController extends Controller
         ]);
     }
 
+    public function logs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $tail = (int) ($request->queryParam('tail') ?? 300);
+
+        return Response::json([
+            'logs' => (new PhpRuntime())->logs($service, $tail),
+        ]);
+    }
+
+    public function actionLogs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'logs' => (new PhpRuntime())->actionLogs($service),
+        ]);
+    }
+
     public function saveIni(Request $request, array $params = []): Response
     {
         $service = (string) ($params['service'] ?? '');
@@ -121,6 +178,117 @@ final class PhpControllerController extends Controller
         return Response::json([
             'message_key' => 'php_controller.ini_saved',
             'php_details' => (new PhpDetails())->forService($service),
+        ]);
+    }
+
+    public function runSnippet(Request $request, array $params = []): Response
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        $service = (string) ($params['service'] ?? '');
+        $code = $request->json()['code'] ?? null;
+        if (!is_string($code)) {
+            throw new HttpException('php_controller.code_empty', 400);
+        }
+        $result = (new PhpSnippetRunner())->run($service, $code);
+        $sessionId = $request->json()['session_id'] ?? null;
+        $scratch = (new PhpScratchPad())->write(
+            $service,
+            $code,
+            $result,
+            true,
+            is_string($sessionId) && PhpScratchPad::isValidId($sessionId) ? $sessionId : null,
+        );
+
+        return Response::json([
+            'message_key' => $result['timed_out']
+                ? 'php_controller.run_timed_out'
+                : 'php_controller.run_finished',
+            'php_run' => $result,
+            'php_scratch' => $scratch,
+        ]);
+    }
+
+    public function showScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'php_scratch' => (new PhpScratchPad())->read($service),
+        ]);
+    }
+
+    public function createScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $name = $request->json()['name'] ?? '';
+        if (!is_string($name)) {
+            $name = '';
+        }
+        $scratch = (new PhpScratchPad())->create($service, $name);
+
+        return Response::json([
+            'message_key' => 'php_controller.session_created',
+            'php_scratch' => $scratch,
+        ]);
+    }
+
+    public function saveScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $id = (string) ($params['id'] ?? '');
+        $body = $request->json();
+        if ($id === '') {
+            $id = is_string($body['session_id'] ?? null) ? $body['session_id'] : '';
+        }
+        $pad = new PhpScratchPad();
+        if ($id !== '' && !PhpScratchPad::isValidId($id)) {
+            throw new HttpException('php_controller.session_not_found', 404);
+        }
+        $code = $body['code'] ?? null;
+        $name = $body['name'] ?? null;
+        $activate = !empty($body['activate']);
+        $scratch = $pad->read($service);
+        if ($id === '') {
+            $id = (string) $scratch['active_id'];
+        }
+        if (is_string($name)) {
+            $scratch = $pad->rename($service, $id, $name);
+        }
+        if (is_string($code)) {
+            $result = $body['result'] ?? null;
+            $scratch = $pad->write(
+                $service,
+                $code,
+                is_array($result) ? $result : null,
+                true,
+                $id,
+            );
+        } elseif ($activate || $id !== $scratch['active_id']) {
+            $scratch = $pad->activate($service, $id);
+        }
+
+        return Response::json([
+            'message_key' => is_string($name) && !is_string($code)
+                ? 'php_controller.session_renamed'
+                : 'php_controller.scratch_saved',
+            'php_scratch' => $scratch,
+        ]);
+    }
+
+    public function deleteScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $id = (string) ($params['id'] ?? '');
+        if (!PhpScratchPad::isValidId($id)) {
+            throw new HttpException('php_controller.session_not_found', 404);
+        }
+        $scratch = (new PhpScratchPad())->delete($service, $id);
+
+        return Response::json([
+            'message_key' => 'php_controller.session_deleted',
+            'php_scratch' => $scratch,
         ]);
     }
 
@@ -184,5 +352,12 @@ final class PhpControllerController extends Controller
             'message_key' => 'php_controller.extension_uninstall_requested',
             'message_parameters' => ['extension' => $name],
         ]);
+    }
+
+    public function startDaemon(Request $request, array $params = []): Response
+    {
+        $result = (new PhpControllerDaemon())->start();
+
+        return Response::json($result);
     }
 }

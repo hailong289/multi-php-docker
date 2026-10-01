@@ -86,6 +86,11 @@ final class DockerLiveState
             return $status;
         }
 
+        // Keep failed create/install as error when no container exists so Create can retry.
+        if (($status['state'] ?? '') === 'error' && $live === 'not_created') {
+            return $status;
+        }
+
         if (($status['state'] ?? null) !== $live) {
             $status['state'] = $live;
             $status['message_key'] = $refreshedMessageKey;

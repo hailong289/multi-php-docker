@@ -8,14 +8,24 @@ use Manager\Http\HttpException;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
+use Manager\Support\JsonFile;
 
 final class NginxManagement
 {
+    private ?PhpControllerDaemon $daemon;
+
     public function __construct(
         private readonly string $controllerPath = '',
         private readonly string $runtimePath = '',
         private readonly string $logsPath = '',
+        ?PhpControllerDaemon $daemon = null,
     ) {
+        $this->daemon = $daemon;
+    }
+
+    private function daemon(): PhpControllerDaemon
+    {
+        return $this->daemon ??= new PhpControllerDaemon();
     }
 
     public function status(): array
@@ -30,13 +40,11 @@ final class NginxManagement
             'updated_at' => '',
         ];
         $file = $base . '/status/nginx.json';
-        if (is_file($file) && is_readable($file)) {
-            $decoded = json_decode((string) file_get_contents($file), true);
-            if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
-                $status = array_merge($status, array_intersect_key($decoded, $status));
-            }
+        $decoded = JsonFile::readObject($file);
+        if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
+            $status = array_merge($status, array_intersect_key($decoded, $status));
         }
-        if (ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
+        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
         } else {
@@ -54,6 +62,8 @@ final class NginxManagement
         if (!in_array($action, ['start', 'stop', 'restart'], true)) {
             throw new HttpException('nginx.invalid_action', 400);
         }
+        $this->daemon()->assertRunning();
+
         $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/');
         $dir = $base . '/requests';
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
@@ -104,7 +114,9 @@ final class NginxManagement
         $test = $runtime . '/nginx.test.log';
         $reload = $runtime . '/nginx.reload.log';
         $operation = (is_file($test) && (!is_file($reload) || filemtime($test) >= filemtime($reload))) ? $test : $reload;
+
         return [
+            'action' => $this->tailFile($this->newestControllerActionLog()),
             'operation' => $this->tailFile($operation),
             'error' => $this->tailFile($logs . '/error.log'),
             'access' => $this->tailFile($logs . '/access.log'),
@@ -112,20 +124,49 @@ final class NginxManagement
     }
 
     /**
+     * Newest php-controller nginx.last-{start|restart|stop}.log (contains docker logs on failed start).
+     */
+    private function newestControllerActionLog(): string
+    {
+        $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/') . '/status';
+        $best = '';
+        $bestMtime = -1;
+        foreach (['nginx.last-start.log', 'nginx.last-restart.log', 'nginx.last-stop.log'] as $name) {
+            $path = $base . '/' . $name;
+            if (!is_file($path)) {
+                continue;
+            }
+            $mtime = (int) filemtime($path);
+            if ($mtime >= $bestMtime) {
+                $bestMtime = $mtime;
+                $best = $path;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
      * Truncate one global nginx manager log panel file.
      *
-     * @param 'operation'|'error'|'access' $name
+     * @param 'action'|'operation'|'error'|'access' $name
      * @return list<string> cleared basenames
      */
     public function clearGlobalLog(string $name): array
     {
-        if (!in_array($name, ['operation', 'error', 'access'], true)) {
+        if (!in_array($name, ['action', 'operation', 'error', 'access'], true)) {
             throw new HttpException('nginx.global_clear_invalid', 400);
         }
 
         $runtime = rtrim($this->runtimePath ?: Config::runtimePath(), '/');
         $logs = rtrim($this->logsPath ?: Config::nginxLogsPath(), '/');
+        $controllerStatus = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/') . '/status';
         $paths = match ($name) {
+            'action' => [
+                $controllerStatus . '/nginx.last-start.log',
+                $controllerStatus . '/nginx.last-restart.log',
+                $controllerStatus . '/nginx.last-stop.log',
+            ],
             'operation' => [
                 $runtime . '/nginx.test.log',
                 $runtime . '/nginx.reload.log',

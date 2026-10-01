@@ -1,9 +1,21 @@
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiGet, apiSend, setCsrfToken } from '../api'
+import { apiGet, apiRelativeUrl, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
 import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
+import { addToast, toastSeverityFromType } from '../lib/toast'
+import { confirmDialog } from '../lib/confirm'
+import { SOURCE_PREFIX } from '../lib/frameworkPaths'
+
+const STATUS_STREAM_PATH = '/api/status/stream'
+const STATUS_STREAM_EVENTS = ['servers', 'nginx', 'hosts', 'php', 'infra', 'supervisor']
+const STATUS_FALLBACK_MS = 5000
+
+/** @type {EventSource|null} */
+let statusStreamSource = null
+let statusStreamsWanted = false
+let statusFallbackTimer = null
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
@@ -15,15 +27,12 @@ const reloadMessageKeys = {
 
 const loading = ref(true)
 const fatalError = ref('')
-const toasts = ref([])
 const editingKey = ref(null)
 const fieldErrors = ref({})
 const busy = ref(false)
 const pendingAction = ref(null)
 const modalOpen = ref(false)
 const bootstrapped = ref(false)
-let toastSeq = 0
-const toastTimers = new Map()
 
 const data = reactive({
   servers: {},
@@ -36,16 +45,24 @@ const data = reactive({
   hosts_write_enabled: true,
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
-  infra_services: { targets: {}, statuses: {} },
+  infra_services: { targets: {}, statuses: {}, compose_files: [] },
   supervisor_services: { targets: {}, statuses: {} },
+  php_controller_daemon: {
+    container: 'php_controller_container',
+    state: 'running',
+    start_available: false,
+  },
 })
 
 const form = reactive({
   app_name: '',
   domain_name: '',
-  server_path: '/var/www/source_php8.5/',
+  server_path: `${SOURCE_PREFIX}/`,
   php_version: 'php-8.5',
   enabled: true,
+  ssl_enabled: false,
+  ssl_certificate: '',
+  ssl_private_key: '',
 })
 
 const domainForm = reactive({
@@ -60,6 +77,11 @@ const domainFieldErrors = ref({})
 const hostsManualOpen = ref(false)
 const hostsManual = ref(null)
 const hostsProgress = ref(null)
+const pullProgress = ref(null)
+let pullProgressTimer = null
+
+const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate', 'recreate'])
+const PULL_PROGRESS_POLL_MS = 2000
 
 export function useManager() {
   const { t } = useI18n()
@@ -116,21 +138,13 @@ export function useManager() {
     return trKey(payload.key, payload.parameters || {})
   }
 
-  function dismissToast(id) {
-    const timer = toastTimers.get(id)
-    if (timer) {
-      clearTimeout(timer)
-      toastTimers.delete(id)
-    }
-    toasts.value = toasts.value.filter((toast) => toast.id !== id)
-  }
-
   function showToast(type, text) {
     if (!text) return
-    const id = ++toastSeq
-    toasts.value = [...toasts.value, { id, type, text }]
-    const timer = setTimeout(() => dismissToast(id), 4200)
-    toastTimers.set(id, timer)
+    addToast({
+      severity: toastSeverityFromType(type),
+      summary: text,
+      life: 4200,
+    })
   }
 
   function toastFromResult(result) {
@@ -147,6 +161,7 @@ export function useManager() {
     if (meta.service != null && current.service !== meta.service) return false
     if (meta.action != null && current.action !== meta.action) return false
     if (meta.domain != null && current.domain !== meta.domain) return false
+    if (meta.name != null && current.name !== meta.name) return false
     return true
   }
 
@@ -156,19 +171,118 @@ export function useManager() {
   }
 
   function applyBootstrap(payload) {
-    data.servers = payload.servers || {}
-    data.php_versions = payload.php_versions || {}
-    data.apply_command = payload.apply_command || ''
-    data.nginx_status = payload.nginx_status || null
-    data.nginx_management = payload.nginx_management || null
-    data.hosts_status = payload.hosts_status || null
-    data.hosts_extras = payload.hosts_extras || []
-    data.hosts_write_enabled = payload.hosts_write_enabled !== false
-    data.pending_sync = !!payload.pending_sync
-    data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
-    data.infra_services = payload.infra_services || { targets: {}, statuses: {} }
-    data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
+    applySubsystem('servers', payload)
+    applySubsystem('nginx', payload)
+    applySubsystem('hosts', payload)
+    applySubsystem('php', payload)
+    applySubsystem('infra', payload)
+    applySubsystem('supervisor', payload)
+    if (payload.profiles !== undefined) data.profiles = payload.profiles
     if (payload.csrf_token) setCsrfToken(payload.csrf_token)
+  }
+
+  function applySubsystem(id, payload) {
+    if (!payload || typeof payload !== 'object') return
+    switch (id) {
+      case 'servers':
+        if (payload.servers) data.servers = payload.servers
+        if (payload.php_versions) data.php_versions = payload.php_versions
+        if (payload.profiles !== undefined) data.profiles = payload.profiles
+        if (payload.apply_command !== undefined) data.apply_command = payload.apply_command || ''
+        break
+      case 'nginx':
+        if (payload.nginx_status !== undefined) data.nginx_status = payload.nginx_status
+        if (payload.nginx_management !== undefined) {
+          const next = payload.nginx_management
+          data.nginx_management = {
+            ...(data.nginx_management || {}),
+            ...next,
+            logs: next.logs
+              ? {
+                  ...(data.nginx_management?.logs || {}),
+                  ...next.logs,
+                }
+              : data.nginx_management?.logs,
+          }
+        }
+        break
+      case 'hosts':
+        if (payload.hosts_status !== undefined) data.hosts_status = payload.hosts_status
+        if (payload.hosts_extras !== undefined) data.hosts_extras = payload.hosts_extras
+        if (payload.hosts_write_enabled !== undefined) {
+          data.hosts_write_enabled = payload.hosts_write_enabled !== false
+        }
+        if (payload.pending_sync !== undefined) data.pending_sync = !!payload.pending_sync
+        break
+      case 'php':
+        if (payload.php_controllers) data.php_controllers = payload.php_controllers
+        if (payload.php_controller_daemon) data.php_controller_daemon = payload.php_controller_daemon
+        break
+      case 'infra':
+        if (payload.infra_services) data.infra_services = payload.infra_services
+        break
+      case 'supervisor':
+        if (payload.supervisor_services) data.supervisor_services = payload.supervisor_services
+        break
+      default:
+        break
+    }
+  }
+
+  function stopStatusFallback() {
+    if (statusFallbackTimer) {
+      clearInterval(statusFallbackTimer)
+      statusFallbackTimer = null
+    }
+  }
+
+  function startStatusFallback() {
+    if (statusFallbackTimer || !statusStreamsWanted) return
+    statusFallbackTimer = setInterval(() => {
+      if (statusStreamsWanted) loadBootstrap({ silent: true })
+    }, STATUS_FALLBACK_MS)
+  }
+
+  function closeStatusStream() {
+    if (statusStreamSource) {
+      statusStreamSource.close()
+      statusStreamSource = null
+    }
+  }
+
+  function openStatusStream() {
+    closeStatusStream()
+    if (!statusStreamsWanted) return
+    const es = new EventSource(apiRelativeUrl(STATUS_STREAM_PATH), { withCredentials: true })
+    for (const id of STATUS_STREAM_EVENTS) {
+      es.addEventListener(id, (ev) => {
+        try {
+          applySubsystem(id, JSON.parse(ev.data))
+          stopStatusFallback()
+        } catch (_) {}
+      })
+    }
+    es.addEventListener('reconnect', () => {
+      closeStatusStream()
+      if (statusStreamsWanted) openStatusStream()
+    })
+    es.onerror = () => {
+      startStatusFallback()
+    }
+    statusStreamSource = es
+  }
+
+  function startStatusStreams() {
+    if (statusStreamsWanted) return
+    statusStreamsWanted = true
+    stopStatusFallback()
+    openStatusStream()
+  }
+
+  function stopStatusStreams() {
+    statusStreamsWanted = false
+    closeStatusStream()
+    stopStatusFallback()
   }
 
   function versionFromContainer(container) {
@@ -187,11 +301,12 @@ export function useManager() {
     fieldErrors.value = {}
     form.app_name = ''
     form.domain_name = ''
-    form.server_path = data.php_versions['php-8.5']?.source_prefix
-      ? `${data.php_versions['php-8.5'].source_prefix}/`
-      : '/var/www/source_php8.5/'
+    form.server_path = `${SOURCE_PREFIX}/`
     form.php_version = 'php-8.5'
     form.enabled = true
+    form.ssl_enabled = false
+    form.ssl_certificate = ''
+    form.ssl_private_key = ''
   }
 
   function openAddModal() {
@@ -214,15 +329,13 @@ export function useManager() {
     form.server_path = server.SERVER_PATH || ''
     form.php_version = versionFromContainer(server.CONTAINER_PHP_VERSION || '')
     form.enabled = isServerEnabled(server)
+    form.ssl_enabled = server.ssl_enabled === true || server.SSL_ENABLED === true
+    form.ssl_certificate = ''
+    form.ssl_private_key = ''
     modalOpen.value = true
   }
 
   async function loadBootstrap({ silent = false } = {}) {
-    if (authState.remote && (!authState.authenticated || authState.locked)) {
-      bootstrapped.value = false
-      if (!silent) loading.value = false
-      return
-    }
     if (!silent) {
       loading.value = true
       fatalError.value = ''
@@ -232,18 +345,6 @@ export function useManager() {
       applyBootstrap(payload)
       bootstrapped.value = true
     } catch (error) {
-      if (error?.status === 401 && authState.remote) {
-        applySessionPayload({
-          remote: true,
-          authenticated: false,
-          locked: authState.locked,
-          domain: authState.domain,
-        })
-        bootstrapped.value = false
-        const { default: router } = await import('../router')
-        await router.push({ name: 'login' })
-        return
-      }
       if (!silent) {
         fatalError.value = translateApiError(error)
       }
@@ -254,31 +355,21 @@ export function useManager() {
     }
   }
 
-  async function logout() {
-    try {
-      const result = await apiSend('POST', '/api/logout', {})
-      if (result.csrf_token) setCsrfToken(result.csrf_token)
-    } catch (_) {
-      /* still clear local auth */
-    }
-    applySessionPayload({
-      remote: authState.remote,
-      authenticated: false,
-      locked: authState.locked,
-      domain: authState.domain,
-      hosts_write_enabled: authState.hosts_write_enabled,
-    })
-    bootstrapped.value = false
-    const { default: router } = await import('../router')
-    await router.push({ name: 'login' })
-  }
-
   async function saveServer() {
     busy.value = true
     pendingAction.value = { kind: 'save' }
     fieldErrors.value = {}
     try {
-      const body = { ...form }
+      const body = {
+        app_name: form.app_name,
+        domain_name: form.domain_name,
+        server_path: form.server_path,
+        php_version: form.php_version,
+        enabled: form.enabled,
+        ssl_enabled: !!form.ssl_enabled,
+      }
+      if (form.ssl_certificate) body.ssl_certificate = form.ssl_certificate
+      if (form.ssl_private_key) body.ssl_private_key = form.ssl_private_key
       const result = editingKey.value
         ? await apiSend('PUT', `/api/servers/${editingKey.value}`, body)
         : await apiSend('POST', '/api/servers', body)
@@ -298,7 +389,7 @@ export function useManager() {
   }
 
   async function deleteServer(key, confirmKey = 'confirm.delete') {
-    if (!confirm(t(confirmKey))) return
+    if (!(await confirmDialog(t(confirmKey), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
     try {
@@ -307,6 +398,31 @@ export function useManager() {
       toastFromResult(result)
       if (editingKey.value === key) closeModal()
       if (domainEditingKey.value === key) closeDomainModal()
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function regenerateSsl(key) {
+    const server = data.servers[key]
+    if (!server) return
+    busy.value = true
+    pendingAction.value = { kind: 'ssl-regenerate', key }
+    try {
+      const body = {
+        app_name: server.APP_NAME || '',
+        domain_name: server.DOMAIN_NAME || '',
+        server_path: server.SERVER_PATH || '',
+        php_version: versionFromContainer(server.CONTAINER_PHP_VERSION || ''),
+        enabled: isServerEnabled(server),
+        ssl_enabled: true,
+      }
+      const result = await apiSend('PUT', `/api/servers/${key}`, body)
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      showToast('success', t('flash.ssl_regenerated'))
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -353,7 +469,7 @@ export function useManager() {
       showToast('failure', t('error.hosts_only_delete'))
       return
     }
-    if (!confirm(t('domains.confirm_delete'))) return
+    if (!(await confirmDialog(t('domains.confirm_delete'), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     const domain = String(key).slice('hosts:'.length)
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
@@ -375,6 +491,15 @@ export function useManager() {
       busy.value = false
       pendingAction.value = null
     }
+  }
+
+  async function removeDomainEntry(item) {
+    if (!item?.key) return
+    if (item.source === 'hosts') {
+      await deleteDomain(item.key)
+      return
+    }
+    await deleteServer(item.key, 'domains.confirm_delete_server')
   }
 
   async function reloadNginx() {
@@ -422,11 +547,48 @@ export function useManager() {
 
   /** Queue a PHP container lifecycle action; status updates via bootstrap poll. */
   async function phpAction(service, action) {
+    const target = data.php_controllers?.targets?.[service]
+    if (action === 'delete') {
+      if (!(await confirmDialog(t('services.delete_confirm', {
+            service: target?.label || service,
+            container: target?.container || service,
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
+    }
+    if (action === 'delete-image') {
+      if (!(await confirmDialog(t('services.delete_image_confirm', {
+            service: target?.label || service,
+            image: target?.image || service,
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
+    }
     pendingAction.value = { kind: 'php', service, action }
     try {
       const result = await apiSend('POST', `/api/php-controllers/${service}/${action}`, {})
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
+      if (action === 'delete' || action === 'delete-image') {
+        await loadBootstrap({ silent: true })
+        return
+      }
+      await waitForPullProgress({
+        runtime: 'php',
+        service,
+        action,
+        label: target?.label || service,
+      })
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  async function startPhpControllerDaemon() {
+    pendingAction.value = { kind: 'php-daemon', action: 'start' }
+    try {
+      const result = await apiSend('POST', '/api/php-controller/start', {})
+      toastFromResult(result)
+      if (result.php_controller_daemon) data.php_controller_daemon = result.php_controller_daemon
+      await loadBootstrap({ silent: true })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -436,11 +598,52 @@ export function useManager() {
 
   /** Queue an infra container lifecycle action; status updates via bootstrap poll. */
   async function infraAction(service, action) {
+    const target = data.infra_services?.targets?.[service]
+    if (action === 'delete') {
+      if (!(await confirmDialog(t('services.delete_confirm', {
+            service: target?.label || service,
+            container: target?.container || service,
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
+    }
+    if (action === 'delete-image') {
+      if (!(await confirmDialog(t('services.delete_image_confirm', {
+            service: target?.label || service,
+            image: target?.image || service,
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
+    }
     pendingAction.value = { kind: 'infra', service, action }
     try {
       const result = await apiSend('POST', `/api/infra-services/${service}/${action}`, {})
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
+      if (action === 'delete' || action === 'delete-image') return
+      await waitForPullProgress({
+        runtime: 'infra',
+        service,
+        action,
+        label: target?.label || service,
+      })
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  /** Queue a Supervisor container lifecycle action; status updates via bootstrap poll. */
+  async function supervisorAction(service, action) {
+    const target = data.supervisor_services?.targets?.[service]
+    pendingAction.value = { kind: 'supervisor', service, action }
+    try {
+      const result = await apiSend('POST', `/api/supervisor/${service}/${action}`, {})
+      toastFromResult(result)
+      if (result.supervisor_services) data.supervisor_services = result.supervisor_services
+      await waitForPullProgress({
+        runtime: 'supervisor',
+        service,
+        action,
+        label: target?.label || service,
+      })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -493,6 +696,135 @@ export function useManager() {
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  function pullProgressLabel(runtime, service, composeFile) {
+    if (runtime === 'compose') return composeFile || service
+    if (runtime === 'infra') return data.infra_services?.targets?.[service]?.label || service
+    if (runtime === 'php') return data.php_controllers?.targets?.[service]?.label || service
+    if (runtime === 'supervisor') return data.supervisor_services?.targets?.[service]?.label || service
+    return service
+  }
+
+  function pullProgressBootstrapState(job) {
+    if (job.runtime === 'compose') {
+      const row = data.infra_services?.compose_files?.find((file) => file.name === job.composeFile)
+      return row?.state || 'busy'
+    }
+    if (job.runtime === 'infra') return infraServiceState(job.service)
+    if (job.runtime === 'php') return phpServiceState(job.service)
+    if (job.runtime === 'supervisor') return supervisorServiceState(job.service)
+    return job.state || 'busy'
+  }
+
+  function pullProgressLogsUrl(job) {
+    if (job.runtime === 'compose') {
+      return `/api/infra-services/compose-files/${encodeURIComponent(job.composeFile)}/action-logs`
+    }
+    if (job.runtime === 'infra') {
+      return `/api/infra-services/${job.service}/action-logs`
+    }
+    if (job.runtime === 'php') {
+      return `/api/php-controllers/${job.service}/action-logs`
+    }
+    if (job.runtime === 'supervisor') {
+      return `/api/supervisor/${job.service}/action-logs`
+    }
+    return null
+  }
+
+  function stopPullProgressTimer() {
+    if (pullProgressTimer) {
+      clearInterval(pullProgressTimer)
+      pullProgressTimer = null
+    }
+  }
+
+  function resolvePullProgressState(job, liveState, logState) {
+    if (liveState === 'busy' || logState === 'busy') {
+      job.sawBusy = true
+      return 'busy'
+    }
+    if (liveState === 'error' || logState === 'error') return 'error'
+    const pending =
+      (job.runtime === 'compose' &&
+        pendingAction.value?.kind === 'compose-file' &&
+        pendingAction.value?.name === job.composeFile) ||
+      (job.runtime !== 'compose' &&
+        pendingAction.value?.kind === job.runtime &&
+        pendingAction.value?.service === job.service)
+    if (pending && !job.sawBusy) return 'busy'
+    return logState || liveState || 'busy'
+  }
+
+  async function pollPullProgress() {
+    const job = pullProgress.value
+    if (!job) return
+
+    await loadBootstrap({ silent: true })
+    const liveState = pullProgressBootstrapState(job)
+
+    const url = pullProgressLogsUrl(job)
+    let logState = ''
+    if (url) {
+      try {
+        const result = await apiGet(url)
+        const logs = result.logs || {}
+        job.content = logs.content || logs.recreate_log || logs.create_log || ''
+        logState = logs.state || ''
+      } catch (_) {
+        // keep previous output
+      }
+    }
+
+    job.state = resolvePullProgressState(job, liveState, logState)
+    job.loading = false
+  }
+
+  function startPullProgress({ runtime, service = '', action, label, composeFile = '' }) {
+    stopPullProgressTimer()
+    pullProgress.value = {
+      runtime,
+      service,
+      composeFile,
+      action,
+      label: label || pullProgressLabel(runtime, service, composeFile),
+      dismissed: false,
+      state: 'busy',
+      content: '',
+      loading: true,
+      sawBusy: false,
+    }
+    pollPullProgress()
+    pullProgressTimer = setInterval(pollPullProgress, PULL_PROGRESS_POLL_MS)
+  }
+
+  function dismissPullProgress() {
+    if (pullProgress.value) pullProgress.value.dismissed = true
+  }
+
+  async function waitForPullProgress(job) {
+    if (!PULL_TRACKED_ACTIONS.has(job.action)) return
+
+    startPullProgress(job)
+
+    const deadline = Date.now() + 120_000
+    while (Date.now() < deadline) {
+      const current = pullProgress.value
+      if (!current) break
+      if (current.state !== 'busy') break
+      await sleep(PULL_PROGRESS_POLL_MS)
+      await pollPullProgress()
+    }
+    await pollPullProgress()
+    stopPullProgressTimer()
+    for (let i = 0; i < 4; i += 1) {
+      if (!pullProgress.value || pullProgress.value.dismissed) break
+      if (pullProgress.value.state !== 'busy') break
+      await sleep(1200)
+      await pollPullProgress()
+    }
+    await pollPullProgress()
   }
 
   async function waitForHostsResult(previousUpdatedAt, maxAttempts = 5) {
@@ -652,10 +984,6 @@ export function useManager() {
   }
 
   async function writeDomainHostsAdmin(domainName) {
-    if (!data.hosts_write_enabled) {
-      showToast('failure', t('error.hosts_write_disabled_remote'))
-      return
-    }
     const domain = String(domainName || '').toLowerCase()
     if (!domain) return
     busy.value = true
@@ -723,7 +1051,9 @@ export function useManager() {
 
   function stateClass(state) {
     if (state === 'running') return 'state-running'
+    if (state === 'stopped') return 'state-stopped'
     if (state === 'error' || state === 'busy') return `state-${state}`
+    if (state === 'not_created') return 'state-idle'
     return ''
   }
 
@@ -747,10 +1077,17 @@ export function useManager() {
         if (row?.state === 'busy') return true
       }
     }
+    for (const file of data.infra_services?.compose_files || []) {
+      if (file.state === 'busy') return true
+    }
     const nginx = data.nginx_management
     if (nginx?.state === 'busy') return true
     return false
   })
+
+  const phpControllerDaemonRunning = computed(
+    () => data.php_controller_daemon?.state === 'running',
+  )
 
   function phpServiceState(service) {
     return data.php_controllers.statuses[service]?.state || 'not_created'
@@ -758,10 +1095,20 @@ export function useManager() {
 
   function phpActionEnabled(service, action) {
     if (isPending('php', { service })) return false
+    if (!phpControllerDaemonRunning.value) return false
     const state = phpServiceState(service)
     const target = data.php_controllers.targets[service]
     if (action === 'create') {
-      return state === 'not_created' && target?.profile != null
+      return (state === 'not_created' || state === 'error') && target?.profile != null
+    }
+    if (action === 'recreate') {
+      return (state === 'running' || state === 'stopped' || state === 'error') && target?.profile != null
+    }
+    if (action === 'delete') {
+      return state === 'running' || state === 'stopped'
+    }
+    if (action === 'delete-image') {
+      return (state === 'not_created' || state === 'error') && !!target?.image_present
     }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
@@ -770,7 +1117,8 @@ export function useManager() {
   }
 
   function showCreateHint(service, target) {
-    return phpServiceState(service) === 'not_created' && target.profile !== null
+    const state = phpServiceState(service)
+    return (state === 'not_created' || state === 'error') && target.profile !== null
   }
 
   function infraServiceState(service) {
@@ -779,13 +1127,20 @@ export function useManager() {
 
   function infraActionEnabled(service, action) {
     if (isPending('infra', { service })) return false
+    if (!phpControllerDaemonRunning.value) return false
     const state = infraServiceState(service)
     const target = data.infra_services.targets[service]
     if (action === 'create') {
-      return state === 'not_created' && target?.profile != null
+      return (state === 'not_created' || state === 'error') && target?.profile != null
     }
     if (action === 'pull-recreate') {
       return state === 'running' || state === 'stopped'
+    }
+    if (action === 'delete') {
+      return state === 'running' || state === 'stopped'
+    }
+    if (action === 'delete-image') {
+      return (state === 'not_created' || state === 'error') && !!target?.image_present
     }
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
     if (action === 'start') return state === 'stopped'
@@ -794,29 +1149,171 @@ export function useManager() {
   }
 
   function showInfraCreateHint(service, target) {
-    return infraServiceState(service) === 'not_created' && target.profile !== null
+    const state = infraServiceState(service)
+    return (state === 'not_created' || state === 'error') && target.profile !== null
   }
 
-  watch(
-    () => form.php_version,
-    (version) => {
-      const prefix = data.php_versions[version]?.source_prefix
-      if (!prefix || editingKey.value) return
-      if (!form.server_path || form.server_path.startsWith('/var/www/source_php')) {
-        form.server_path = `${prefix}/`
+  function supervisorServiceState(service) {
+    return data.supervisor_services.statuses[service]?.state || 'not_created'
+  }
+
+  function supervisorActionEnabled(service, action) {
+    if (isPending('supervisor', { service })) return false
+    if (!phpControllerDaemonRunning.value) return false
+    const state = supervisorServiceState(service)
+    if (action === 'create') return state === 'not_created' || state === 'error'
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
+    return false
+  }
+
+  function composeYamlActionEnabled(item, action) {
+    if (item?.runtime !== 'compose') return false
+    if (isPending('compose-file', { name: item.name, action })) return false
+    if (!phpControllerDaemonRunning.value) return false
+    const state = item.state || 'not_created'
+    if (action === 'create') return state === 'not_created' || state === 'error'
+    if (action === 'recreate') return state === 'running' || state === 'stopped' || state === 'error'
+    if (action === 'delete') return state === 'running' || state === 'stopped'
+    if (action === 'delete-image') {
+      return (state === 'not_created' || state === 'error') && !!item.image_present
+    }
+    if (state === 'busy' || state === 'error' || state === 'not_created') return false
+    if (action === 'start') return state === 'stopped'
+    if (action === 'stop' || action === 'restart') return state === 'running'
+    return false
+  }
+
+  async function composeYamlAction(item, action) {
+    if (item?.runtime !== 'compose') return
+    const label = item.compose_services?.[0]?.name || item.name.replace(/\.ya?ml$/i, '')
+    const container = item.container || item.compose_services?.[0]?.container || label
+    if (action === 'delete') {
+      if (!(await confirmDialog(t('services.delete_confirm', {
+            service: label,
+            container,
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
+    }
+    if (action === 'delete-image') {
+      if (!(await confirmDialog(t('services.delete_image_confirm', {
+            service: label,
+            image: item.image || label,
+          }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
+    }
+    pendingAction.value = { kind: 'compose-file', name: item.name, action }
+    try {
+      const result = await apiSend(
+        'POST',
+        `/api/infra-services/compose-files/${encodeURIComponent(item.name)}/${action}`,
+        {},
+      )
+      toastFromResult(result)
+      if (result.infra_services) data.infra_services = result.infra_services
+      if (action === 'delete' || action === 'delete-image' || action === 'stop' || action === 'restart') {
+        await loadBootstrap({ silent: true })
+        return result
       }
-    },
-  )
+      await waitForPullProgress({
+        runtime: 'compose',
+        composeFile: item.name,
+        action,
+        label: item.name,
+      })
+      const deadline = Date.now() + 90_000
+      while (Date.now() < deadline) {
+        await loadBootstrap({ silent: true })
+        const row = data.infra_services?.compose_files?.find((file) => file.name === item.name)
+        if ((row?.state || 'busy') !== 'busy') break
+        await sleep(1500)
+      }
+      await loadBootstrap({ silent: true })
+      return result
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      pendingAction.value = null
+    }
+  }
+
+  function composeTabActionEnabled(item, action) {
+    if (!item?.runtime) return false
+    if (item.runtime === 'compose') {
+      if (action === 'recreate') return composeYamlActionEnabled(item, 'recreate')
+      return composeYamlActionEnabled(item, action)
+    }
+    if (!item.service) return false
+    if (action === 'create') {
+      if (item.runtime === 'infra') return infraActionEnabled(item.service, 'create')
+      if (item.runtime === 'php') return phpActionEnabled(item.service, 'create')
+      if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'create')
+    }
+    if (action === 'recreate') {
+      if (item.runtime === 'php') return phpActionEnabled(item.service, 'recreate')
+    }
+    if (action === 'delete' || action === 'delete-image') {
+      if (item.runtime === 'php') return phpActionEnabled(item.service, action)
+    }
+    if (action === 'start') {
+      if (item.runtime === 'infra') return infraActionEnabled(item.service, 'start')
+      if (item.runtime === 'supervisor') return supervisorActionEnabled(item.service, 'start')
+    }
+    if (action === 'pull-recreate' && item.runtime === 'infra' && item.pull_recreate) {
+      return infraActionEnabled(item.service, 'pull-recreate')
+    }
+    return false
+  }
+
+  async function composeTabAction(item, action) {
+    if (item.runtime === 'compose') return composeYamlAction(item, action)
+    if (!item?.runtime || !item.service) return
+    if (item.runtime === 'infra') return infraAction(item.service, action)
+    if (item.runtime === 'php') return phpAction(item.service, action)
+    if (item.runtime === 'supervisor') return supervisorAction(item.service, action)
+  }
+
+  function composeFileState(itemOrRuntime, service) {
+    if (itemOrRuntime && typeof itemOrRuntime === 'object') {
+      const item = itemOrRuntime
+      if (item.runtime === 'compose') return item.state || 'not_created'
+      if (!item.runtime || !item.service) return 'not_created'
+      return composeFileState(item.runtime, item.service)
+    }
+    const runtime = itemOrRuntime
+    if (runtime === 'infra') return infraServiceState(service)
+    if (runtime === 'php') return phpServiceState(service)
+    if (runtime === 'supervisor') return supervisorServiceState(service)
+    return 'not_created'
+  }
+
+  function composeFileActionEnabled(item, action) {
+    return composeTabActionEnabled(item, action)
+  }
+
+  async function composeFileAction(item, action) {
+    return composeTabAction(item, action)
+  }
+
+  function showComposeCreateHint(item) {
+    if (!item?.runtime) return false
+    if (item.runtime === 'compose') {
+      const state = item.state || 'not_created'
+      return state === 'not_created' || state === 'error'
+    }
+    if (!item.service) return false
+    const state = composeFileState(item)
+    return state === 'not_created' || state === 'error'
+  }
 
   return {
     loading,
     fatalError,
-    toasts,
     editingKey,
     fieldErrors,
     busy,
     pendingAction,
     dockerStatusBusy,
+    phpControllerDaemonRunning,
     modalOpen,
     bootstrapped,
     data,
@@ -829,23 +1326,30 @@ export function useManager() {
     hostsManualOpen,
     hostsManual,
     hostsProgress,
+    pullProgress,
+    dismissPullProgress,
     serverEntries,
     domainEntries,
     versionLabel,
     loadBootstrap,
-    logout,
+    startStatusStreams,
+    stopStatusStreams,
     openAddModal,
     openHostsDomainAdd,
     closeModal,
     startEdit,
     saveServer,
     deleteServer,
+    regenerateSsl,
     toggleServerEnabled,
     isServerEnabled,
     deleteDomain,
+    removeDomainEntry,
     reloadNginx,
     phpAction,
+    startPhpControllerDaemon,
     infraAction,
+    supervisorAction,
     openDomainEdit,
     closeDomainModal,
     saveDomain,
@@ -865,9 +1369,18 @@ export function useManager() {
     infraServiceState,
     infraActionEnabled,
     showInfraCreateHint,
+    supervisorServiceState,
+    supervisorActionEnabled,
+    composeFileState,
+    composeFileActionEnabled,
+    composeFileAction,
+    composeYamlAction,
+    composeYamlActionEnabled,
+    composeTabAction,
+    composeTabActionEnabled,
+    showComposeCreateHint,
     isPending,
     showToast,
-    dismissToast,
     translateApiError,
   }
 }

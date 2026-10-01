@@ -5,20 +5,31 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
+use Manager\Support\JsonFile;
 
 final class SupervisorRuntime
 {
     private readonly string $basePath;
+
     private readonly string $projectPath;
 
-    public function __construct(?string $basePath = null, ?string $projectPath = null)
+    private ?PhpControllerDaemon $daemon;
+
+    public function __construct(?string $basePath = null, ?string $projectPath = null, ?PhpControllerDaemon $daemon = null)
     {
         $this->basePath = rtrim($basePath ?? Config::phpControllerPath(), '/');
         $this->projectPath = rtrim($projectPath ?? Config::projectPath(), '/');
+        $this->daemon = $daemon;
+    }
+
+    private function daemon(): PhpControllerDaemon
+    {
+        return $this->daemon ??= new PhpControllerDaemon();
     }
 
     public static function targets(?string $projectPath = null): array
@@ -54,17 +65,15 @@ final class SupervisorRuntime
                 'updated_at' => '',
             ];
             $statusFile = $this->basePath . '/status/' . $service . '.json';
-            if (is_file($statusFile) && is_readable($statusFile)) {
-                $decoded = json_decode((string) file_get_contents($statusFile), true);
-                if (
-                    is_array($decoded)
-                    && ($decoded['service'] ?? null) === $service
-                    && in_array(($decoded['state'] ?? null), $allowedStates, true)
-                ) {
-                    $status = array_merge($status, array_intersect_key($decoded, $status));
-                }
+            $decoded = JsonFile::readObject($statusFile);
+            if (
+                is_array($decoded)
+                && ($decoded['service'] ?? null) === $service
+                && in_array(($decoded['state'] ?? null), $allowedStates, true)
+            ) {
+                $status = array_merge($status, array_intersect_key($decoded, $status));
             }
-            if ($this->hasBlockingRequests($service)) {
+            if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
                 $status['message_key'] = 'supervisor.processing';
             } else {
@@ -98,6 +107,8 @@ final class SupervisorRuntime
         if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
             throw new HttpException('supervisor.invalid_action', 400);
         }
+
+        $this->daemon()->assertRunning();
 
         $requestDir = $this->basePath . '/requests';
         if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {
@@ -235,5 +246,35 @@ final class SupervisorRuntime
         if (file_put_contents($path, '') === false) {
             throw new HttpException('supervisor.clear_failed', 500);
         }
+    }
+
+    /**
+     * @return array{
+     *     service: string,
+     *     state: string,
+     *     message_key: string,
+     *     request_id: string,
+     *     available: bool,
+     *     content: string,
+     *     create_log: string,
+     *     start_log: string,
+     *     updated_at: string
+     * }
+     */
+    public function actionLogs(string $service): array
+    {
+        $targets = self::targets($this->projectPath);
+        if (!isset($targets[$service])) {
+            throw new HttpException('supervisor.invalid_service', 400);
+        }
+
+        return array_merge(
+            ['service' => $service],
+            ActionLogReader::bundle(
+                $this->basePath . '/status',
+                $service,
+                static fn (array $decoded): bool => ($decoded['service'] ?? null) === $service,
+            ),
+        );
     }
 }

@@ -21,7 +21,7 @@ case "$ext" in
         run "pecl uninstall -r $ext 2>/dev/null || pecl uninstall $ext 2>/dev/null || true"
         disable_and_unlink "$ext"
         ;;
-    bcmath|intl|soap|exif|gmp|opcache)
+    bcmath|intl|soap|exif|gmp|opcache|pdo_pgsql|pgsql)
         disable_and_unlink "$ext"
         ;;
     *)

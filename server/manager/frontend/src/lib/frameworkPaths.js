@@ -1,3 +1,6 @@
+/** Shared document-root prefix for every PHP version. */
+export const SOURCE_PREFIX = '/var/www/source'
+
 /** Document-root presets for common PHP frameworks. */
 
 /** @typedef {{ id: string, suffix: string | null }} FrameworkPreset */
@@ -33,7 +36,7 @@ export function appFolderName(appName, fallback = 'my-app') {
 }
 
 /**
- * @param {string} sourcePrefix e.g. /var/www/source_php8.5
+ * @param {string} sourcePrefix e.g. /var/www/source
  * @param {string} appName
  * @param {string} frameworkId
  */
@@ -106,7 +109,7 @@ export function detectFramework(serverPath, sourcePrefix) {
   return 'custom'
 }
 
-/** Host-relative hint under the repo: source_php8.5/my-app/public */
+/** Host-relative hint under the repo: source/my-app/public */
 export function hostRelativeHint(sourcePrefix, appName, frameworkId) {
   const containerPath = buildServerPath(sourcePrefix, appName, frameworkId)
   if (!containerPath) return ''

@@ -5,10 +5,14 @@ export function tourIdForRoute(routeName) {
     domains: 'domains',
     nginx: 'nginx',
     services: 'services',
+    'compose-yaml': 'compose-yaml',
+    'service-logs': 'service-logs',
     'php-versions': 'php-versions',
+    'php-version-logs': 'php-version-logs',
     'php-version-detail': 'php-version-detail',
     'php-version-catalog': 'php-version-catalog',
     'php-version-supervisor': 'php-version-supervisor',
+    'php-version-run': 'php-version-run',
   }
   return map[routeName] || null
 }
@@ -45,6 +49,15 @@ export function buildTourSteps(t) {
           description: t('tour.home.add_body'),
           side: 'bottom',
           align: 'end',
+        },
+      },
+      {
+        element: '[data-tour="home-pinned"]',
+        popover: {
+          title: t('tour.home.pinned_title'),
+          description: t('tour.home.pinned_body'),
+          side: 'bottom',
+          align: 'start',
         },
       },
       {
@@ -175,17 +188,16 @@ export function buildTourSteps(t) {
         },
       },
       {
-        element: '[data-tour="services-tabs"]',
+        element: '[data-tour="services-compose-yaml"]',
         popover: {
-          title: t('tour.services.tabs_title'),
-          description: t('tour.services.tabs_body'),
+          title: t('tour.services.compose_title'),
+          description: t('tour.services.compose_body'),
           side: 'bottom',
-          align: 'start',
+          align: 'end',
         },
       },
       {
         element: '[data-tour="services-table"]',
-        prepareClick: '[data-tour="services-control-tab"]',
         popover: {
           title: t('tour.services.table_title'),
           description: t('tour.services.table_body'),
@@ -194,32 +206,60 @@ export function buildTourSteps(t) {
         },
       },
       {
-        element: '[data-tour="services-compose-tab"]',
-        prepareClick: '[data-tour="services-compose-tab"]',
+        element: '[data-tour="services-logs-btn"]',
         popover: {
-          title: t('tour.services.compose_title'),
-          description: t('tour.services.compose_body'),
+          title: t('tour.services.logs_title'),
+          description: t('tour.services.logs_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+    ],
+    'compose-yaml': [
+      {
+        element: '[data-tour="compose-panel"]',
+        popover: {
+          title: t('tour.compose.intro_title'),
+          description: t('tour.compose.intro_body'),
           side: 'bottom',
           align: 'start',
         },
       },
       {
-        element: '[data-tour="services-compose-add"]',
-        prepareClick: '[data-tour="services-compose-tab"]',
+        element: '[data-tour="compose-add"]',
         popover: {
-          title: t('tour.services.compose_add_title'),
-          description: t('tour.services.compose_add_body'),
+          title: t('tour.compose.add_title'),
+          description: t('tour.compose.add_body'),
           side: 'left',
           align: 'start',
         },
       },
       {
-        element: '[data-tour="services-compose"]',
-        prepareClick: '[data-tour="services-compose-tab"]',
+        element: '[data-tour="compose-body"]',
         popover: {
-          title: t('tour.services.compose_editor_title'),
-          description: t('tour.services.compose_editor_body'),
+          title: t('tour.compose.list_title'),
+          description: t('tour.compose.list_body'),
           side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="compose-editor"]',
+        popover: {
+          title: t('tour.compose.editor_title'),
+          description: t('tour.compose.editor_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+    ],
+    'service-logs': [
+      {
+        element: '[data-tour="service-logs-panel"]',
+        popover: {
+          title: t('tour.services.logs_title'),
+          description: t('tour.services.logs_body'),
+          side: 'bottom',
           align: 'start',
         },
       },
@@ -253,11 +293,40 @@ export function buildTourSteps(t) {
         },
       },
       {
+        element: '[data-tour="php-logs-btn"]',
+        popover: {
+          title: t('tour.php.logs_title'),
+          description: t('tour.php.logs_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run"]',
+        popover: {
+          title: t('tour.php.run_title'),
+          description: t('tour.php.run_body'),
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
         element: '[data-tour="php-supervisor"]',
         popover: {
           title: t('tour.php.supervisor_title'),
           description: t('tour.php.supervisor_body'),
           side: 'left',
+          align: 'start',
+        },
+      },
+    ],
+    'php-version-logs': [
+      {
+        element: '[data-tour="service-logs-panel"]',
+        popover: {
+          title: t('tour.php.logs_title'),
+          description: t('tour.php.logs_body'),
+          side: 'bottom',
           align: 'start',
         },
       },
@@ -277,6 +346,15 @@ export function buildTourSteps(t) {
         popover: {
           title: t('tour.php_detail.actions_title'),
           description: t('tour.php_detail.actions_body'),
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+      {
+        element: '[data-tour="php-run"]',
+        popover: {
+          title: t('tour.php.run_title'),
+          description: t('tour.php.run_body'),
           side: 'bottom',
           align: 'end',
         },
@@ -385,6 +463,62 @@ export function buildTourSteps(t) {
         popover: {
           title: t('tour.supervisor.conf_editor_title'),
           description: t('tour.supervisor.conf_editor_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+    ],
+    'php-version-run': [
+      {
+        element: '[data-tour="php-run-panel"]',
+        popover: {
+          title: t('tour.php_run.intro_title'),
+          description: t('tour.php_run.intro_body'),
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-session-add"]',
+        popover: {
+          title: t('tour.php_run.add_title'),
+          description: t('tour.php_run.add_body'),
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+      {
+        element: '[data-tour="php-run-sessions"]',
+        popover: {
+          title: t('tour.php_run.sessions_title'),
+          description: t('tour.php_run.sessions_body'),
+          side: 'right',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-editor"]',
+        popover: {
+          title: t('tour.php_run.editor_title'),
+          description: t('tour.php_run.editor_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-actions"]',
+        popover: {
+          title: t('tour.php_run.actions_title'),
+          description: t('tour.php_run.actions_body'),
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '[data-tour="php-run-output"]',
+        popover: {
+          title: t('tour.php_run.output_title'),
+          description: t('tour.php_run.output_body'),
           side: 'top',
           align: 'start',
         },

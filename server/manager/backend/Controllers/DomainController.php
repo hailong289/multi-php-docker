@@ -10,6 +10,8 @@ use Manager\Http\Response;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\PhpVersionCatalog;
+use Manager\Models\SslCertificates;
+use Manager\Support\Config;
 
 final class DomainController extends Controller
 {
@@ -95,6 +97,14 @@ final class DomainController extends Controller
         if ($validation['errors'] !== []) {
             throw new HttpException('validation.failed', 422, $validation['errors']);
         }
+
+        $ssl = new SslCertificates(Config::projectPath());
+        $ssl->persist(
+            $server,
+            $validation['server'],
+            (string) ($validation['ssl_certificate'] ?? ''),
+            (string) ($validation['ssl_private_key'] ?? '')
+        );
 
         $servers[$key] = $validation['server'];
         $env->save($servers);

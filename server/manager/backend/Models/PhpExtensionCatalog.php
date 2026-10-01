@@ -9,6 +9,7 @@ final class PhpExtensionCatalog
     public const NAMES = [
         'redis', 'imagick', 'mongodb', 'xdebug',
         'bcmath', 'intl', 'opcache', 'soap', 'exif', 'gmp',
+        'pdo_pgsql', 'pgsql',
     ];
 
     /** Common always-on modules — hide from the manage table as "custom". */

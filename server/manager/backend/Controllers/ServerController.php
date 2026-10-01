@@ -8,6 +8,8 @@ use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
 use Manager\Models\EnvConfig;
+use Manager\Models\SslCertificates;
+use Manager\Support\Config;
 
 final class ServerController extends Controller
 {
@@ -19,6 +21,14 @@ final class ServerController extends Controller
         if ($validation['errors'] !== []) {
             throw new HttpException('validation.failed', 422, $validation['errors']);
         }
+
+        $ssl = new SslCertificates(Config::projectPath());
+        $ssl->persist(
+            [],
+            $validation['server'],
+            (string) ($validation['ssl_certificate'] ?? ''),
+            (string) ($validation['ssl_private_key'] ?? '')
+        );
 
         $key = $env->nextKey($servers);
         $servers[$key] = $validation['server'];
@@ -46,6 +56,14 @@ final class ServerController extends Controller
             throw new HttpException('validation.failed', 422, $validation['errors']);
         }
 
+        $ssl = new SslCertificates(Config::projectPath());
+        $ssl->persist(
+            $servers[$key],
+            $validation['server'],
+            (string) ($validation['ssl_certificate'] ?? ''),
+            (string) ($validation['ssl_private_key'] ?? '')
+        );
+
         $servers[$key] = $validation['server'];
         $env->save($servers);
 
@@ -66,8 +84,12 @@ final class ServerController extends Controller
             throw new HttpException('error.server_missing', 404);
         }
 
+        $appName = (string) ($servers[$key]['APP_NAME'] ?? '');
         unset($servers[$key]);
         $env->save($servers);
+        if ($appName !== '') {
+            (new SslCertificates(Config::projectPath()))->deleteApp($appName);
+        }
 
         return Response::json([
             'message_key' => 'flash.deleted',

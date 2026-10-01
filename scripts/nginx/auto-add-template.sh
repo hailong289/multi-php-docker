@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # Tạo / cập nhật file config nginx từ template cho từng server trong env.json.
-# - Giữ file đã tồn tại nếu DOMAIN_NAME, SERVER_PATH và CONTAINER_PHP_VERSION khớp.
+# - Giữ file đã tồn tại nếu DOMAIN_NAME, SERVER_PATH, CONTAINER_PHP_VERSION và SSL khớp.
 # - Regenerate khi file chưa có hoặc một trong các giá trị trên đã đổi.
 # - Xóa template của app không còn trong env / đã ENABLED=false.
+# - Thêm listen 443 khi SSL_ENABLED và đủ cert/key trong $SSL_DIR.
 
 JSON_FILE="${ENV_JSON_FILE:-/var/environment/env.json}"
 
@@ -22,8 +23,11 @@ fi
 
 keys=$(jq -r 'keys_unsorted | .[] | select(test("SERVER_NAME[0-9]*"))' "$JSON_FILE")
 
-TEMPLATE_FILE="/etc/nginx/examples/server_example.txt"
-OUTPUT_DIR="/etc/nginx/templates"
+TEMPLATE_FILE="${NGINX_TEMPLATE_FILE:-/etc/nginx/examples/server_example.txt}"
+SSL_TEMPLATE_FILE="${NGINX_SSL_TEMPLATE_FILE:-/etc/nginx/examples/server_ssl_example.txt}"
+OUTPUT_DIR="${NGINX_OUTPUT_DIR:-/etc/nginx/templates}"
+JSON_DIR=$(dirname "$JSON_FILE")
+SSL_DIR="${NGINX_SSL_DIR:-$JSON_DIR/nginx/ssl}"
 
 if [ ! -f "$TEMPLATE_FILE" ]; then
     echo "Template file not found: $TEMPLATE_FILE" >&2
@@ -57,7 +61,7 @@ current_domain_from_template() {
     sed -n 's/^[[:space:]]*server_name[[:space:]]\{1,\}\([^;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
 
-# "    root /var/www/source_php8.2/app/public;" → path
+# "    root /var/www/source/app/public;" → path
 current_root_from_template() {
     sed -n 's/^[[:space:]]*root[[:space:]]\{1,\}\([^;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
@@ -67,16 +71,63 @@ current_php_from_template() {
     sed -n 's/^[[:space:]]*fastcgi_pass[[:space:]]\{1,\}\([^:;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
 
+is_ssl_enabled() {
+    key="$1"
+    SSL_RAW=$(jq -r --arg key "$key" '
+        .[$key] as $s
+        | (if ($s | has("SSL_ENABLED")) then $s.SSL_ENABLED else false end) as $e
+        | if ($e | type) == "boolean" then (if $e then "true" else "false" end)
+          elif ($e | type) == "number" then (if $e == 0 then "false" else "true" end)
+          else ($e | tostring | ascii_downcase)
+          end
+    ' "$JSON_FILE")
+    case "$SSL_RAW" in
+        true|1|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+ssl_files_present() {
+    app="$1"
+    [ -f "$SSL_DIR/$app/cert.pem" ] && [ -f "$SSL_DIR/$app/key.pem" ]
+}
+
+current_ssl_listen() {
+    grep -q 'listen[[:space:]]\{1,\}443' "$1"
+}
+
+current_ssl_app_from_template() {
+    sed -n 's#^[[:space:]]*ssl_certificate[[:space:]]\{1,\}.*/\([^/]\{1,\}\)/cert\.pem;.*#\1#p' "$1" | head -n 1
+}
+
 render_template() {
     hostname="$1"
     source_path="$2"
     php_version="$3"
-    output_file="$4"
+    app_name="$4"
+    output_file="$5"
+    with_ssl="$6"
 
     sed -e "s|\${SERVER_NAME}|${hostname}|g" \
         -e "s|\${SERVER_PATH}|${source_path}|g" \
         -e "s|\${CONTAINER_PHP_VERSION}|${php_version}|g" \
+        -e "s|\${APP_NAME}|${app_name}|g" \
+        -e "s|\${SSL_DIR}|${SSL_DIR}|g" \
         "$TEMPLATE_FILE" > "$output_file"
+
+    if [ "$with_ssl" = "1" ]; then
+        if [ ! -f "$SSL_TEMPLATE_FILE" ]; then
+            echo "SSL template file not found: $SSL_TEMPLATE_FILE" >&2
+            return 0
+        fi
+        printf '\n' >> "$output_file"
+        sed -e "s|\${SERVER_NAME}|${hostname}|g" \
+            -e "s|\${SERVER_PATH}|${source_path}|g" \
+            -e "s|\${CONTAINER_PHP_VERSION}|${php_version}|g" \
+            -e "s|\${APP_NAME}|${app_name}|g" \
+            -e "s|\${SSL_DIR}|${SSL_DIR}|g" \
+            "$SSL_TEMPLATE_FILE" >> "$output_file"
+    fi
 }
 
 for key in $keys; do
@@ -97,11 +148,22 @@ for key in $keys; do
 
     printf '%s\n' "$DOCKER_APP_NAME" >> "$desired_list"
     OUTPUT_FILE="$OUTPUT_DIR/${DOCKER_APP_NAME}.template"
+    WANT_SSL=0
+    if is_ssl_enabled "$key" && ssl_files_present "$DOCKER_APP_NAME"; then
+        WANT_SSL=1
+    elif is_ssl_enabled "$key"; then
+        echo "SSL bật cho $DOCKER_APP_NAME nhưng thiếu cert/key trong $SSL_DIR/$DOCKER_APP_NAME; chỉ ghi HTTP" >&2
+    fi
 
     if [ -f "$OUTPUT_FILE" ]; then
         CURRENT_DOMAIN=$(current_domain_from_template "$OUTPUT_FILE")
         CURRENT_ROOT=$(current_root_from_template "$OUTPUT_FILE")
         CURRENT_PHP=$(current_php_from_template "$OUTPUT_FILE")
+        CURRENT_SSL=0
+        if current_ssl_listen "$OUTPUT_FILE"; then
+            CURRENT_SSL=1
+        fi
+        CURRENT_SSL_APP=$(current_ssl_app_from_template "$OUTPUT_FILE")
         REASONS=""
 
         if [ "$CURRENT_DOMAIN" != "$DOCKER_HOSTNAME" ]; then
@@ -113,9 +175,15 @@ for key in $keys; do
         if [ "$CURRENT_PHP" != "$DOCKER_PHP_VERSION" ]; then
             REASONS="${REASONS} php($CURRENT_PHP→$DOCKER_PHP_VERSION)"
         fi
+        if [ "$CURRENT_SSL" != "$WANT_SSL" ]; then
+            REASONS="${REASONS} ssl($CURRENT_SSL→$WANT_SSL)"
+        fi
+        if [ "$WANT_SSL" -eq 1 ] && [ "$CURRENT_SSL_APP" != "$DOCKER_APP_NAME" ]; then
+            REASONS="${REASONS} ssl_app($CURRENT_SSL_APP→$DOCKER_APP_NAME)"
+        fi
 
         if [ -z "$REASONS" ]; then
-            echo "Giữ template (domain/path/php không đổi): $OUTPUT_FILE"
+            echo "Giữ template (domain/path/php/ssl không đổi): $OUTPUT_FILE"
             continue
         fi
         echo "Ghi đè vì thay đổi:${REASONS} → $OUTPUT_FILE"
@@ -123,85 +191,16 @@ for key in $keys; do
         echo "Tạo mới: $OUTPUT_FILE"
     fi
 
-    render_template "$DOCKER_HOSTNAME" "$DOCKER_SOURCE_PATH" "$DOCKER_PHP_VERSION" "$OUTPUT_FILE"
+    render_template "$DOCKER_HOSTNAME" "$DOCKER_SOURCE_PATH" "$DOCKER_PHP_VERSION" "$DOCKER_APP_NAME" "$OUTPUT_FILE" "$WANT_SSL"
     echo "Tạo config nginx thành công: $OUTPUT_FILE"
 done
 
-inject_manager_locations() {
-    target="$1"
-    snippet="$2"
-    [ -f "$target" ] && [ -f "$snippet" ] || return 0
-    if grep -q 'location ^~ /server-manage/' "$target" 2>/dev/null; then
-        return 0
-    fi
-    tmp=$(mktemp)
-    # Drop the last closing brace of the server block, append Manager locations, re-close.
-    sed '$ d' "$target" > "$tmp"
-    cat "$snippet" >> "$tmp"
-    echo "}" >> "$tmp"
-    mv "$tmp" "$target"
-    echo "Injected Manager /server-manage into $target"
-}
-
-# Xóa template không còn trong danh sách app enabled (giữ manager.template riêng)
+# Xóa template không còn trong danh sách app enabled
 for existing in "$OUTPUT_DIR"/*.template; do
     [ -e "$existing" ] || break
     base=$(basename "$existing" .template)
-    if [ "$base" = "manager" ]; then
-        continue
-    fi
     if ! grep -Fxq "$base" "$desired_list"; then
         echo "Xóa template orphan/disabled: $existing"
         rm -f "$existing"
     fi
 done
-
-MANAGER_REMOTE_RAW=$(printf '%s' "${MANAGER_REMOTE:-0}" | tr '[:upper:]' '[:lower:]')
-MANAGER_DOMAIN_VAL="${MANAGER_DOMAIN:-}"
-MANAGER_USER_VAL="${MANAGER_USERNAME:-}"
-MANAGER_PASS_VAL="${MANAGER_PASSWORD:-}"
-MANAGER_TEMPLATE="$OUTPUT_DIR/manager.template"
-MANAGER_EXAMPLE="/etc/nginx/examples/manager_proxy_example.txt"
-MANAGER_SNIPPET="/etc/nginx/examples/manager_location_snippet.txt"
-
-case "$MANAGER_REMOTE_RAW" in
-  1|true|yes|on)
-    if [ -n "$MANAGER_DOMAIN_VAL" ] && [ -n "$MANAGER_USER_VAL" ] && [ -n "$MANAGER_PASS_VAL" ]; then
-      # Inject /server-manage into every site so "/" stays the website (incl. bare IP).
-      for existing in "$OUTPUT_DIR"/*.template; do
-        [ -e "$existing" ] || break
-        base=$(basename "$existing" .template)
-        [ "$base" = "manager" ] && continue
-        inject_manager_locations "$existing" "$MANAGER_SNIPPET"
-      done
-
-      domain_has_site=0
-      for key in $keys; do
-        if ! is_enabled "$key"; then
-          continue
-        fi
-        site_domain=$(jq -r --arg key "$key" '.[$key].DOMAIN_NAME // empty' "$JSON_FILE")
-        if [ "$site_domain" = "$MANAGER_DOMAIN_VAL" ]; then
-          domain_has_site=1
-          break
-        fi
-      done
-
-      if [ "$domain_has_site" -eq 0 ] && [ -f "$MANAGER_EXAMPLE" ]; then
-        # No site on this hostname yet — expose Manager only under /server-manage.
-        sed -e "s|\${MANAGER_DOMAIN}|${MANAGER_DOMAIN_VAL}|g" \
-          "$MANAGER_EXAMPLE" > "$MANAGER_TEMPLATE"
-        echo "Wrote manager proxy template for ${MANAGER_DOMAIN_VAL} (/server-manage only)"
-      else
-        rm -f "$MANAGER_TEMPLATE"
-        echo "MANAGER_DOMAIN matches a site vhost; Manager is available at /server-manage on that host"
-      fi
-    else
-      rm -f "$MANAGER_TEMPLATE"
-      echo "MANAGER_REMOTE enabled but domain/credentials incomplete; skipped manager proxy" >&2
-    fi
-    ;;
-  *)
-    rm -f "$MANAGER_TEMPLATE"
-    ;;
-esac
