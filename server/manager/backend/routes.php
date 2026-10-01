@@ -61,6 +61,7 @@ return [
     ['POST', '/infra-services/(?P<service>mysql|postgres|redis|rabbitmq|kafka|mailpit|minio)/(?P<action>start|stop|restart|create|pull-recreate|delete|delete-image)', [InfraController::class, 'action']],
     ['GET', '/supervisor', [SupervisorController::class, 'index']],
     ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)', [SupervisorController::class, 'details']],
+    ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/logs/stream', [SupervisorController::class, 'streamLog']],
     ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/action-logs', [SupervisorController::class, 'actionLogs']],
     ['POST', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/clear-log', [SupervisorController::class, 'clearLog']],
     ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/configs', [SupervisorController::class, 'configs']],

@@ -1066,6 +1066,34 @@ foreach ($routes as $route) {
 }
 assert_true($hasLogStream, 'GET source log stream route registered');
 
+$hasSupervisorStream = false;
+foreach ($routes as $route) {
+    if (
+        ($route[0] ?? null) === 'GET'
+        && str_contains((string) ($route[1] ?? ''), '/supervisor/')
+        && str_ends_with((string) ($route[1] ?? ''), '/logs/stream')
+    ) {
+        $hasSupervisorStream = true;
+        break;
+    }
+}
+assert_true($hasSupervisorStream, 'GET supervisor log stream route registered');
+
+$supRoot = sys_get_temp_dir() . '/mgr-sup-' . bin2hex(random_bytes(4));
+mkdir($supRoot . '/compose', 0775, true);
+mkdir($supRoot . '/logs/supervisor-8.5', 0775, true);
+file_put_contents($supRoot . '/compose/php-8.5.yml', "name: test\n");
+file_put_contents($supRoot . '/logs/supervisor-8.5/supervisord.log', "ready\n");
+$supervisorLogs = new SupervisorRuntime($supRoot, $supRoot);
+$supervisorLogPath = $supervisorLogs->resolveLogPath('supervisor-8.5', 'supervisord.log');
+assert_true(str_ends_with($supervisorLogPath, '/supervisord.log'), 'supervisor log path resolves');
+try {
+    $supervisorLogs->resolveLogPath('supervisor-8.5', '../compose/php-8.5.yml');
+    assert_true(false, 'supervisor log rejects traversal');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'supervisor.invalid_log', 'supervisor log rejects traversal');
+}
+
 $followFile = sys_get_temp_dir() . '/mgr-follow-' . bin2hex(random_bytes(4)) . '.log';
 file_put_contents($followFile, "one\n");
 $followLogs = new SourceLogs();

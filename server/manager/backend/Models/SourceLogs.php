@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\FileLogFollow;
 
 /**
  * Application logs under each source project. Paths are relative to the project
@@ -552,153 +553,12 @@ final class SourceLogs
      */
     public function readFollowChunk(string $path, int $offset, int $inode): array
     {
-        clearstatcache(true, $path);
-        if (!is_file($path) || !is_readable($path)) {
-            return [
-                'event' => 'gone',
-                'content' => '',
-                'offset' => 0,
-                'inode' => 0,
-                'size' => 0,
-                'updated_at' => '',
-            ];
-        }
-
-        $stat = stat($path);
-        $size = (int) ($stat['size'] ?? 0);
-        $currentInode = (int) ($stat['ino'] ?? 0);
-        $updatedAt = date(DATE_ATOM, (int) ($stat['mtime'] ?? time()));
-        if ($currentInode !== $inode || $size < $offset) {
-            $tail = $this->tailFile($path, 200);
-
-            return [
-                'event' => 'reset',
-                'content' => (string) ($tail['content'] ?? ''),
-                'offset' => $size,
-                'inode' => $currentInode,
-                'size' => $size,
-                'updated_at' => $updatedAt,
-            ];
-        }
-
-        if ($size === $offset) {
-            return [
-                'event' => 'append',
-                'content' => '',
-                'offset' => $offset,
-                'inode' => $currentInode,
-                'size' => $size,
-                'updated_at' => $updatedAt,
-            ];
-        }
-
-        $length = min(65536, $size - $offset);
-        $handle = fopen($path, 'rb');
-        if ($handle === false) {
-            return [
-                'event' => 'gone',
-                'content' => '',
-                'offset' => 0,
-                'inode' => 0,
-                'size' => 0,
-                'updated_at' => '',
-            ];
-        }
-        fseek($handle, $offset);
-        $raw = (string) fread($handle, $length);
-        fclose($handle);
-        $advance = strlen($raw);
-        if (!preg_match('//u', $raw)) {
-            $raw = (string) iconv('UTF-8', 'UTF-8//IGNORE', $raw);
-        }
-
-        return [
-            'event' => 'append',
-            'content' => $raw,
-            'offset' => $offset + $advance,
-            'inode' => $currentInode,
-            'size' => $size,
-            'updated_at' => $updatedAt,
-        ];
+        return FileLogFollow::readChunk($path, $offset, $inode);
     }
 
     public function follow(string $path): void
     {
-        ignore_user_abort(true);
-        set_time_limit(0);
-        while (ob_get_level() > 0) {
-            ob_end_flush();
-        }
-        header('Content-Type: text/event-stream; charset=utf-8');
-        header('Cache-Control: no-cache, no-store');
-        header('Connection: keep-alive');
-        header('X-Accel-Buffering: no');
-        echo ':' . str_repeat(' ', 2048) . "\n\n";
-        flush();
-
-        clearstatcache(true, $path);
-        $stat = is_file($path) ? stat($path) : false;
-        if ($stat === false) {
-            echo "event: gone\ndata: {}\n\n";
-            flush();
-
-            return;
-        }
-
-        $inode = (int) ($stat['ino'] ?? 0);
-        $offset = (int) ($stat['size'] ?? 0);
-        $tail = $this->tailFile($path, 200);
-        $this->emitFollow('snapshot', [
-            'content' => (string) ($tail['content'] ?? ''),
-            'size' => $offset,
-            'updated_at' => (string) ($tail['updated_at'] ?? ''),
-        ]);
-
-        $started = time();
-        $lastPing = time();
-        while (!connection_aborted()) {
-            if ((time() - $started) > 1200) {
-                echo "event: reconnect\ndata: {}\n\n";
-                flush();
-
-                return;
-            }
-
-            $chunk = $this->readFollowChunk($path, $offset, $inode);
-            if ($chunk['event'] === 'gone') {
-                echo "event: gone\ndata: {}\n\n";
-                flush();
-
-                return;
-            }
-
-            $offset = $chunk['offset'];
-            $inode = $chunk['inode'];
-            if ($chunk['event'] === 'reset' || $chunk['content'] !== '') {
-                $this->emitFollow($chunk['event'], [
-                    'content' => $chunk['content'],
-                    'size' => $chunk['size'],
-                    'updated_at' => $chunk['updated_at'],
-                ]);
-            } elseif ((time() - $lastPing) >= 15) {
-                echo ": ping\n\n";
-                flush();
-                $lastPing = time();
-            }
-
-            if ($chunk['size'] <= $chunk['offset']) {
-                usleep(300000);
-            }
-        }
-    }
-
-    /** @param array<string, mixed> $payload */
-    private function emitFollow(string $event, array $payload): void
-    {
-        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-        echo 'event: ' . $event . "\n";
-        echo 'data: ' . $json . "\n\n";
-        flush();
+        FileLogFollow::follow($path);
     }
 
     private function env(): EnvConfig
