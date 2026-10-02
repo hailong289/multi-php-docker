@@ -61,6 +61,10 @@ function openTerminal(item) {
   router.push({ name: 'terminal', params: { serverKey: item.key } })
 }
 
+function openSourceLogs(item) {
+  router.push({ name: 'source-logs', params: { serverKey: item.key } })
+}
+
 function serverPhpState(server) {
   const container = server?.CONTAINER_PHP_VERSION || ''
   if (!container) return 'not_created'
@@ -194,7 +198,7 @@ async function onSslFile(kind, event) {
 
 function onSubmit() {
   syncServerPathFromParts()
-  saveServer()
+  saveServer(editingKey.value ? {} : { framework: frameworkId.value })
 }
 </script>
 
@@ -355,6 +359,13 @@ function onSubmit() {
                   serverPhpRunning(item.server) ? '' : t('terminal.container_not_running')
                 "
                 @click="openTerminal(item)"
+              />
+              <Button
+                type="button"
+                size="small"
+                :label="t('action.logs')"
+                :disabled="busy"
+                @click="openSourceLogs(item)"
               />
               <Button
                 type="button"
