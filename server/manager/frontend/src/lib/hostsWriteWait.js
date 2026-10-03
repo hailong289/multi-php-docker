@@ -1,7 +1,7 @@
 /** Decide when Manager should stop waiting for a hosts write. */
 
 export const HOSTS_WRITE_POLL_MS = 250
-export const HOSTS_WRITE_TIMEOUT_MS = 45_000
+export const HOSTS_WRITE_TIMEOUT_MS = 8_000
 
 function normalizeId(value) {
   return String(value || '')

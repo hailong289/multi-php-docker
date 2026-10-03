@@ -141,13 +141,19 @@ for key in $keys; do
     DOCKER_SOURCE_PATH=$(jq -r --arg key "$key" '.[$key].SERVER_PATH' "$JSON_FILE")
     DOCKER_PHP_VERSION=$(jq -r --arg key "$key" '.[$key].CONTAINER_PHP_VERSION' "$JSON_FILE")
 
-    if [ -z "$DOCKER_APP_NAME" ] || [ -z "$DOCKER_HOSTNAME" ] || [ -z "$DOCKER_SOURCE_PATH" ]; then
+    if [ -z "$DOCKER_APP_NAME" ] || [ "$DOCKER_APP_NAME" = "null" ] || [ -z "$DOCKER_SOURCE_PATH" ] || [ "$DOCKER_SOURCE_PATH" = "null" ]; then
         echo "Biến môi trường bị thiếu: $key"
         continue
     fi
 
     printf '%s\n' "$DOCKER_APP_NAME" >> "$desired_list"
     OUTPUT_FILE="$OUTPUT_DIR/${DOCKER_APP_NAME}.template"
+
+    # Domain removed: keep the server and its existing nginx file.
+    if [ -z "$DOCKER_HOSTNAME" ] || [ "$DOCKER_HOSTNAME" = "null" ]; then
+        echo "Giữ máy chủ (không có domain): $OUTPUT_FILE"
+        continue
+    fi
     WANT_SSL=0
     if is_ssl_enabled "$key" && ssl_files_present "$DOCKER_APP_NAME"; then
         WANT_SSL=1

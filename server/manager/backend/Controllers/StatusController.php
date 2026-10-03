@@ -37,7 +37,8 @@ final class StatusController extends Controller
                 ],
                 'hosts' => [
                     'factory' => fn (): array => $this->hostsPayload(),
-                    'busy' => static fn (array $payload): bool => ($payload['hosts_status']['status'] ?? '') === 'busy',
+                    'busy' => static fn (array $payload): bool => ($payload['hosts_status']['status'] ?? '') === 'busy'
+                        || ($payload['pending_sync'] ?? false) === true,
                 ],
                 'php' => [
                     'factory' => fn (): array => $this->phpPayload(),
@@ -81,7 +82,8 @@ final class StatusController extends Controller
         return Response::stream(static function (): void {
             StatusStream::emitLoop(
                 static fn (): array => (new self())->hostsPayload(),
-                static fn (array $payload): bool => ($payload['hosts_status']['status'] ?? '') === 'busy',
+                static fn (array $payload): bool => ($payload['hosts_status']['status'] ?? '') === 'busy'
+                    || ($payload['pending_sync'] ?? false) === true,
             );
         });
     }

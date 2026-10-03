@@ -88,6 +88,53 @@ final class EnvConfig
         }
     }
 
+    /**
+     * Drop DOMAIN_NAME only. The server key, app, path, PHP, and SSL stay.
+     *
+     * @return array<string, mixed>
+     */
+    public function clearDomain(string $key): array
+    {
+        $servers = $this->all();
+        if (!isset($servers[$key]) || !is_array($servers[$key])) {
+            throw new HttpException('error.server_missing', 404);
+        }
+
+        $domain = strtolower(trim((string) ($servers[$key]['DOMAIN_NAME'] ?? '')));
+        if ($domain === '') {
+            throw new HttpException('error.domain_missing', 404);
+        }
+
+        $servers[$key]['DOMAIN_NAME'] = '';
+        $this->save($servers);
+
+        return $servers[$key];
+    }
+
+    /**
+     * Put DOMAIN_NAME back after a cancelled hosts write. Does not touch hosts.
+     *
+     * @return array<string, mixed>
+     */
+    public function assignDomain(string $key, string $domain): array
+    {
+        $servers = $this->all();
+        if (!isset($servers[$key]) || !is_array($servers[$key])) {
+            throw new HttpException('error.server_missing', 404);
+        }
+
+        $domain = strtolower(trim($domain));
+        $current = strtolower(trim((string) ($servers[$key]['DOMAIN_NAME'] ?? '')));
+        if ($current !== '' && $current !== $domain) {
+            return $servers[$key];
+        }
+
+        $servers[$key]['DOMAIN_NAME'] = $domain;
+        $this->save($servers);
+
+        return $servers[$key];
+    }
+
     public function nextKey(array $servers): string
     {
         $highest = 0;
