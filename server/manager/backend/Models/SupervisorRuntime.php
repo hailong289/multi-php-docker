@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
+use Manager\Support\JsonFile;
 
 final class SupervisorRuntime
 {
@@ -63,15 +65,13 @@ final class SupervisorRuntime
                 'updated_at' => '',
             ];
             $statusFile = $this->basePath . '/status/' . $service . '.json';
-            if (is_file($statusFile) && is_readable($statusFile)) {
-                $decoded = json_decode((string) file_get_contents($statusFile), true);
-                if (
-                    is_array($decoded)
-                    && ($decoded['service'] ?? null) === $service
-                    && in_array(($decoded['state'] ?? null), $allowedStates, true)
-                ) {
-                    $status = array_merge($status, array_intersect_key($decoded, $status));
-                }
+            $decoded = JsonFile::readObject($statusFile);
+            if (
+                is_array($decoded)
+                && ($decoded['service'] ?? null) === $service
+                && in_array(($decoded['state'] ?? null), $allowedStates, true)
+            ) {
+                $status = array_merge($status, array_intersect_key($decoded, $status));
             }
             if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
@@ -225,6 +225,32 @@ final class SupervisorRuntime
         ];
     }
 
+    public function resolveLogPath(string $service, string $logFile): string
+    {
+        $targets = self::targets($this->projectPath);
+        if (!isset($targets[$service])) {
+            throw new HttpException('supervisor.invalid_service', 400);
+        }
+        $logFile = basename(str_replace('\\', '/', $logFile));
+        if ($logFile === '' || !str_ends_with(strtolower($logFile), '.log')) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+        $dir = $this->projectPath . '/' . $targets[$service]['log_dir'];
+        $realDir = realpath($dir);
+        if ($realDir === false || !is_dir($realDir)) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+        if (!in_array($logFile, $this->listLogFiles($targets[$service]['log_dir']), true)) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+        $real = realpath($realDir . DIRECTORY_SEPARATOR . $logFile);
+        if ($real === false || !is_file($real) || !str_starts_with($real, $realDir . DIRECTORY_SEPARATOR)) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+
+        return $real;
+    }
+
     public function clearLog(string $service, string $logFile): void
     {
         $targets = self::targets($this->projectPath);
@@ -246,5 +272,35 @@ final class SupervisorRuntime
         if (file_put_contents($path, '') === false) {
             throw new HttpException('supervisor.clear_failed', 500);
         }
+    }
+
+    /**
+     * @return array{
+     *     service: string,
+     *     state: string,
+     *     message_key: string,
+     *     request_id: string,
+     *     available: bool,
+     *     content: string,
+     *     create_log: string,
+     *     start_log: string,
+     *     updated_at: string
+     * }
+     */
+    public function actionLogs(string $service): array
+    {
+        $targets = self::targets($this->projectPath);
+        if (!isset($targets[$service])) {
+            throw new HttpException('supervisor.invalid_service', 400);
+        }
+
+        return array_merge(
+            ['service' => $service],
+            ActionLogReader::bundle(
+                $this->basePath . '/status',
+                $service,
+                static fn (array $decoded): bool => ($decoded['service'] ?? null) === $service,
+            ),
+        );
     }
 }

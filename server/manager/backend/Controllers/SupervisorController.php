@@ -9,6 +9,7 @@ use Manager\Http\Request;
 use Manager\Http\Response;
 use Manager\Models\SupervisorConfigs;
 use Manager\Models\SupervisorRuntime;
+use Manager\Support\FileLogFollow;
 
 final class SupervisorController extends Controller
 {
@@ -52,6 +53,26 @@ final class SupervisorController extends Controller
                 'targets' => SupervisorRuntime::targets(),
                 'statuses' => $runtime->statuses(),
             ],
+        ]);
+    }
+
+    public function streamLog(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $log = (string) $request->queryParam('log', '');
+        $path = (new SupervisorRuntime())->resolveLogPath($service, $log);
+
+        return Response::stream(static function () use ($path): void {
+            FileLogFollow::follow($path);
+        });
+    }
+
+    public function actionLogs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'logs' => (new SupervisorRuntime())->actionLogs($service),
         ]);
     }
 

@@ -81,13 +81,48 @@ final class PhpControllerController extends Controller
     {
         $service = (string) ($params['service'] ?? '');
         $action = (string) ($params['action'] ?? '');
+        $runtime = new PhpRuntime();
+        $targets = PhpRuntime::targets();
+        if (!isset($targets[$service])) {
+            throw new HttpException('php_controller.invalid_service', 400);
+        }
+        $target = $targets[$service];
+
+        if ($action === 'delete') {
+            $runtime->deleteContainer($service);
+
+            return Response::json([
+                'message_key' => 'services.deleted',
+                'message_parameters' => [
+                    'service' => $target['label'],
+                ],
+                'php_controllers' => [
+                    'targets' => PhpRuntime::targets(),
+                    'statuses' => $runtime->statuses(),
+                ],
+            ]);
+        }
+
+        if ($action === 'delete-image') {
+            $runtime->deleteImage($service);
+
+            return Response::json([
+                'message_key' => 'services.image_deleted',
+                'message_parameters' => [
+                    'service' => $target['label'],
+                ],
+                'php_controllers' => [
+                    'targets' => PhpRuntime::targets(),
+                    'statuses' => $runtime->statuses(),
+                ],
+            ]);
+        }
+
         if ($action === 'create') {
             // Repair missing include after a partial install (files written, queue failed).
             (new PhpVersionInstaller())->repairComposeInclude($service);
         }
-        $runtime = new PhpRuntime();
         $requestId = $runtime->request($service, $action);
-        $target = PhpRuntime::targets()[$service];
 
         return Response::json([
             'request_id' => $requestId,
@@ -119,6 +154,15 @@ final class PhpControllerController extends Controller
 
         return Response::json([
             'logs' => (new PhpRuntime())->logs($service, $tail),
+        ]);
+    }
+
+    public function actionLogs(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json([
+            'logs' => (new PhpRuntime())->actionLogs($service),
         ]);
     }
 

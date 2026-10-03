@@ -3,8 +3,11 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { apiGet, apiSend } from '../api'
+import { apiRelativeUrl, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+import { terminalThemeFromDocument } from '../lib/monaco'
+import Button from 'primevue/button'
+import Tag from 'primevue/tag'
 
 const props = defineProps({
   serverKey: { type: String, required: true },
@@ -25,10 +28,31 @@ let offset = 0
 let closed = false
 let resizeTimer = null
 let hostObserver = null
-let idleTimer = 0
+let themeObserver = null
 let inputBuf = ''
 let inputFlushTimer = 0
 let inputInFlight = null
+let eventSource = null
+let writeQueue = []
+let writeFrame = 0
+
+function statusSeverity() {
+  if (status.value === 'ready') return 'success'
+  if (status.value === 'connecting') return 'info'
+  if (status.value === 'disconnected') return 'warn'
+  return 'danger'
+}
+
+function statusLabelKey() {
+  if (status.value === 'connecting') return 'terminal.connecting'
+  if (status.value === 'disconnected') return 'terminal.disconnected'
+  if (status.value === 'ready') return 'terminal.ready'
+  return 'terminal.unavailable'
+}
+
+function applyTerminalTheme() {
+  term?.options && (term.options.theme = terminalThemeFromDocument())
+}
 
 function bytesToBase64(bytes) {
   let binary = ''
@@ -48,10 +72,6 @@ function base64ToUint8(b64) {
 
 function stringToBase64(str) {
   return bytesToBase64(new TextEncoder().encode(str))
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function helperTextarea(host) {
@@ -82,57 +102,84 @@ function applyEnglishImeAttrs(host) {
   ta.style.setProperty('ime-mode', 'disabled')
 }
 
+function flushWriteQueue() {
+  writeFrame = 0
+  if (!term || !writeQueue.length) return
+  let total = 0
+  for (const chunk of writeQueue) total += chunk.length
+  const merged = new Uint8Array(total)
+  let at = 0
+  for (const chunk of writeQueue) {
+    merged.set(chunk, at)
+    at += chunk.length
+  }
+  writeQueue = []
+  term.write(merged)
+}
+
+function queueTerminalWrite(bytes) {
+  if (!bytes.length || !term) return
+  writeQueue.push(bytes)
+  if (!writeFrame) {
+    writeFrame = requestAnimationFrame(flushWriteQueue)
+  }
+}
+
 function applyOutput(data) {
   if (!data || typeof data !== 'object') return false
-  if (typeof data.offset === 'number') offset = data.offset
   if (data.data) {
     const bytes = base64ToUint8(data.data)
-    if (bytes.length && term) term.write(bytes)
+    if (bytes.length) queueTerminalWrite(bytes)
   }
+  if (typeof data.offset === 'number') offset = data.offset
   if (data.closed) {
     status.value = 'disconnected'
-    stopIdle()
+    stopOutputStream()
     return true
   }
   return false
 }
 
-function stopIdle() {
-  if (idleTimer) {
-    clearTimeout(idleTimer)
-    idleTimer = 0
+function stopOutputStream() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
   }
 }
 
-function scheduleIdle() {
-  stopIdle()
-  if (closed || status.value !== 'ready') return
-  idleTimer = window.setTimeout(() => {
-    idleTimer = 0
-    pullOutput().then((ended) => {
-      if (!ended) scheduleIdle()
-    })
-  }, 2000)
-}
-
-async function pullOutput() {
-  if (!sessionId.value || closed) return true
-  try {
-    const data = await apiGet(`/api/terminal/sessions/${sessionId.value}/output?since=${offset}`)
-    return applyOutput(data)
-  } catch (_) {
-    return false
+function startOutputStream() {
+  stopOutputStream()
+  if (closed || !sessionId.value || status.value !== 'ready') return
+  const url = apiRelativeUrl(
+    `/api/terminal/sessions/${sessionId.value}/stream?since=${offset}`,
+  )
+  eventSource = new EventSource(url, { withCredentials: true })
+  eventSource.onmessage = (ev) => {
+    try {
+      applyOutput(JSON.parse(ev.data))
+    } catch (_) {}
   }
+  eventSource.addEventListener('closed', () => {
+    status.value = 'disconnected'
+    stopOutputStream()
+  })
+  eventSource.addEventListener('gone', () => {
+    status.value = 'disconnected'
+    stopOutputStream()
+  })
+  eventSource.addEventListener('reconnect', () => {
+    stopOutputStream()
+    if (!closed && sessionId.value) startOutputStream()
+  })
 }
 
 async function postInput(data) {
   if (!sessionId.value || closed || status.value !== 'ready') return
   try {
-    const result = await apiSend('POST', `/api/terminal/sessions/${sessionId.value}/input`, {
+    await apiSend('POST', `/api/terminal/sessions/${sessionId.value}/input`, {
       data: stringToBase64(data),
       since: offset,
     })
-    applyOutput(result)
   } catch (_) {}
 }
 
@@ -216,17 +263,6 @@ function onHostKeyDown(ev) {
   queueInput(ch)
 }
 
-async function drainAfterCommand() {
-  for (let i = 0; i < 12; i += 1) {
-    if (closed || status.value !== 'ready') return
-    await sleep(40)
-    const before = offset
-    const ended = await pullOutput()
-    if (ended) return
-    if (offset === before && i >= 2) break
-  }
-}
-
 async function flushInput() {
   if (inputFlushTimer) {
     clearTimeout(inputFlushTimer)
@@ -236,15 +272,11 @@ async function flushInput() {
   if (!inputBuf) return
   const data = inputBuf
   inputBuf = ''
-  const urgent = shouldFlushNow(data)
-  stopIdle()
   inputInFlight = postInput(data).finally(() => {
     inputInFlight = null
   })
   await inputInFlight
-  if (urgent) await drainAfterCommand()
   if (inputBuf) queueInput('')
-  else scheduleIdle()
 }
 
 function queueInput(data) {
@@ -282,11 +314,18 @@ function onWinResize() {
 
 function teardownIo() {
   closed = true
-  stopIdle()
+  stopOutputStream()
+  if (writeFrame) {
+    cancelAnimationFrame(writeFrame)
+    writeFrame = 0
+  }
+  writeQueue = []
   if (resizeTimer) clearTimeout(resizeTimer)
   if (inputFlushTimer) clearTimeout(inputFlushTimer)
   hostObserver?.disconnect()
   hostObserver = null
+  themeObserver?.disconnect()
+  themeObserver = null
   window.removeEventListener('resize', onWinResize)
   hostEl.value?.removeEventListener('keydown', onHostKeyDown, true)
   hostEl.value?.removeEventListener('compositionstart', onImeNoise, true)
@@ -327,11 +366,7 @@ onMounted(async () => {
       fontSize: 13,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       scrollback: 4000,
-      theme: {
-        background: '#0f1419',
-        foreground: '#e7ecf3',
-        cursor: '#e7ecf3',
-      },
+      theme: terminalThemeFromDocument(),
     })
     fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -350,9 +385,13 @@ onMounted(async () => {
     window.addEventListener('resize', onWinResize)
     hostObserver = new ResizeObserver(() => onWinResize())
     hostObserver.observe(hostEl.value)
+    themeObserver = new MutationObserver(() => applyTerminalTheme())
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-surface', 'data-primary', 'style'],
+    })
     await sendResize()
-    await pullOutput()
-    scheduleIdle()
+    startOutputStream()
   } catch (err) {
     status.value = 'error'
     showToast('failure', translateApiError(err))
@@ -380,31 +419,27 @@ onBeforeUnmount(() => {
     data-tour="docker-terminal"
   >
     <div class="terminal-panel-header">
-      <div>
-        <h3>{{ title || $t('terminal.title') }}</h3>
+      <div class="terminal-panel-copy">
+        <h3 v-if="!page">{{ title || $t('terminal.title') }}</h3>
         <p class="terminal-hint">
           {{ $t('terminal.hint') }}
           <template v-if="cwdLabel">
-            <br />
+            <span class="terminal-hint-sep" aria-hidden="true">·</span>
             <code>{{ cwdLabel }}</code>
           </template>
         </p>
       </div>
       <div class="terminal-panel-actions">
-        <span class="terminal-status">
-          {{
-            status === 'connecting'
-              ? $t('terminal.connecting')
-              : status === 'disconnected'
-                ? $t('terminal.disconnected')
-                : status === 'ready'
-                  ? ''
-                  : $t('terminal.unavailable')
-          }}
-        </span>
-        <button type="button" @click="closeSession">
-          {{ page ? $t('terminal.back') : $t('terminal.close') }}
-        </button>
+        <Tag v-if="status !== 'ready'" :severity="statusSeverity()" :value="$t(statusLabelKey())" />
+        <Button
+          v-if="!page"
+          type="button"
+          :label="$t('terminal.close')"
+          severity="secondary"
+          outlined
+          size="small"
+          @click="closeSession"
+        />
       </div>
     </div>
     <div class="terminal-screen">

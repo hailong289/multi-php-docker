@@ -19,6 +19,11 @@ function withApiPrefix(path) {
   return `${API_PREFIX}${p}`
 }
 
+/** Relative URL for EventSource / fetch streaming (same origin + session cookie). */
+export function apiRelativeUrl(path) {
+  return withApiPrefix(path)
+}
+
 const http = axios.create({
   timeout: API_TIMEOUT_MS,
   withCredentials: true,

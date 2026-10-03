@@ -43,7 +43,7 @@ final class TerminalSession
     public static function projectDirFromServerPath(string $serverPath): string
     {
         $path = rtrim(str_replace('\\', '/', $serverPath), '/');
-        if ($path === '' || !str_starts_with($path, '/var/www/source_')) {
+        if ($path !== '/var/www/source' && !str_starts_with($path, '/var/www/source/')) {
             return '';
         }
         foreach (['webroot', 'public', 'web'] as $root) {
@@ -281,7 +281,7 @@ final class TerminalSession
                 flush();
                 $lastPing = time();
             }
-            usleep(30000);
+            usleep(20000);
         }
     }
 

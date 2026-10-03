@@ -155,19 +155,19 @@ final class SupervisorConfigs
 
     public function defaultContent(string $supervisorService): string
     {
-        $targets = SupervisorRuntime::targets($this->projectPath);
-        $phpService = (string) ($targets[$supervisorService]['php_service'] ?? PhpVersionId::defaultService());
-        $source = 'source_php' . PhpVersionId::minorFromService($phpService) . PhpVersionId::pathSuffix($phpService);
+        if (!PhpVersionId::isValidSupervisorService($supervisorService)) {
+            throw new HttpException('supervisor.invalid_service', 400);
+        }
+
         $example = $this->projectPath . '/configs/supervisor.d/worker.conf.example';
         if (is_file($example) && is_readable($example)) {
-            $raw = (string) file_get_contents($example);
-            return str_replace('source_php8.5', $source, $raw);
+            return (string) file_get_contents($example);
         }
 
         return <<<CONF
 ; Supervisord program config
 [program:app_worker]
-directory=/var/www/{$source}/my-project
+directory=/var/www/source/my-project
 command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
 process_name=%(program_name)s_%(process_num)02d
 numprocs=1

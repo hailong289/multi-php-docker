@@ -62,6 +62,10 @@ case "$ext" in
     bcmath|exif)
         install_builtin "$ext"
         ;;
+    pdo_pgsql|pgsql)
+        pkg_install "libpq-dev" "postgresql-dev"
+        install_builtin "$ext"
+        ;;
     intl)
         pkg_install "libicu-dev" "icu-dev"
         install_builtin intl

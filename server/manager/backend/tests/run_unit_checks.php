@@ -17,6 +17,9 @@ spl_autoload_register(static function (string $class): void {
 use Manager\Http\HttpException;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
+use Manager\Models\ComposeFileParser;
+use Manager\Models\ComposeFileRuntime;
+use Manager\Models\ComposeInclude;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\NginxManagement;
@@ -87,6 +90,7 @@ assert_true($editor->extensionLineStatus($removed, 'imagick') === 'absent', 'rem
 assert_true(str_contains($removed, 'extension=foo.so'), 'keep redis line');
 
 assert_true(PhpExtensionCatalog::isCurated('redis'), 'curated redis');
+assert_true(PhpExtensionCatalog::isCurated('pdo_pgsql'), 'curated pdo_pgsql');
 assert_true(!PhpExtensionCatalog::isCurated('foobar'), 'not curated foobar');
 assert_true(PhpExtensionCatalog::isValidName('gd'), 'valid gd');
 assert_true(PhpExtensionCatalog::isValidName('pdo_mysql'), 'valid pdo_mysql');
@@ -146,11 +150,23 @@ assert_true(
 @rmdir($staleDir);
 
 $infraTargets = InfraRuntime::targets();
-assert_true(isset($infraTargets['mysql'], $infraTargets['redis'], $infraTargets['rabbitmq']), 'infra targets');
+assert_true(isset($infraTargets['mysql'], $infraTargets['postgres'], $infraTargets['redis'], $infraTargets['rabbitmq'], $infraTargets['kafka'], $infraTargets['mailpit'], $infraTargets['minio']), 'infra targets');
 assert_true($infraTargets['mysql']['profile'] === 'mysql', 'mysql profile');
+assert_true($infraTargets['postgres']['profile'] === 'postgres', 'postgres profile');
+assert_true($infraTargets['postgres']['container'] === 'postgres_container', 'postgres container');
+assert_true($infraTargets['postgres']['compose_file'] === 'compose/postgres.yml', 'postgres compose file');
 assert_true($infraTargets['redis']['container'] === 'redis_container', 'redis container');
 assert_true($infraTargets['mysql']['compose_file'] === 'compose/mysql.yml', 'mysql compose file');
 assert_true(str_contains($infraTargets['rabbitmq']['create_command'], '--profile rabbitmq'), 'rabbitmq create cmd');
+assert_true($infraTargets['kafka']['profile'] === 'kafka', 'kafka profile');
+assert_true($infraTargets['kafka']['container'] === 'kafka_container', 'kafka container');
+assert_true($infraTargets['kafka']['compose_file'] === 'compose/kafka.yml', 'kafka compose file');
+assert_true($infraTargets['mailpit']['profile'] === 'mailpit', 'mailpit profile');
+assert_true($infraTargets['mailpit']['container'] === 'mailpit_container', 'mailpit container');
+assert_true($infraTargets['mailpit']['compose_file'] === 'compose/mailpit.yml', 'mailpit compose file');
+assert_true($infraTargets['minio']['profile'] === 'minio', 'minio profile');
+assert_true($infraTargets['minio']['container'] === 'minio_container', 'minio container');
+assert_true($infraTargets['minio']['compose_file'] === 'compose/minio.yml', 'minio compose file');
 
 $runningDaemon = new PhpControllerDaemon(static fn (): string => 'running');
 $stoppedDaemon = new PhpControllerDaemon(static fn (): string => 'stopped');
@@ -185,9 +201,21 @@ assert_true(($written['size'] ?? 0) > 10, 'compose write size');
 assert_true(str_contains((string) file_get_contents($composeProj . '/compose/mysql.yml'), 'mysql:8.4'), 'compose file updated');
 $created = $compose->writeFile('custom.yml', "services:\n  custom:\n    image: alpine\n", true);
 assert_true(($created['name'] ?? '') === 'custom.yml', 'compose create custom');
+file_put_contents($composeProj . '/compose/php-8.5.yml', "services:\n  php-8.5: {}\n");
 $list = $compose->list();
 assert_true(count($list) >= 2, 'compose list has files');
+$listedNames = array_column($list, 'name');
+assert_true(!in_array('php-8.5.yml', $listedNames, true), 'php compose hidden from services list');
+assert_true(in_array('mysql.yml', $listedNames, true), 'mysql compose listed');
+$phpList = $compose->list('php');
+$phpListedNames = array_column($phpList, 'name');
+assert_true(in_array('php-8.5.yml', $phpListedNames, true), 'php compose listed with scope=php');
+assert_true(!in_array('mysql.yml', $phpListedNames, true), 'mysql hidden from php scope list');
 assert_true($compose->isCoreFile('mysql.yml'), 'mysql is core');
+assert_true($compose->isCoreFile('postgres.yml'), 'postgres is core');
+assert_true($compose->isCoreFile('kafka.yml'), 'kafka is core');
+assert_true($compose->isCoreFile('mailpit.yml'), 'mailpit is core');
+assert_true($compose->isCoreFile('minio.yml'), 'minio is core');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {
     $compose->deleteFile('mysql.yml');
@@ -197,9 +225,139 @@ try {
 }
 $compose->deleteFile('custom.yml');
 assert_true(!is_file($composeProj . '/compose/custom.yml'), 'custom compose deleted');
+$mysqlCtx = $compose->actionContextForFile('mysql.yml');
+assert_true(($mysqlCtx['runtime'] ?? '') === 'infra', 'mysql compose runtime');
+assert_true(($mysqlCtx['service'] ?? '') === 'mysql', 'mysql compose service');
+assert_true(($mysqlCtx['pull_recreate'] ?? false) === true, 'mysql compose pull recreate');
+$postgresInfraCtx = $compose->actionContextForFile('postgres.yml');
+assert_true(($postgresInfraCtx['runtime'] ?? '') === 'infra', 'postgres compose runtime');
+assert_true(($postgresInfraCtx['service'] ?? '') === 'postgres', 'postgres compose service');
+assert_true(($postgresInfraCtx['pull_recreate'] ?? false) === true, 'postgres compose pull recreate');
+file_put_contents($composeProj . '/compose/php-8.5.yml', "services:\n  php-8.5: {}\n");
+$phpCtx = $compose->actionContextForFile('php-8.5.yml');
+assert_true(($phpCtx['runtime'] ?? '') === 'php', 'php compose runtime');
+assert_true(($phpCtx['service'] ?? '') === 'php-8.5', 'php compose service');
+assert_true(($phpCtx['pull_recreate'] ?? true) === false, 'php compose no pull recreate');
+assert_true($compose->actionContextForFile('custom.yml') === null, 'custom compose no runtime');
+$kafkaYaml = <<<'YAML'
+services:
+  kafka:
+    profiles: ["kafka"]
+    image: apache/kafka:latest
+    container_name: kafka_container
+YAML;
+$parsed = ComposeFileParser::services($kafkaYaml);
+assert_true(($parsed[0]['name'] ?? '') === 'kafka', 'parser service name');
+assert_true(($parsed[0]['has_build'] ?? true) === false, 'image-only service has no build');
+$buildYaml = <<<'YAML'
+services:
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+    container_name: app_container
+YAML;
+$built = ComposeFileParser::services($buildYaml);
+assert_true(($built[0]['has_build'] ?? false) === true, 'build-only service needs build');
+$bothYaml = <<<'YAML'
+services:
+  mysql:
+    image: mysql:8
+    build:
+      context: .
+YAML;
+$both = ComposeFileParser::services($bothYaml);
+assert_true(($both[0]['has_build'] ?? true) === false, 'image plus build uses pull not build button');
+assert_true(($parsed[0]['profile'] ?? '') === 'kafka', 'parser profile');
+assert_true(($parsed[0]['container'] ?? '') === 'kafka_container', 'parser container');
+$withNetworks = <<<'YAML'
+services:
+  kafka:
+    profiles: ["kafka"]
+    image: apache/kafka:latest
+    container_name: kafka_container
+
+networks:
+  app-network:
+    driver: bridge
+YAML;
+$parsedNetworks = ComposeFileParser::services($withNetworks);
+assert_true(count($parsedNetworks) === 1, 'parser ignores networks section');
+assert_true(($parsedNetworks[0]['name'] ?? '') === 'kafka', 'parser networks section service name');
+$minioYaml = <<<'YAML'
+services:
+  minio:
+    profiles: ["minio"]
+    image: minio/minio:latest
+    container_name: minio_container
+YAML;
+$customYaml = <<<'YAML'
+services:
+  meilisearch:
+    profiles: ["meilisearch"]
+    image: getmeili/meilisearch:latest
+    container_name: meilisearch_container
+YAML;
+$customCtx = (new InfraCompose($composeProj))->actionContextForFile('meilisearch.yml', $customYaml);
+assert_true(($customCtx['runtime'] ?? '') === 'compose', 'custom compose runtime');
+assert_true(($customCtx['has_build'] ?? true) === false, 'custom compose no build');
+$kafkaInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('kafka.yml');
+assert_true(($kafkaInfraCtx['runtime'] ?? '') === 'infra', 'kafka compose runtime');
+assert_true(($kafkaInfraCtx['service'] ?? '') === 'kafka', 'kafka compose service');
+assert_true(($kafkaInfraCtx['pull_recreate'] ?? false) === true, 'kafka compose pull recreate');
+$mailpitInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('mailpit.yml');
+assert_true(($mailpitInfraCtx['runtime'] ?? '') === 'infra', 'mailpit compose runtime');
+assert_true(($mailpitInfraCtx['service'] ?? '') === 'mailpit', 'mailpit compose service');
+assert_true(($mailpitInfraCtx['pull_recreate'] ?? false) === true, 'mailpit compose pull recreate');
+$minioInfraCtx = (new InfraCompose($composeProj))->actionContextForFile('minio.yml', $minioYaml);
+assert_true(($minioInfraCtx['runtime'] ?? '') === 'infra', 'minio compose runtime');
+assert_true(($minioInfraCtx['service'] ?? '') === 'minio', 'minio compose service');
+assert_true(($minioInfraCtx['pull_recreate'] ?? false) === true, 'minio compose pull recreate');
+file_put_contents($composeProj . '/compose/meilisearch.yml', $customYaml);
+$composeProjDocker = sys_get_temp_dir() . '/compose-include-' . bin2hex(random_bytes(4));
+mkdir($composeProjDocker . '/compose', 0775, true);
+file_put_contents(
+    $composeProjDocker . '/docker-compose.yml',
+    "include:\n  - path: compose/redis.yml\n    project_directory: .\n\nservices: {}\n",
+);
+$composeInclude = new ComposeInclude($composeProjDocker);
+$composeInclude->ensureIncluded('meilisearch.yml');
+assert_true($composeInclude->isIncluded('meilisearch.yml'), 'meilisearch included in docker-compose');
+$composeFileRuntime = new ComposeFileRuntime($infraTmp, $composeProj, $runningDaemon);
+$composeReq = $composeFileRuntime->request('meilisearch.yml', 'create');
+assert_true(strlen($composeReq) === 32, 'compose file create request id');
+assert_true($composeFileRuntime->hasBlockingRequests('meilisearch.yml'), 'compose file blocking create');
+
+$logDir = $infraTmp . '/status';
+file_put_contents($logDir . '/compose-file__meilisearch.yml.last-create.log', "create ok\n");
+file_put_contents(
+    $logDir . '/compose-file__meilisearch.yml.json',
+    '{"compose_file":"meilisearch.yml","queue_key":"compose-file__meilisearch.yml","state":"error","message_key":"php_controller.action_failed","request_id":"a","updated_at":"2026-08-28T10:00:00Z"}' . "\n",
+);
+$actionLogs = $composeFileRuntime->actionLogs('meilisearch.yml');
+assert_true(($actionLogs['state'] ?? '') === 'error', 'compose action logs state');
+assert_true(str_contains((string) ($actionLogs['content'] ?? ''), 'create ok'), 'compose action logs content');
 $pullId = (new InfraRuntime($infraTmp, $runningDaemon))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
 assert_true((new InfraRuntime($infraTmp, $runningDaemon))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
+try {
+    (new InfraRuntime($infraTmp, $runningDaemon))->request('rabbitmq', 'delete');
+    assert_true(false, 'delete must use deleteContainer');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'services.invalid_action', 'delete not queued');
+}
+try {
+    (new InfraRuntime($infraTmp, $runningDaemon))->request('rabbitmq', 'delete-image');
+    assert_true(false, 'delete-image must use deleteImage');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'services.invalid_action', 'delete-image not queued');
+}
+
+$parsedImage = ComposeFileParser::services("services:\n  mysql:\n    image: mysql:8.4\n");
+assert_true(($parsedImage[0]['image'] ?? '') === 'mysql:8.4', 'compose parser image field');
+$infraTargets = InfraRuntime::targets();
+assert_true(array_key_exists('image', $infraTargets['mysql'] ?? []), 'infra targets image key');
+assert_true(array_key_exists('image_present', $infraTargets['mysql'] ?? []), 'infra targets image_present key');
 
 $frame = pack('C', 1) . "\0\0\0" . pack('N', 5) . 'hello';
 assert_true(\Manager\Support\DockerExec::decodeLogStream($frame) === 'hello', 'decode multiplexed docker logs');
@@ -226,26 +384,6 @@ try {
     assert_true($e->errorKey() === 'php_controller.invalid_service', 'invalid php logs service');
 }
 
-use Manager\Support\RemoteAuth;
-
-putenv('MANAGER_REMOTE=0');
-assert_true(RemoteAuth::isRemote() === false, 'remote off by default');
-
-putenv('MANAGER_REMOTE=1');
-putenv('MANAGER_USERNAME=');
-putenv('MANAGER_PASSWORD=');
-assert_true(RemoteAuth::isRemote() === true, 'remote on');
-assert_true(RemoteAuth::isLocked() === true, 'locked without credentials');
-
-putenv('MANAGER_USERNAME=admin');
-putenv('MANAGER_PASSWORD=secret');
-assert_true(RemoteAuth::credentialsConfigured() === true, 'credentials ok');
-assert_true(RemoteAuth::isLocked() === false, 'not locked with credentials');
-
-putenv('MANAGER_REMOTE=0');
-putenv('MANAGER_USERNAME=');
-putenv('MANAGER_PASSWORD=');
-
 use Manager\Models\TerminalSession;
 use Manager\Support\Config;
 
@@ -254,24 +392,31 @@ assert_true(isset($allowed['php8.5_container']), 'default php container allowlis
 assert_true(!isset($allowed['nginx_container']), 'nginx not allowlisted');
 
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/spa-fnb-retail/public')
-        === '/var/www/source_php8.5/spa-fnb-retail',
+    TerminalSession::projectDirFromServerPath('/var/www/source/spa-fnb-retail/public')
+        === '/var/www/source/spa-fnb-retail',
     'terminal cwd strips /public',
 );
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/posapp-yii-backend/web')
-        === '/var/www/source_php8.5/posapp-yii-backend',
+    TerminalSession::projectDirFromServerPath('/var/www/source/posapp-yii-backend/web')
+        === '/var/www/source/posapp-yii-backend',
     'terminal cwd strips /web',
 );
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php7.4/app/webroot')
-        === '/var/www/source_php7.4/app',
+    TerminalSession::projectDirFromServerPath('/var/www/source/app/webroot')
+        === '/var/www/source/app',
     'terminal cwd strips /webroot',
 );
 assert_true(
     TerminalSession::projectDirFromServerPath('/tmp/evil') === '',
     'terminal cwd rejects non-source paths',
 );
+assert_true(
+    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/app/public') === '',
+    'terminal cwd rejects legacy version path',
+);
+assert_true(PhpVersionId::sourcePrefix('php-8.5') === '/var/www/source', 'shared source prefix 8.5');
+assert_true(PhpVersionId::sourcePrefix('php-7.4') === '/var/www/source', 'shared source prefix 7.4');
+assert_true(PhpVersionId::sourceDirName('php-8.4-alpine') === 'source', 'variant shares source dir');
 
 use Manager\Models\DockerHubPhpTags;
 
@@ -456,7 +601,7 @@ $envSsl = new EnvConfig($tmpEnv);
 $vOff = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
 ], []);
 assert_true(($vOff['server']['SSL_ENABLED'] ?? true) === false, 'validate default ssl off');
@@ -465,7 +610,7 @@ assert_true(!isset($vOff['server']['SSL_MODE']), 'no ssl mode when off');
 $vOn = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
 ], []);
@@ -475,7 +620,7 @@ assert_true(($vOn['server']['SSL_MODE'] ?? '') === 'generated', 'default mode ge
 $vUp = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
     'ssl_certificate' => 'x',
@@ -486,7 +631,7 @@ assert_true(($vUp['server']['SSL_MODE'] ?? '') === 'uploaded', 'both pems set up
 $vOne = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
     'ssl_certificate' => 'x',
@@ -497,7 +642,7 @@ $existing = ['SERVER_NAME1' => $vOn['server']];
 $vKeep = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'enabled' => false,
 ], $existing, 'SERVER_NAME1');
@@ -512,7 +657,7 @@ $sslC = new SslCertificates($proj);
 $validated = $envC->validate([
     'app_name' => 'ctrl-app',
     'domain_name' => 'ctrl.test',
-    'server_path' => '/var/www/source_php8.5/ctrl-app/public',
+    'server_path' => '/var/www/source/ctrl-app/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
 ], []);
@@ -789,5 +934,182 @@ assert_true(isset($boot['php_controller_daemon']['container']), 'bootstrap daemo
 assert_true($boot['php_controller_daemon']['container'] === 'php_controller_container', 'bootstrap daemon container');
 assert_true(in_array($boot['php_controller_daemon']['state'], ['running', 'stopped', 'not_created'], true), 'bootstrap daemon state');
 assert_true(array_key_exists('start_available', $boot['php_controller_daemon']), 'bootstrap start_available');
+
+use Manager\Models\SourceLogs;
+
+assert_true(SourceLogs::normalizeRelative('storage/logs') === 'storage/logs', 'log path keeps relative dir');
+assert_true(SourceLogs::normalizeRelative('/storage/logs/') === 'storage/logs', 'log path trims slashes');
+assert_true(SourceLogs::normalizeRelative('../secret') === null, 'log path rejects traversal');
+assert_true(SourceLogs::normalizeRelative('storage//logs') === null, 'log path rejects empty segment');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop/public') === 'laravel', 'detect laravel from public');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop/web') === 'yii', 'detect yii from web');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop/webroot') === 'cakephp', 'detect cakephp from webroot');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop') === 'plain', 'detect plain project root');
+assert_true(SourceLogs::frameworkOf(['SERVER_PATH' => '/var/www/source/shop/public']) === 'laravel', 'old source guesses laravel');
+assert_true(
+    SourceLogs::effectiveRelative(['SERVER_PATH' => '/var/www/source/shop/public']) === 'storage/logs',
+    'old source uses laravel preset',
+);
+assert_true(
+    SourceLogs::effectiveRelative([
+        'SERVER_PATH' => '/var/www/source/shop/public',
+        'FRAMEWORK' => 'symfony',
+        'LOG_PATH' => 'var/log/custom.log',
+    ]) === 'var/log/custom.log',
+    'log path override wins',
+);
+
+$sourceRoot = sys_get_temp_dir() . '/mgr-source-logs-' . bin2hex(random_bytes(4));
+$appDir = $sourceRoot . '/server/source/shop';
+mkdir($appDir . '/storage/logs', 0775, true);
+file_put_contents($appDir . '/storage/logs/laravel.log', "hello log\nline two\n");
+file_put_contents($appDir . '/storage/logs/queue.log', "queue\n");
+$outside = sys_get_temp_dir() . '/mgr-source-logs-out-' . bin2hex(random_bytes(4));
+mkdir($outside, 0775, true);
+file_put_contents($outside . '/secret.log', "secret\n");
+symlink($outside . '/secret.log', $appDir . '/storage/logs/secret.log');
+$envFile = $sourceRoot . '/env.json';
+$shop = [
+    'APP_NAME' => 'shop',
+    'DOMAIN_NAME' => 'shop.test',
+    'SERVER_PATH' => '/var/www/source/shop/public',
+    'CONTAINER_PHP_VERSION' => 'php8.5_container',
+    'ENABLED' => true,
+    'SSL_ENABLED' => false,
+];
+file_put_contents($envFile, json_encode(['SERVER_NAME2' => $shop], JSON_THROW_ON_ERROR));
+$sourceLogs = new SourceLogs($sourceRoot, new EnvConfig($envFile));
+assert_true(
+    $sourceLogs->hostProjectDir('/var/www/source/shop/public') === $appDir,
+    'host path maps container source dir',
+);
+$described = $sourceLogs->describe('SERVER_NAME2', $shop);
+assert_true($described['framework'] === 'laravel', 'missing framework detects laravel');
+assert_true($described['framework_stored'] === false, 'detected framework is not stored');
+assert_true($described['kind'] === 'directory', 'laravel preset is a directory');
+assert_true(count($described['files']) === 2, 'symlink outside project is skipped');
+$names = array_column($described['files'], 'name');
+assert_true(in_array('laravel.log', $names, true) && !in_array('secret.log', $names, true), 'only inside log files');
+$read = $sourceLogs->read('SERVER_NAME2', 'laravel.log', 50);
+assert_true(str_contains((string) ($read['log']['content'] ?? ''), 'hello log'), 'tail reads laravel.log');
+$cleared = $sourceLogs->clear('SERVER_NAME2', 'laravel.log');
+assert_true(($cleared['log']['content'] ?? 'x') === '', 'clear truncates log file');
+assert_true(is_file($appDir . '/storage/logs/laravel.log'), 'clear keeps the file');
+$written = $sourceLogs->write('SERVER_NAME2', 'laravel.log', "edited line\n");
+assert_true(($written['log']['content'] ?? '') === "edited line\n", 'write replaces log contents');
+assert_true(($written['log']['full'] ?? false) === true, 'write returns the full file');
+$deleted = $sourceLogs->delete('SERVER_NAME2', 'laravel.log');
+assert_true(!is_file($appDir . '/storage/logs/laravel.log'), 'delete removes the log file');
+$left = array_column($deleted['source']['files'] ?? [], 'name');
+assert_true(!in_array('laravel.log', $left, true) && in_array('queue.log', $left, true), 'delete drops only that file');
+try {
+    $sourceLogs->delete('SERVER_NAME2', 'secret.log');
+    assert_true(false, 'delete rejects file outside the list');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'source_logs.file_missing', 'outside log file is missing');
+}
+try {
+    $sourceLogs->saveConfig('SERVER_NAME2', 'custom', '../etc/passwd');
+    assert_true(false, 'save rejects traversal');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'validation.failed', 'traversal is validation failed');
+    assert_true(isset($e->fields()['log_path']), 'traversal error on log_path');
+}
+try {
+    $sourceLogs->saveConfig('SERVER_NAME2', 'custom', '');
+    assert_true(false, 'custom framework requires a path');
+} catch (HttpException $e) {
+    assert_true(isset($e->fields()['log_path']), 'empty custom path is required');
+}
+$saved = $sourceLogs->saveConfig('SERVER_NAME2', 'symfony', 'var/log');
+assert_true($saved['framework'] === 'symfony' && $saved['log_path'] === 'var/log', 'save stores framework and path');
+$storedServers = json_decode((string) file_get_contents($envFile), true);
+assert_true(($storedServers['SERVER_NAME2']['FRAMEWORK'] ?? '') === 'symfony', 'env keeps FRAMEWORK');
+assert_true(($storedServers['SERVER_NAME2']['LOG_PATH'] ?? '') === 'var/log', 'env keeps LOG_PATH');
+
+$envKeep = new EnvConfig($envFile);
+$kept = $envKeep->validate([
+    'app_name' => 'shop',
+    'domain_name' => 'shop.test',
+    'server_path' => '/var/www/source/shop/public',
+    'php_version' => 'php-8.5',
+    'enabled' => true,
+], ['SERVER_NAME2' => $storedServers['SERVER_NAME2']], 'SERVER_NAME2');
+assert_true(($kept['server']['FRAMEWORK'] ?? '') === 'symfony', 'validate keeps FRAMEWORK');
+assert_true(($kept['server']['LOG_PATH'] ?? '') === 'var/log', 'validate keeps LOG_PATH');
+$clearedPath = $envKeep->validate([
+    'app_name' => 'shop',
+    'domain_name' => 'shop.test',
+    'server_path' => '/var/www/source/shop/public',
+    'php_version' => 'php-8.5',
+    'framework' => 'laravel',
+    'log_path' => '',
+], ['SERVER_NAME2' => $storedServers['SERVER_NAME2']], 'SERVER_NAME2');
+assert_true(($clearedPath['server']['FRAMEWORK'] ?? '') === 'laravel', 'validate stores framework');
+assert_true(!isset($clearedPath['server']['LOG_PATH']), 'empty log_path clears override');
+
+$hasSourceLogs = false;
+foreach ($routes as $route) {
+    if (($route[0] ?? null) === 'GET' && ($route[1] ?? null) === '/sources/logs') {
+        $hasSourceLogs = true;
+        break;
+    }
+}
+assert_true($hasSourceLogs, 'GET /sources/logs route registered');
+
+$hasLogStream = false;
+foreach ($routes as $route) {
+    if (($route[0] ?? null) === 'GET' && str_contains((string) ($route[1] ?? ''), '/logs/stream')) {
+        $hasLogStream = true;
+        break;
+    }
+}
+assert_true($hasLogStream, 'GET source log stream route registered');
+
+$hasSupervisorStream = false;
+foreach ($routes as $route) {
+    if (
+        ($route[0] ?? null) === 'GET'
+        && str_contains((string) ($route[1] ?? ''), '/supervisor/')
+        && str_ends_with((string) ($route[1] ?? ''), '/logs/stream')
+    ) {
+        $hasSupervisorStream = true;
+        break;
+    }
+}
+assert_true($hasSupervisorStream, 'GET supervisor log stream route registered');
+
+$supRoot = sys_get_temp_dir() . '/mgr-sup-' . bin2hex(random_bytes(4));
+mkdir($supRoot . '/compose', 0775, true);
+mkdir($supRoot . '/logs/supervisor-8.5', 0775, true);
+file_put_contents($supRoot . '/compose/php-8.5.yml', "name: test\n");
+file_put_contents($supRoot . '/logs/supervisor-8.5/supervisord.log', "ready\n");
+$supervisorLogs = new SupervisorRuntime($supRoot, $supRoot);
+$supervisorLogPath = $supervisorLogs->resolveLogPath('supervisor-8.5', 'supervisord.log');
+assert_true(str_ends_with($supervisorLogPath, '/supervisord.log'), 'supervisor log path resolves');
+try {
+    $supervisorLogs->resolveLogPath('supervisor-8.5', '../compose/php-8.5.yml');
+    assert_true(false, 'supervisor log rejects traversal');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'supervisor.invalid_log', 'supervisor log rejects traversal');
+}
+
+$followFile = sys_get_temp_dir() . '/mgr-follow-' . bin2hex(random_bytes(4)) . '.log';
+file_put_contents($followFile, "one\n");
+$followLogs = new SourceLogs();
+$followStat = stat($followFile);
+$followInode = (int) ($followStat['ino'] ?? 0);
+$followOffset = (int) ($followStat['size'] ?? 0);
+$idle = $followLogs->readFollowChunk($followFile, $followOffset, $followInode);
+assert_true(($idle['event'] ?? '') === 'append' && ($idle['content'] ?? 'x') === '', 'follow idle sends no bytes');
+file_put_contents($followFile, "two\n", FILE_APPEND);
+$appended = $followLogs->readFollowChunk($followFile, $followOffset, $followInode);
+assert_true(($appended['content'] ?? '') === "two\n", 'follow appends new bytes');
+file_put_contents($followFile, 'x');
+$reset = $followLogs->readFollowChunk($followFile, 100, $followInode);
+assert_true(($reset['event'] ?? '') === 'reset' && ($reset['content'] ?? '') === 'x', 'follow reset after truncate');
+unlink($followFile);
+$gone = $followLogs->readFollowChunk($followFile, 0, $followInode);
+assert_true(($gone['event'] ?? '') === 'gone', 'follow ends when file disappears');
 
 echo "All checks passed\n";
