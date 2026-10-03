@@ -13,6 +13,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { useManager } from '../composables/useManager'
 import HomePinnedSection from '../components/HomePinnedSection.vue'
+import DomainNameCombobox from '../components/DomainNameCombobox.vue'
 import {
   FRAMEWORK_PRESETS,
   SOURCE_PREFIX,
@@ -197,6 +198,7 @@ async function onSslFile(kind, event) {
 }
 
 function onSubmit() {
+  form.domain_name = String(form.domain_name || '').trim().toLowerCase()
   syncServerPathFromParts()
   saveServer(editingKey.value ? {} : { framework: frameworkId.value })
 }
@@ -275,10 +277,13 @@ function onSubmit() {
               rounded
             />
             <br />
-            <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
-              http://{{ item.server.DOMAIN_NAME }}
-            </a>
-            <template v-if="isSslEnabled(item.server)">
+            <template v-if="item.server.DOMAIN_NAME">
+              <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
+                http://{{ item.server.DOMAIN_NAME }}
+              </a>
+            </template>
+            <span v-else>{{ t('servers.no_domain') }}</span>
+            <template v-if="item.server.DOMAIN_NAME && isSslEnabled(item.server)">
               <br />
               <a :href="'https://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
                 https://{{ item.server.DOMAIN_NAME }}
@@ -416,12 +421,7 @@ function onSubmit() {
         <small v-if="fieldErrors.app_name" class="p-error">{{ fieldErrors.app_name }}</small>
 
         <label>{{ t('form.domain') }}</label>
-        <InputText
-          v-model="form.domain_name"
-          :placeholder="t('form.server_domain_placeholder')"
-          required
-          fluid
-        />
+        <DomainNameCombobox v-model="form.domain_name" />
         <small v-if="fieldErrors.domain_name" class="p-error">{{ fieldErrors.domain_name }}</small>
 
         <label>{{ t('form.php_version') }}</label>

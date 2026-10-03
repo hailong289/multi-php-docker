@@ -506,6 +506,33 @@ assert_true($desired === ['solo.test'], 'desiredDomains extras only');
 $listed = $hosts->listedDomains([], null);
 assert_true(count($listed) === 1 && ($listed[0]['source'] ?? '') === 'hosts', 'listedDomains hosts-only');
 
+$clearEnvPath = $envMissingDir . '/clear-domain-env.json';
+file_put_contents(
+    $clearEnvPath,
+    "{\"SERVER_NAME1\":{\"DOMAIN_NAME\":\"app1.test\",\"APP_NAME\":\"app1\",\"SERVER_PATH\":\"/var/www/source/app1/public\"}}\n",
+);
+$clearEnv = new EnvConfig($clearEnvPath);
+$clearHosts = new HostsSync($hostsTmp);
+$clearHosts->saveExtras(['app1.test', 'other.test']);
+$clearedDomain = $clearHosts->normalizeDomain((string) ($clearEnv->all()['SERVER_NAME1']['DOMAIN_NAME'] ?? ''));
+$clearedServer = $clearEnv->clearDomain('SERVER_NAME1');
+$clearHosts->removeExtra($clearedDomain);
+$afterClear = $clearEnv->all();
+assert_true(isset($afterClear['SERVER_NAME1']), 'clearDomain keeps the server');
+assert_true(($clearedServer['DOMAIN_NAME'] ?? 'x') === '', 'clearDomain blanks DOMAIN_NAME');
+assert_true(($afterClear['SERVER_NAME1']['APP_NAME'] ?? '') === 'app1', 'clearDomain keeps the app');
+assert_true($clearHosts->extras() === ['other.test'], 'server domain delete drops the matching hosts extra');
+$listedAfterClear = $clearHosts->listedDomains($afterClear, null);
+assert_true(
+    count($listedAfterClear) === 1 && ($listedAfterClear[0]['domain_name'] ?? '') === 'other.test',
+    'listedDomains hides a domain cleared from both sources',
+);
+$restored = $clearEnv->assignDomain('SERVER_NAME1', 'app1.test');
+assert_true(($restored['DOMAIN_NAME'] ?? '') === 'app1.test', 'assignDomain restores DOMAIN_NAME');
+assert_true(($clearEnv->assignDomain('SERVER_NAME1', 'other.test')['DOMAIN_NAME'] ?? '') === 'app1.test', 'assignDomain does not replace a different domain');
+$clearHosts->ensureExtra('app1.test');
+assert_true(in_array('app1.test', $clearHosts->extras(), true), 'ensureExtra puts a hosts name back');
+
 assert_true(HostsSync::normalizeWriteToken('DEADBEEFcafe') === 'deadbeefcafe', 'normalizeWriteToken lowercases hex');
 assert_true(HostsSync::normalizeWriteToken('not a token!') === '', 'normalizeWriteToken rejects junk');
 assert_true(HostsSync::normalizeWriteToken('abcd') === '', 'normalizeWriteToken rejects short token');
