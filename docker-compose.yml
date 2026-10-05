@@ -102,10 +102,6 @@ services:
     build:
       context: .
       dockerfile: ./docker_files/manager.Dockerfile
-      additional_contexts:
-        php85: service:php-8.5
-      args:
-        PHP_BASE_IMAGE: php85
     container_name: manager_container
     ports:
       - "127.0.0.1:8080:8080"

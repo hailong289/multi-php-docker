@@ -1,7 +1,3 @@
-# Must precede the first FROM. An ARG after a stage belongs to that stage
-# and is invisible to a later FROM, so ${PHP_BASE_IMAGE} stays blank.
-ARG PHP_BASE_IMAGE=multi-php-local:php-8.5
-
 # Static Vite output. Build on the runner CPU so npm never runs under QEMU:
 # arm64 emulation hits "Illegal instruction" inside npm ci and the step hangs.
 FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
@@ -13,7 +9,7 @@ COPY server/manager/frontend/ ./
 # vite.config.js writes to ../public → /public
 RUN npm run build
 
-FROM ${PHP_BASE_IMAGE}
+FROM php:8.5-cli-alpine
 
 WORKDIR /app
 COPY server/manager/backend ./backend
