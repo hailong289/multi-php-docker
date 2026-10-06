@@ -1,13 +1,10 @@
-FROM nginx:latest
+FROM nginx:alpine
 
-# Cài đặt envsubst (công cụ thay thế biến môi trường)
-RUN apt-get update && apt-get install -y gettext-base jq && apt-get clean && rm -rf /var/lib/apt/lists/*
-# Tạo thư mục cho các file cấu hình
-# Copy các template vào container
+# envsubst (gettext) and jq. One layer, no package index left behind.
+RUN apk add --no-cache jq gettext
+
 COPY nginx/examples /etc/nginx/examples
-
-# Sao chép script vào container
 COPY env.example.json /var/environment/env.json
 COPY scripts/ /var/scripts/
-# Chạy Nginx
+
 CMD ["nginx", "-g", "daemon off;"]
