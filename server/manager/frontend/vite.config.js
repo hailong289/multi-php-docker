@@ -22,7 +22,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['monaco-editor'],
+    include: ['monaco-editor/esm/vs/editor/editor.api'],
   },
   worker: {
     format: 'es',
