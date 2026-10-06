@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y gettext-base jq && apt-get clean && rm 
 COPY nginx/examples /etc/nginx/examples
 
 # Sao chép script vào container
-COPY env.json /var/environment/
+COPY env.example.json /var/environment/env.json
 COPY scripts/ /var/scripts/
 # Chạy Nginx
 CMD ["nginx", "-g", "daemon off;"]

@@ -6,8 +6,7 @@ on:
     paths:
       - "server/manager/**"
       - "docker_files/manager.Dockerfile"
-      - "docker-compose.yml"
-      - ".github/workflows/build-manager.yml"
+      - ".dockerignore"
   workflow_dispatch:
 
 # Only keep the latest push build; cancel older in-progress runs on the same branch.
