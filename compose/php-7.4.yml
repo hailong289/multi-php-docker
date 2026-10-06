@@ -5,9 +5,6 @@ services:
     build:
       context: .
       dockerfile: ./docker_files/php7.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: php7.4_container
     volumes:
       - ./server/source:/var/www/source

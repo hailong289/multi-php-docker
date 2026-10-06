@@ -5,9 +5,6 @@ services:
     build:
       context: .
       dockerfile: ./docker_files/php8.1.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: php8.1_container
     volumes:
       - ./server/source:/var/www/source

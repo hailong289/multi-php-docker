@@ -185,12 +185,19 @@ run_compose_create() {
 }
 
 # Hub images (MySQL/Redis/RabbitMQ/Kafka): prefer pull, then create.
-# If the tag is not on Hub yet (or pull fails), fall back to local image / build.
+# multi-php-local:* is built on this machine. Pulling that name from Hub always
+# fails, and a multi-arch build then has to reach auth.docker.io for every platform.
 run_compose_pull_create() {
     project_name="$1"
     compose_file="$2"
     profile="$3"
     service="$4"
+
+    service_file="$(dirname "$compose_file")/compose/${service}.yml"
+    if [ -f "$service_file" ] && grep -q 'image: multi-php-local:' "$service_file"; then
+        run_compose_create "$project_name" "$compose_file" "$profile" "$service"
+        return $?
+    fi
 
     set -- docker compose -p "$project_name"
     if [ -f /project/.env ]; then

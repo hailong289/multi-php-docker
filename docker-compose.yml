@@ -70,9 +70,6 @@ services:
     build:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: nginx_container
     ports:
       - "80:80"
