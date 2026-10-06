@@ -4,13 +4,25 @@ on:
   push:
     branches: [master, main]
     paths:
-      - "docker_files/**"
+      - "docker_files/nginx.Dockerfile"
+      - "docker_files/php8.5.Dockerfile"
+      - "docker_files/php8.4.Dockerfile"
+      - "docker_files/php8.3.Dockerfile"
+      - "docker_files/php8.2.Dockerfile"
+      - "docker_files/php8.1.Dockerfile"
+      - "docker_files/php8.0.Dockerfile"
+      - "docker_files/php7.Dockerfile"
+      - "docker_files/mysql.Dockerfile"
+      - "docker_files/postgres.Dockerfile"
+      - "docker_files/redis.Dockerfile"
+      - "docker_files/rabbitMQ.Dockerfile"
+      - "docker_files/kafka.Dockerfile"
+      - "docker_files/mailpit.Dockerfile"
+      - "docker_files/minio.Dockerfile"
       - "nginx/examples/**"
       - "scripts/**"
       - "env.example.json"
       - ".dockerignore"
-    paths-ignore:
-      - "docker_files/manager.Dockerfile"
   workflow_dispatch:
     inputs:
       image:
