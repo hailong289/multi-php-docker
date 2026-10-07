@@ -7,6 +7,7 @@ import Tag from 'primevue/tag'
 import ActionMenu from './ActionMenu.vue'
 import PinButton from './PinButton.vue'
 import ServiceConnectionDialog from './ServiceConnectionDialog.vue'
+import StartupSequenceSection from './StartupSequenceSection.vue'
 import { apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { usePinnedContainers } from '../composables/usePinnedContainers'
@@ -333,16 +334,19 @@ function onDrop(toIndex) {
 
 <template>
   <section
-    v-if="pins.length"
     class="panel home-pinned"
     data-tour="home-pinned"
   >
-    <div class="panel-heading">
-      <h2>{{ t('pin.section_title') }}</h2>
-      <p class="status-line">{{ t('pin.section_hint') }}</p>
+    <div class="panel-heading home-pinned-heading">
+      <div>
+        <h2>{{ t('pin.section_title') }}</h2>
+        <p class="status-line">{{ t('pin.section_hint') }}</p>
+      </div>
+      <StartupSequenceSection />
     </div>
     <div class="panel-body home-pinned-body">
-      <ul class="home-pinned-list">
+      <p v-if="!pins.length" class="empty">{{ t('pin.empty') }}</p>
+      <ul v-else class="home-pinned-list">
         <li
           v-for="(row, index) in rows"
           :key="row.key"
