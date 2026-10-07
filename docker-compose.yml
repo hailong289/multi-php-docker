@@ -66,6 +66,7 @@ services:
     restart: "no"
 
   nginx:
+    profiles: ["nginx"]
     image: multi-php-local:nginx
     build:
       context: .
@@ -89,8 +90,6 @@ services:
     depends_on:
       env-init:
         condition: service_completed_successfully
-      php-8.5:
-        condition: service_started
     networks:
       - app-network
 

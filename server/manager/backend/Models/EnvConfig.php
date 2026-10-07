@@ -297,6 +297,9 @@ final class EnvConfig
     public function applyCommand(array $servers): string
     {
         $profiles = $this->requiredProfiles($servers);
+        $profiles[] = 'nginx';
+        $profiles = array_values(array_unique($profiles));
+        sort($profiles);
         $profileFlags = implode(' ', array_map(
             static fn (string $profile): string => '--profile ' . $profile,
             $profiles

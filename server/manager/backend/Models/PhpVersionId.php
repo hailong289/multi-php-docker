@@ -208,7 +208,7 @@ final class PhpVersionId
 
     public static function profile(string $service): ?string
     {
-        return self::isDefault($service) ? null : $service;
+        return $service;
     }
 
     public static function label(string $service): string

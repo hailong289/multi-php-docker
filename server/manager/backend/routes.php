@@ -35,7 +35,7 @@ return [
     ['GET', '/nginx/domain-logs/(?P<domain>[a-zA-Z0-9][a-zA-Z0-9._-]{0,253})', [NginxController::class, 'domainLogShow']],
     ['POST', '/nginx/domain-logs/(?P<domain>[a-zA-Z0-9][a-zA-Z0-9._-]{0,253})/clear', [NginxController::class, 'domainLogClear']],
     ['POST', '/nginx/logs/clear', [NginxController::class, 'globalLogClear']],
-    ['POST', '/nginx/actions/(?P<action>start|stop|restart)', [NginxController::class, 'action']],
+    ['POST', '/nginx/actions/(?P<action>start|stop|restart|create)', [NginxController::class, 'action']],
     ['POST', '/nginx/test', [NginxController::class, 'test']],
     ['POST', '/nginx/reload', [NginxController::class, 'reload']],
     ['GET', '/hosts/status', [HostsController::class, 'status']],
