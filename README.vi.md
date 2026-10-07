@@ -513,15 +513,7 @@ Tương tự với profile `php-8.4` / `supervisor-8.4`, `php-8.2` / `supervisor
 Image PHP 7.4 được cung cấp sẵn hiện chưa có Supervisor. Để chạy `supervisor-7.4`, hãy tạo image tùy chỉnh: thêm `supervisor` vào danh sách package trong `docker_files/php7.Dockerfile`, đổi image của `php-7.4` (và `supervisor-7.4` trong `compose/php-7.4.yml`) sang tên riêng và thêm `build` như hướng dẫn ở mục **Tự build image riêng**.
 
 ```dockerfile
-RUN apt-get update && apt-get install -y \
-    supervisor \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libzip-dev \
-    libxml2-dev \
-    unzip \
-    curl
+RUN apk add --no-cache supervisor
 ```
 
 ```bash
@@ -623,7 +615,7 @@ PHP 7.4 và 8.0–8.5 đã có sẵn. Mục này dành cho phiên bản mới h�
 cp docker_files/php8.5.Dockerfile docker_files/php8.6.Dockerfile
 ```
 
-Đổi base image trong Dockerfile (ví dụ `FROM php:8.6-fpm`). Giữ hoặc điều chỉnh package/extension; các bản 8.x hiện có thường gồm `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl` và Redis. Cài `pdo_pgsql` / `pgsql` từ Server Manager khi project dùng PostgreSQL.
+Đổi base image trong Dockerfile (ví dụ `FROM php:8.6-fpm-alpine`). Giữ hoặc điều chỉnh package/extension; các bản 8.x hiện có thường gồm `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl` và Redis. Cài `pdo_pgsql` / `pgsql` từ Server Manager khi project dùng PostgreSQL.
 
 ### 2. Tạo cấu hình PHP và Supervisor
 

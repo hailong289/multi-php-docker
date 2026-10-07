@@ -1,24 +1,26 @@
-FROM php:8.4-fpm
+FROM php:8.4-fpm-alpine
 
-RUN apt-get update && apt-get install -y \
-    git \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libzip-dev \
-    libxml2-dev \
-    unzip \
-    libz-dev \
-    curl \
-    supervisor \
+# Runtime libraries stay. Compilers are installed in a virtual package and removed
+# in this same layer, so they are not part of the image.
+RUN apk add --no-cache \
+        git curl unzip supervisor \
+        freetype libjpeg-turbo libpng libzip libxml2 \
+    && apk add --no-cache --virtual .php-build \
+        $PHPIZE_DEPS \
+        freetype-dev \
+        libjpeg-turbo-dev \
+        libpng-dev \
+        libzip-dev \
+        libxml2-dev \
+        linux-headers \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && pecl install redis \
     && docker-php-ext-enable redis \
-    && curl -sS https://getcomposer.org/installer | php \
-    && mv composer.phar /usr/local/bin/composer
-
-RUN docker-php-ext-install pdo_mysql mysqli gd zip sockets pcntl
-
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+    && docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli gd zip sockets pcntl \
+    && curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+    && apk del .php-build \
+    && rm -rf /tmp/pear \
+    && docker-php-source delete
 
 EXPOSE 9000
 

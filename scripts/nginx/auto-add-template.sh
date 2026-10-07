@@ -15,7 +15,11 @@ fi
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "jq command not found. Cài đặt jq..."
-    apt-get update && apt-get install -y jq
+    if [ -f /etc/alpine-release ]; then
+        apk add --no-cache jq
+    else
+        apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
+    fi
     echo "jq đã được cài đặt thành công."
 else
     echo "jq đã được cài đặt."

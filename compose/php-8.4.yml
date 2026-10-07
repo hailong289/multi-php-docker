@@ -4,9 +4,6 @@ services:
     build:
       context: ./docker_files
       dockerfile: php8.4.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     image: multi-php-local:php-8.4
     container_name: php8.4_container
     volumes:

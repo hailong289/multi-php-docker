@@ -513,15 +513,7 @@ Same pattern for profiles `php-8.4` / `supervisor-8.4`, `php-8.2` / `supervisor-
 The provided PHP 7.4 image does not currently include Supervisor. To run `supervisor-7.4`, create a custom image: add `supervisor` to the package list in `docker_files/php7.Dockerfile`, change the image of `php-7.4` (and `supervisor-7.4` in `compose/php-7.4.yml`) to your own name, and add `build` as described under **Build custom images**.
 
 ```dockerfile
-RUN apt-get update && apt-get install -y \
-    supervisor \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libzip-dev \
-    libxml2-dev \
-    unzip \
-    curl
+RUN apk add --no-cache supervisor
 ```
 
 ```bash
@@ -623,7 +615,7 @@ PHP 7.4 and 8.0–8.5 are already shipped. Use this section for a newer release 
 cp docker_files/php8.5.Dockerfile docker_files/php8.6.Dockerfile
 ```
 
-Change the base image (for example `FROM php:8.6-fpm`). Keep or adjust packages and extensions; current 8.x images typically include `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl`, and Redis. Install `pdo_pgsql` / `pgsql` from Server Manager when the project uses PostgreSQL.
+Change the base image (for example `FROM php:8.6-fpm-alpine`). Keep or adjust packages and extensions; current 8.x images typically include `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl`, and Redis. Install `pdo_pgsql` / `pgsql` from Server Manager when the project uses PostgreSQL.
 
 ### 2. Create PHP config and Supervisor dirs
 
@@ -751,7 +743,7 @@ services:
     image: <dockerhub-username>/server-php:8.2-v1.0.0
     build:
       context: .
-      dockerfile: ./docker_files/php8.Dockerfile
+      dockerfile: ./docker_files/php8.2.Dockerfile
       platforms:
         - linux/amd64
         - linux/arm64

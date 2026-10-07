@@ -89,26 +89,26 @@ final class PhpVersionInstaller
 FROM php:{$tag}
 
 RUN apk add --no-cache \\
-    \$PHPIZE_DEPS \\
-    git \\
-    curl \\
-    unzip \\
-    freetype-dev \\
-    libjpeg-turbo-dev \\
-    libpng-dev \\
-    libzip-dev \\
-    libxml2-dev \\
-    oniguruma-dev \\
-    linux-headers \\
-    postgresql-dev \\
-    supervisor \\
+        git curl unzip supervisor \\
+        freetype libjpeg-turbo libpng libzip libxml2 oniguruma libpq \\
+    && apk add --no-cache --virtual .php-build \\
+        \$PHPIZE_DEPS \\
+        freetype-dev \\
+        libjpeg-turbo-dev \\
+        libpng-dev \\
+        libzip-dev \\
+        libxml2-dev \\
+        oniguruma-dev \\
+        linux-headers \\
+        postgresql-dev \\
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \\
     && pecl install redis \\
     && docker-php-ext-enable redis \\
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \\
     && docker-php-ext-install pdo_mysql pdo_pgsql pgsql mysqli gd zip sockets pcntl \\
-    && curl -sS https://getcomposer.org/installer | php \\
-    && mv composer.phar /usr/local/bin/composer \\
-    && apk del \$PHPIZE_DEPS
+    && curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \\
+    && apk del .php-build \\
+    && rm -rf /tmp/pear \\
+    && docker-php-source delete
 
 EXPOSE 9000
 
@@ -118,26 +118,45 @@ DOCKER;
             $content = <<<DOCKER
 FROM php:{$tag}
 
-RUN apt-get update && apt-get install -y \\
-    git \\
-    libpng-dev \\
-    libjpeg-dev \\
-    libfreetype6-dev \\
-    libzip-dev \\
-    libxml2-dev \\
-    unzip \\
-    libz-dev \\
-    libpq-dev \\
-    curl \\
-    supervisor \\
-    && pecl install redis \\
-    && docker-php-ext-enable redis \\
-    && curl -sS https://getcomposer.org/installer | php \\
-    && mv composer.phar /usr/local/bin/composer
-
-RUN docker-php-ext-install pdo_mysql pdo_pgsql pgsql mysqli gd zip sockets pcntl
-
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \\
+    apt-get update; \\
+    apt-get install -y --no-install-recommends \\
+        git unzip curl supervisor \\
+        libfreetype6-dev libjpeg-dev libpng-dev libzip-dev libxml2-dev libz-dev libpq-dev \\
+        \$PHPIZE_DEPS; \\
+    docker-php-ext-configure gd --with-freetype --with-jpeg; \\
+    pecl install redis; \\
+    docker-php-ext-enable redis; \\
+    docker-php-ext-install -j"\$(nproc)" pdo_mysql pdo_pgsql pgsql mysqli gd zip sockets pcntl; \\
+    curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer; \\
+    rm -rf /tmp/pear; \\
+    ext_dir="\$(php -d display_errors=0 -r 'echo ini_get("extension_dir");')"; \\
+    { for so in "\$ext_dir"/*.so; do ldd "\$so"; done; } \\
+        | awk '/=> \\// { print \$3 }' \\
+        | sort -u \\
+        | while read -r lib; do readlink -f "\$lib"; done \\
+        | sort -u \\
+        | xargs -r dpkg-query --search \\
+        | cut -d: -f1 \\
+        | sort -u \\
+        | xargs -r apt-mark manual; \\
+    devpkgs=""; \\
+    for pkg in \$PHPIZE_DEPS libc6-dev libfreetype6-dev libfreetype-dev libjpeg-dev libjpeg62-turbo-dev libpng-dev libzip-dev libxml2-dev zlib1g-dev libpq-dev; do \\
+        if dpkg-query -W -f='\${Status}' "\$pkg" 2>/dev/null | grep -q 'install ok installed'; then \\
+            devpkgs="\$devpkgs \$pkg"; \\
+        fi; \\
+    done; \\
+    apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \$devpkgs; \\
+    rm -rf /var/lib/apt/lists/*; \\
+    missing=0; \\
+    for so in "\$ext_dir"/*.so; do \\
+        if ldd "\$so" | grep -q 'not found'; then \\
+            ldd "\$so"; \\
+            missing=1; \\
+        fi; \\
+    done; \\
+    test "\$missing" -eq 0; \\
+    docker-php-source delete
 
 EXPOSE 9000
 
