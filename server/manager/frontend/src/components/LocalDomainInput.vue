@@ -1,8 +1,11 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import { CUSTOM_TLD, LOCAL_TLDS } from '../lib/localDomain'
+
+const { t } = useI18n()
 
 const name = defineModel('name', { type: String, default: '' })
 const tld = defineModel('tld', { type: String, default: '.test' })
@@ -12,7 +15,7 @@ const isCustom = computed(() => tld.value === CUSTOM_TLD)
 
 const tldOptions = computed(() => [
   ...LOCAL_TLDS.map((item) => ({ label: item, value: item })),
-  { label: 'custom', value: CUSTOM_TLD, custom: true },
+  { label: t('form.domain_tld_custom'), value: CUSTOM_TLD },
 ])
 </script>
 
@@ -33,14 +36,7 @@ const tldOptions = computed(() => [
       option-value="value"
       :aria-label="$t('form.domain_tld')"
       class="domain-tld-select"
-    >
-      <template #option="{ option }">
-        <span>{{ option.custom ? $t('form.domain_tld_custom') : option.label }}</span>
-      </template>
-      <template #value="{ value }">
-        <span>{{ value === CUSTOM_TLD ? $t('form.domain_tld_custom') : value }}</span>
-      </template>
-    </Select>
+    />
     <InputText
       v-if="isCustom"
       v-model="custom"

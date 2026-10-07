@@ -19,6 +19,7 @@ const {
   busy,
   data,
   domainEntries,
+  isDomainDeleteHolding,
   domainForm,
   domainModalOpen,
   domainModalMode,
@@ -172,7 +173,7 @@ async function copyManualLines() {
                     : t('domains.write_admin')
                 "
                 :loading="isPending('hosts-admin', { domain: row.domain_name })"
-                :disabled="busy"
+                :disabled="busy || isDomainDeleteHolding(row.key)"
                 :title="t('domains.write_admin_hint')"
                 @click="writeDomainHostsAdmin(row.domain_name)"
               />
@@ -180,7 +181,7 @@ async function copyManualLines() {
                 type="button"
                 size="small"
                 :label="t('action.edit')"
-                :disabled="busy"
+                :disabled="busy || isDomainDeleteHolding(row.key)"
                 @click="openDomainEdit(row.key)"
               />
               <Button
@@ -188,13 +189,9 @@ async function copyManualLines() {
                 size="small"
                 severity="danger"
                 outlined
-                :label="
-                  isPending('delete', { key: row.key })
-                    ? t('action.working')
-                    : t('action.delete')
-                "
-                :loading="isPending('delete', { key: row.key })"
-                :disabled="busy"
+                :label="t('action.delete')"
+                :loading="isPending('delete', { key: row.key }) || isDomainDeleteHolding(row.key)"
+                :disabled="busy || isDomainDeleteHolding(row.key)"
                 :title="
                   row.source === 'hosts'
                     ? t('domains.delete_hosts_hint')

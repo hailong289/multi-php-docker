@@ -205,12 +205,24 @@ build_hosts_tmp() {
   printf '%s' "$tmp"
 }
 
+# Set when the macOS admin dialog is cancelled. apply_and_status reads this.
+HOSTS_ELEVATION_DENIED=0
+
 # Copy tmp hosts file into place (sudo, or macOS GUI elevation when no TTY).
 install_hosts_file() {
   local src="$1"
+  local err=""
+  local rc=0
   if [ "$PLATFORM" = 'mac' ] && [ ! -t 0 ] && command -v osascript >/dev/null 2>&1; then
-    osascript -e "do shell script \"cp $(printf %q "$src") $(printf %q "$HOSTS_FILE")\" with administrator privileges"
-    return $?
+    err="$(osascript -e "do shell script \"cp $(printf %q "$src") $(printf %q "$HOSTS_FILE")\" with administrator privileges" 2>&1)" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      printf '%s\n' "$err" >&2
+      if printf '%s' "$err" | grep -Eqi 'user canceled|user cancelled|\(-128\)'; then
+        HOSTS_ELEVATION_DENIED=1
+      fi
+      return "$rc"
+    fi
+    return 0
   fi
   sudo cp "$src" "$HOSTS_FILE"
 }
@@ -258,6 +270,7 @@ apply_hosts() {
 apply_and_status() {
   local force_from_sync="${1:-0}"
   local rc=1
+  HOSTS_ELEVATION_DENIED=0
   if ! acquire_write_lock; then
     return 1
   fi
@@ -278,9 +291,14 @@ apply_and_status() {
     echo "Hosts updated successfully."
     rc=0
   else
-    write_status error hosts.manual_required "$(domains_map_json unknown "${domains[@]:-}")" "$(manual_json "${domains[@]:-}")"
+    if [ "$HOSTS_ELEVATION_DENIED" -eq 1 ]; then
+      write_status error hosts.elevation_denied "$(domains_map_json unknown "${domains[@]:-}")"
+      echo "Admin password prompt was cancelled."
+    else
+      write_status error hosts.manual_required "$(domains_map_json unknown "${domains[@]:-}")" "$(manual_json "${domains[@]:-}")"
+      echo "Hosts update failed. Add entries manually if needed."
+    fi
     rm -f "$SYNC_FILE"
-    echo "Hosts update failed. Add entries manually if needed."
     rc=1
   fi
   release_write_lock
