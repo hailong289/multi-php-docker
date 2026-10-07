@@ -1,4 +1,4 @@
-FROM php:8.1-fpm-alpine
+FROM php:8.2-fpm-alpine
 
 # Runtime libraries stay. Compilers are installed in a virtual package and removed
 # in this same layer, so they are not part of the image.

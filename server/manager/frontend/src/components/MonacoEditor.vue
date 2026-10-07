@@ -21,7 +21,12 @@ let suppressEmit = false
 async function mountEditor() {
   if (!host.value || editor) return
   ensureMonacoEnvironment()
-  monaco = await import('monaco-editor')
+  monaco = await import('monaco-editor/esm/vs/editor/editor.api')
+  await Promise.all([
+    import('monaco-editor/esm/vs/basic-languages/ini/ini.contribution'),
+    import('monaco-editor/esm/vs/basic-languages/php/php.contribution'),
+    import('monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution'),
+  ])
   registerManagerMonacoThemes(monaco)
   editor = monaco.editor.create(host.value, {
     value: props.modelValue,
