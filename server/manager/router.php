@@ -9,8 +9,14 @@ $originalPath = $path;
 
 $underManageBase = $path === '/server-manage' || str_starts_with($path, '/server-manage/');
 
-// Local UX: http://127.0.0.1:8080/ → /server-manage/
+// http://127.0.0.1:8080/ is the introduction page. Server Manager stays at /server-manage/.
 if (!$underManageBase && $path === '/') {
+    $welcome = welcome_page_path();
+    if ($welcome !== null) {
+        header('Content-Type: text/html; charset=utf-8');
+        readfile($welcome);
+        return true;
+    }
     header('Location: /server-manage/', true, 302);
     return true;
 }
@@ -49,6 +55,24 @@ http_response_code(503);
 header('Content-Type: text/plain; charset=utf-8');
 echo "Manager UI is not built yet. Run: cd server/manager/frontend && npm install && npm run build\n";
 return true;
+
+function welcome_page_path(): ?string
+{
+    $candidates = [];
+    $env = getenv('MANAGER_ENV_PATH');
+    if (is_string($env) && $env !== '') {
+        $candidates[] = dirname($env) . '/nginx/welcome/index.html';
+    }
+    $candidates[] = dirname(__DIR__, 2) . '/nginx/welcome/index.html';
+    $candidates[] = __DIR__ . '/welcome/index.html';
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return null;
+}
 
 /**
  * @param non-empty-string $file

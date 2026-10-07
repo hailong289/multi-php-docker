@@ -66,7 +66,6 @@ services:
     restart: "no"
 
   nginx:
-    profiles: ["nginx"]
     image: multi-php-local:nginx
     build:
       context: .
@@ -79,6 +78,7 @@ services:
       - ./server:/var/www
       - ./scripts:/var/scripts
       - ./nginx/examples:/etc/nginx/examples
+      - ./nginx/welcome:/usr/share/nginx/welcome:ro
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
       - ./nginx/ssl:/etc/nginx/ssl

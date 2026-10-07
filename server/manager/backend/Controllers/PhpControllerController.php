@@ -21,12 +21,7 @@ final class PhpControllerController extends Controller
 {
     public function index(Request $request, array $params = []): Response
     {
-        $runtime = new PhpRuntime();
-
-        return Response::json([
-            'targets' => PhpRuntime::targets(),
-            'statuses' => $runtime->statuses(),
-        ]);
+        return Response::json($this->phpPayload());
     }
 
     public function availableVersions(Request $request, array $params = []): Response

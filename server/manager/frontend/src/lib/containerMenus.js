@@ -236,14 +236,6 @@ export function buildNginxMenuItems({ t, nginx }) {
   const { enabled, pending, run } = nginx
   return [
     {
-      id: 'create',
-      label: t('nginx.create'),
-      primary: true,
-      disabled: !enabled('create'),
-      loading: pending('create'),
-      run: () => run('create'),
-    },
-    {
       id: 'start',
       label: t('nginx.start'),
       disabled: !enabled('start'),

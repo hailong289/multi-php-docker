@@ -35,7 +35,7 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
 | Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
-`docker compose up -d` starts Server Manager and PHP Controller, and runs one-shot `env-init` first (creates `env.json` only when it is missing). Nginx (`nginx`), PHP 8.5 (`php-8.5`), the other PHP versions, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor each use a Compose profile and stay off until you start them from Server Manager or with `--profile`.
+`docker compose up -d` starts Nginx, Server Manager, and PHP Controller, and runs one-shot `env-init` first (creates `env.json` only when it is missing). PHP 8.5 (`php-8.5`), the other PHP versions, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor each use a Compose profile and stay off until you start them from Server Manager or with `--profile`.
 
 Local images (`multi-php-local`):
 
@@ -312,10 +312,10 @@ The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.js
 
 ### PHP, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor profiles
 
-Nginx uses profile `nginx`. Every PHP version has a Compose profile with the same name (`php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
+Nginx starts with `docker compose up -d`. Every PHP version has a Compose profile with the same name (`php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
 
 ```bash
-docker compose --profile nginx up -d nginx
+docker compose up -d nginx
 docker compose --profile php-8.5 up -d php-8.5
 docker compose --profile php-8.4 up -d
 docker compose --profile php-8.3 up -d

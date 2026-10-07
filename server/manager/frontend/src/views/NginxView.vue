@@ -488,14 +488,6 @@ onUnmounted(() => {
                     <Button
                       type="button"
                       size="small"
-                      :label="pending === 'create' ? t('action.working') : t('nginx.create')"
-                      :loading="pending === 'create'"
-                      :disabled="!enabled('create')"
-                      @click="run('create', '/api/nginx/actions/create')"
-                    />
-                    <Button
-                      type="button"
-                      size="small"
                       :label="pending === 'start' ? t('action.working') : t('nginx.start')"
                       :loading="pending === 'start'"
                       :disabled="!enabled('start')"
@@ -543,15 +535,6 @@ onUnmounted(() => {
                     <PinButton kind="nginx" id="nginx" />
                   </div>
                 </div>
-
-                <Message
-                  v-if="nginx.state === 'not_created' || nginx.state === 'error'"
-                  severity="info"
-                  :closable="false"
-                  class="nginx-apply-hint"
-                >
-                  {{ t('nginx.create_hint') }}
-                </Message>
 
                 <Message severity="info" :closable="false" class="nginx-apply-hint">
                   {{ t('nginx.apply_reload_hint') }}

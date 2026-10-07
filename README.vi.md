@@ -35,7 +35,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | PHP Controller | `php_controller_container` | Không public | Điều khiển allowlist PHP container qua Docker socket |
 | Env Init | `env_init_container` | Không public | Tạo `env.json` nếu thiếu rồi thoát với mã `0` |
 
-`docker compose up -d` khởi động Server Manager và PHP Controller, và chạy `env-init` một lần trước đó (chỉ tạo `env.json` khi file chưa có). Nginx (`nginx`), PHP 8.5 (`php-8.5`), các bản PHP còn lại, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO và Supervisor đều nằm trong profile riêng và mặc định không chạy cho đến khi bạn bật từ Server Manager hoặc bằng `--profile`.
+`docker compose up -d` khởi động Nginx, Server Manager và PHP Controller, và chạy `env-init` một lần trước đó (chỉ tạo `env.json` khi file chưa có). PHP 8.5 (`php-8.5`), các bản PHP còn lại, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO và Supervisor đều nằm trong profile riêng và mặc định không chạy cho đến khi bạn bật từ Server Manager hoặc bằng `--profile`.
 
 Image local (`multi-php-local`):
 
@@ -312,10 +312,10 @@ Script đọc `DOMAIN_NAME` trong `env.json` (và `runtime/hosts.extra.json` n�
 
 ### Profile PHP, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO và Supervisor
 
-Nginx dùng profile `nginx`. Mọi phiên bản PHP có Compose profile cùng tên (`php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
+Nginx khởi động cùng `docker compose up -d`. Mọi phiên bản PHP có Compose profile cùng tên (`php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
 
 ```bash
-docker compose --profile nginx up -d nginx
+docker compose up -d nginx
 docker compose --profile php-8.5 up -d php-8.5
 docker compose --profile php-8.4 up -d
 docker compose --profile php-8.3 up -d
