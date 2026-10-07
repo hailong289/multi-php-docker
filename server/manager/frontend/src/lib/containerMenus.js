@@ -238,7 +238,6 @@ export function buildNginxMenuItems({ t, nginx }) {
     {
       id: 'start',
       label: t('nginx.start'),
-      primary: true,
       disabled: !enabled('start'),
       loading: pending('start'),
       run: () => run('start'),

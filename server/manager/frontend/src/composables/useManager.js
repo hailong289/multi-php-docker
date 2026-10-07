@@ -16,6 +16,7 @@ const STATUS_FALLBACK_MS = 5000
 /** @type {EventSource|null} */
 let statusStreamSource = null
 let statusStreamsWanted = false
+let statusStreamScope = 'all'
 let statusFallbackTimer = null
 /** @type {Set<(payload: object) => void>} */
 const hostsStreamWaiters = new Set()
@@ -36,6 +37,9 @@ const busy = ref(false)
 const pendingAction = ref(null)
 const modalOpen = ref(false)
 const bootstrapped = ref(false)
+const fullLoaded = ref(false)
+const phpScreenLoaded = ref(false)
+const infraScreenLoaded = ref(false)
 
 const data = reactive({
   servers: {},
@@ -351,7 +355,10 @@ export function useManager() {
   function startStatusFallback() {
     if (statusFallbackTimer || !statusStreamsWanted) return
     statusFallbackTimer = setInterval(() => {
-      if (statusStreamsWanted) loadBootstrap({ silent: true })
+      if (!statusStreamsWanted) return
+      if (statusStreamScope === 'php') loadPhpScreen({ silent: true })
+      else if (statusStreamScope === 'infra') loadInfraScreen({ silent: true })
+      else loadBootstrap({ silent: true })
     }, STATUS_FALLBACK_MS)
   }
 
@@ -365,14 +372,29 @@ export function useManager() {
   function openStatusStream() {
     closeStatusStream()
     if (!statusStreamsWanted) return
-    const es = new EventSource(apiRelativeUrl(STATUS_STREAM_PATH), { withCredentials: true })
-    for (const id of STATUS_STREAM_EVENTS) {
-      es.addEventListener(id, (ev) => {
+    const path = statusStreamScope === 'php'
+      ? '/api/status/php/stream'
+      : statusStreamScope === 'infra'
+        ? '/api/status/infra/stream'
+        : STATUS_STREAM_PATH
+    const es = new EventSource(apiRelativeUrl(path), { withCredentials: true })
+    if (statusStreamScope === 'all') {
+      for (const id of STATUS_STREAM_EVENTS) {
+        es.addEventListener(id, (ev) => {
+          try {
+            applySubsystem(id, JSON.parse(ev.data))
+            stopStatusFallback()
+          } catch (_) {}
+        })
+      }
+    } else {
+      const scope = statusStreamScope
+      es.onmessage = (ev) => {
         try {
-          applySubsystem(id, JSON.parse(ev.data))
+          applySubsystem(scope, JSON.parse(ev.data))
           stopStatusFallback()
         } catch (_) {}
-      })
+      }
     }
     es.addEventListener('reconnect', () => {
       closeStatusStream()
@@ -384,8 +406,9 @@ export function useManager() {
     statusStreamSource = es
   }
 
-  function startStatusStreams() {
-    if (statusStreamsWanted) return
+  function startStatusStreams(scope = 'all') {
+    if (statusStreamsWanted && statusStreamScope === scope) return
+    statusStreamScope = scope
     statusStreamsWanted = true
     stopStatusFallback()
     openStatusStream()
@@ -456,6 +479,9 @@ export function useManager() {
       const payload = await apiGet('/api/bootstrap')
       applyBootstrap(payload)
       bootstrapped.value = true
+      fullLoaded.value = true
+      phpScreenLoaded.value = true
+      infraScreenLoaded.value = true
     } catch (error) {
       if (!silent) {
         fatalError.value = translateApiError(error)
@@ -465,6 +491,64 @@ export function useManager() {
         loading.value = false
       }
     }
+  }
+
+  function screenScope(routeName) {
+    if (routeName === 'php-versions') return 'php'
+    if (routeName === 'services') return 'infra'
+    return 'all'
+  }
+
+  async function loadPhpScreen({ silent = false } = {}) {
+    if (!silent) {
+      loading.value = true
+      fatalError.value = ''
+    }
+    try {
+      applySubsystem('php', await apiGet('/api/php-controllers'))
+      bootstrapped.value = true
+      phpScreenLoaded.value = true
+    } catch (error) {
+      if (!silent) fatalError.value = translateApiError(error)
+    } finally {
+      if (!silent) loading.value = false
+    }
+  }
+
+  async function loadInfraScreen({ silent = false } = {}) {
+    if (!silent) {
+      loading.value = true
+      fatalError.value = ''
+    }
+    try {
+      const payload = await apiGet('/api/infra-services')
+      applySubsystem('infra', payload)
+      if (payload.php_controller_daemon) data.php_controller_daemon = payload.php_controller_daemon
+      bootstrapped.value = true
+      infraScreenLoaded.value = true
+    } catch (error) {
+      if (!silent) fatalError.value = translateApiError(error)
+    } finally {
+      if (!silent) loading.value = false
+    }
+  }
+
+  async function loadForRoute(routeName) {
+    const scope = screenScope(routeName)
+    if (scope === 'php') {
+      return loadPhpScreen({ silent: phpScreenLoaded.value || fullLoaded.value })
+    }
+    if (scope === 'infra') {
+      return loadInfraScreen({ silent: infraScreenLoaded.value || fullLoaded.value })
+    }
+    if (!fullLoaded.value) return loadBootstrap()
+  }
+
+  async function refreshForRoute(routeName) {
+    const scope = screenScope(routeName)
+    if (scope === 'php') return loadPhpScreen({ silent: true })
+    if (scope === 'infra') return loadInfraScreen({ silent: true })
+    return loadBootstrap({ silent: true })
   }
 
   async function saveServer(extra = {}) {
@@ -765,7 +849,7 @@ export function useManager() {
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
       if (action === 'delete' || action === 'delete-image') {
-        await loadBootstrap({ silent: true })
+        await loadPhpScreen({ silent: true })
         return
       }
       await waitForPullProgress({
@@ -787,7 +871,6 @@ export function useManager() {
       const result = await apiSend('POST', '/api/php-controller/start', {})
       toastFromResult(result)
       if (result.php_controller_daemon) data.php_controller_daemon = result.php_controller_daemon
-      await loadBootstrap({ silent: true })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -1404,7 +1487,7 @@ export function useManager() {
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
       if (action === 'delete' || action === 'delete-image' || action === 'stop' || action === 'restart') {
-        await loadBootstrap({ silent: true })
+        await loadInfraScreen({ silent: true })
         return result
       }
       await waitForPullProgress({
@@ -1415,12 +1498,12 @@ export function useManager() {
       })
       const deadline = Date.now() + 90_000
       while (Date.now() < deadline) {
-        await loadBootstrap({ silent: true })
+        await loadInfraScreen({ silent: true })
         const row = data.infra_services?.compose_files?.find((file) => file.name === item.name)
         if ((row?.state || 'busy') !== 'busy') break
         await sleep(1500)
       }
-      await loadBootstrap({ silent: true })
+      await loadInfraScreen({ silent: true })
       return result
     } catch (error) {
       showToast('failure', translateApiError(error))
@@ -1526,6 +1609,9 @@ export function useManager() {
     isDomainDeleteHolding,
     versionLabel,
     loadBootstrap,
+    loadForRoute,
+    refreshForRoute,
+    screenScope,
     startStatusStreams,
     stopStatusStreams,
     openAddModal,
