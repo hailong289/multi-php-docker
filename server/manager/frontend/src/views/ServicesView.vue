@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -31,7 +31,6 @@ const {
   showInfraCreateHint,
   composeFileState,
   showComposeCreateHint,
-  loadBootstrap,
 } = mgr
 const { isPinned, togglePin } = usePinnedContainers()
 
@@ -142,10 +141,6 @@ function rowDescription(row) {
   }
   return ''
 }
-
-onMounted(() => {
-  loadBootstrap()
-})
 </script>
 
 <template>

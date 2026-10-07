@@ -44,7 +44,7 @@ final class NginxManagement
         if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
             $status = array_merge($status, array_intersect_key($decoded, $status));
         }
-        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
+        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart', 'create'])) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
         } else {
@@ -59,7 +59,7 @@ final class NginxManagement
 
     public function requestAction(string $action): string
     {
-        if (!in_array($action, ['start', 'stop', 'restart'], true)) {
+        if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
             throw new HttpException('nginx.invalid_action', 400);
         }
         $this->daemon()->assertRunning();

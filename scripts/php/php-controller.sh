@@ -48,7 +48,7 @@ container_for_service() {
 
 profile_for_service() {
     case "$1" in
-        php-8.5) return 1 ;;
+        nginx) printf '%s' 'nginx' ;;
         mysql|postgres|redis|rabbitmq|kafka|mailpit|minio|supervisor)
             printf '%s' "$1"
             ;;
@@ -104,6 +104,55 @@ list_managed_services() {
     list_supervisor_services
 }
 
+# BuildKit resolves base images through Docker Desktop's internal DNS
+# (192.168.65.7). That UDP path is often down while `docker pull` on the engine
+# still works. Pull the missing base image, then retry the build.
+hub_dns_failure() {
+    grep -Eq 'auth\.docker\.io|network is unreachable|failed to fetch anonymous token|failed to resolve source metadata' "$1"
+}
+
+pull_base_images_from_log() {
+    log_file="$1"
+    pulled=0
+    images=$(grep -oE 'docker\.io/[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+' "$log_file" | sort -u)
+    for image in $images; do
+        echo "BuildKit cannot resolve ${image}; pulling it with the Docker engine"
+        if docker pull "$image"; then
+            pulled=1
+        fi
+    done
+    [ "$pulled" -eq 1 ]
+}
+
+run_retrying_hub() {
+    attempt=1
+    max=4
+    while :; do
+        log=$(mktemp /tmp/hub-retry.XXXXXX) || return 1
+        if "$@" >"$log" 2>&1; then
+            cat "$log"
+            rm -f "$log"
+            return 0
+        fi
+        cat "$log"
+        if [ "$attempt" -ge "$max" ] || ! hub_dns_failure "$log"; then
+            rm -f "$log"
+            return 1
+        fi
+        if pull_base_images_from_log "$log"; then
+            echo "Base image is local; retrying build (attempt ${attempt}/${max})"
+            rm -f "$log"
+            attempt=$((attempt + 1))
+            continue
+        fi
+        wait_s=$((attempt * 3))
+        echo "Docker Hub DNS unreachable (attempt ${attempt}/${max}); retrying in ${wait_s}s"
+        rm -f "$log"
+        sleep "$wait_s"
+        attempt=$((attempt + 1))
+    done
+}
+
 prepare_compose_tmp() {
     host_project="$1"
     tmp_dir="$2"
@@ -115,6 +164,7 @@ prepare_compose_tmp() {
     rewrite_compose_paths() {
         sed \
             -e "s|- \\./|- ${host_project}/|g" \
+            -e "s|- \\.:|- ${host_project}:|g" \
             -e 's|project_directory:[[:space:]]*\.[[:space:]]*$|project_directory: /project|' \
             -e 's|context:[[:space:]]*\.[[:space:]]*$|context: /project|' \
             -e 's|context:[[:space:]]*"\."[[:space:]]*$|context: /project|' \
@@ -140,7 +190,7 @@ run_compose_build_up() {
         set -- "$@" --env-file /project/.env
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" build "$service"
-    "$@" || return 1
+    run_retrying_hub "$@" || return 1
 
     set -- docker compose -p "$project_name"
     if [ -f /project/.env ]; then
@@ -174,7 +224,7 @@ run_compose_create() {
         set -- "$@" --env-file /project/.env
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" build "$service"
-    "$@" || return 1
+    run_retrying_hub "$@" || return 1
 
     set -- docker compose -p "$project_name"
     if [ -f /project/.env ]; then
@@ -204,7 +254,7 @@ run_compose_pull_create() {
         set -- "$@" --env-file /project/.env
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" pull "$service"
-    "$@" || true
+    run_retrying_hub "$@" || true
 
     set -- docker compose -p "$project_name"
     if [ -f /project/.env ]; then
@@ -220,7 +270,7 @@ run_compose_pull_create() {
         set -- "$@" --env-file /project/.env
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" build "$service"
-    "$@" || return 1
+    run_retrying_hub "$@" || return 1
 
     set -- docker compose -p "$project_name"
     if [ -f /project/.env ]; then
@@ -279,7 +329,7 @@ run_compose_pull_recreate() {
         set -- "$@" --env-file /project/.env
     fi
     set -- "$@" -f "$compose_file" --profile "$profile" pull "$service"
-    "$@" || return 1
+    run_retrying_hub "$@" || return 1
 
     run_compose_recreate_start "$project_name" "$compose_file" "$profile" "$service"
 }
@@ -331,7 +381,7 @@ run_compose_file_pull() {
         set -- "$@" --profile "$profile"
     fi
     set -- "$@" pull "$service"
-    "$@"
+    run_retrying_hub "$@"
 }
 
 run_compose_file_build() {
@@ -349,7 +399,7 @@ run_compose_file_build() {
         set -- "$@" --profile "$profile"
     fi
     set -- "$@" build "$service"
-    "$@"
+    run_retrying_hub "$@"
 }
 
 run_compose_file_create() {
@@ -770,7 +820,7 @@ while true; do
         service=$(printf '%s' "$request" | sed -n 's/^.*"service":"\([^"]*\)".*$/\1/p')
         action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
         extension=$(printf '%s' "$request" | sed -n 's/^.*"extension":"\([a-z0-9_]*\)".*$/\1/p')
-        if [ "$service" = "nginx" ] && { [ "$action" = "create" ] || [ "$action" = "install-version" ]; }; then
+        if [ "$service" = "nginx" ] && [ "$action" = "install-version" ]; then
             reject_request "$request_file"
             continue
         fi

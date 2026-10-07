@@ -75,6 +75,7 @@ services:
       - ./server:/var/www
       - ./scripts:/var/scripts
       - ./nginx/examples:/etc/nginx/examples
+      - ./nginx/welcome:/usr/share/nginx/welcome:ro
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
       - ./nginx/ssl:/etc/nginx/ssl
@@ -86,8 +87,6 @@ services:
     depends_on:
       env-init:
         condition: service_completed_successfully
-      php-8.5:
-        condition: service_started
     networks:
       - app-network
 

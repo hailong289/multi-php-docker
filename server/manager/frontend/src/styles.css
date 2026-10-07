@@ -3335,6 +3335,57 @@ select:focus:not([class*='p-']) {
   margin-bottom: 0.25rem;
 }
 
+.home-pinned-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.startup-sequence-actions,
+.startup-sequence-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.startup-sequence-pick {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.startup-sequence-pick li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--p-content-border-color, var(--line));
+  border-radius: 10px;
+}
+
+.startup-sequence-dialog {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 1rem;
+}
+
+.startup-sequence-dialog h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+  .startup-sequence-dialog {
+    grid-template-columns: 1fr;
+  }
+}
+
 .home-pinned-body {
   padding-top: 1.25rem;
 }

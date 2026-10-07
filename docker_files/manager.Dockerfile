@@ -14,6 +14,7 @@ FROM php:8.5-cli-alpine
 WORKDIR /app
 COPY server/manager/backend ./backend
 COPY server/manager/router.php ./router.php
+COPY nginx/welcome/index.html ./welcome/index.html
 COPY --from=frontend /public ./public
 
 EXPOSE 8080
