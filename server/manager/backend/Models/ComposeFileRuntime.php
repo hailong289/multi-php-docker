@@ -8,6 +8,7 @@ use Manager\Http\HttpException;
 use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
+use Manager\Support\ContainerControl;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
@@ -146,6 +147,17 @@ final class ComposeFileRuntime
         if (!DockerExec::removeImage($image)) {
             throw new HttpException('services.delete_image_failed', 500);
         }
+    }
+
+    public function startContainer(string $filename): void
+    {
+        $name = $this->safeFilename($filename);
+        $container = $this->primaryContainer($name);
+        $state = ContainerControl::apply($container, 'start');
+        if ($state === null) {
+            throw new HttpException('services.request_failed', 502);
+        }
+        $this->persistFileStatus($name, $state, 'php_controller.action_success', '');
     }
 
     public function stopContainer(string $filename): void

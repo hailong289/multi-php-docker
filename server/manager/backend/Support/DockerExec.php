@@ -508,13 +508,7 @@ final class DockerExec
             return false;
         }
 
-        return self::httpRequest(
-            'GET',
-            '/images/' . rawurlencode($ref) . '/json',
-            null,
-            null,
-            [200],
-        ) !== null;
+        return DockerImageIndex::contains($ref);
     }
 
     /** Force-remove an image by name:tag. Returns true when absent or removed. */
@@ -524,6 +518,7 @@ final class DockerExec
         if ($ref === '' || !DockerLiveState::available()) {
             return false;
         }
+        DockerImageIndex::resetCache();
         if (!self::imageExists($ref)) {
             return true;
         }
@@ -535,6 +530,7 @@ final class DockerExec
             null,
             [200, 204, 404],
         ) !== null;
+        DockerImageIndex::resetCache();
 
         return $removed && !self::imageExists($ref);
     }

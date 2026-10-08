@@ -358,6 +358,23 @@ assert_true(($parsedImage[0]['image'] ?? '') === 'mysql:8.4', 'compose parser im
 $infraTargets = InfraRuntime::targets();
 assert_true(array_key_exists('image', $infraTargets['mysql'] ?? []), 'infra targets image key');
 assert_true(array_key_exists('image_present', $infraTargets['mysql'] ?? []), 'infra targets image_present key');
+assert_true(
+    \Manager\Support\DockerImageIndex::listed('mysql:8.4', ['mysql:8.4', 'redis:7']),
+    'image index matches repo tag',
+);
+assert_true(
+    \Manager\Support\DockerImageIndex::listed('docker.io/library/mysql:8.4', ['mysql:8.4']),
+    'image index strips docker.io library prefix',
+);
+assert_true(
+    \Manager\Support\DockerImageIndex::listed('mysql', ['mysql:latest']) === true,
+    'image index defaults bare name to latest',
+);
+assert_true(
+    \Manager\Support\DockerImageIndex::listed('mysql:8.0', ['mysql:8.4']) === false,
+    'image index rejects a different tag',
+);
+assert_true(\Manager\Support\DockerImageIndex::normalize('docker.io/library/redis') === 'redis:latest', 'normalize library image');
 
 $frame = pack('C', 1) . "\0\0\0" . pack('N', 5) . 'hello';
 assert_true(\Manager\Support\DockerExec::decodeLogStream($frame) === 'hello', 'decode multiplexed docker logs');
