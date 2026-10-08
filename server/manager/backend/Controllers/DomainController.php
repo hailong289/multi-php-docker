@@ -170,6 +170,35 @@ final class DomainController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, array $params = []): Response
+    {
+        $key = (string) ($params['key'] ?? '');
+        $env = new EnvConfig();
+        $hosts = new HostsSync();
+        $existing = $env->all();
+        $domain = $hosts->normalizeDomain((string) ($existing[$key]['DOMAIN_NAME'] ?? ''));
+        $server = $env->clearDomain($key);
+        // The domains page shows one row per name. A server domain that was also
+        // stored as a hosts extra would stay on screen after DOMAIN_NAME is cleared.
+        if ($domain !== '') {
+            $hosts->removeExtra($domain);
+        }
+
+        $hosts->request(true, '', (string) ($request->json()['hosts_write_token'] ?? ''));
+        $servers = $env->allOrEmpty();
+
+        return Response::json([
+            'key' => $key,
+            'server' => $server,
+            'message_key' => 'hosts.domain_removed_keep_server',
+            'domains' => $hosts->listedDomains($servers, $hosts->status()),
+            'hosts_status' => $hosts->status(),
+            'pending_sync' => $hosts->pendingSync(),
+            'manual' => $hosts->manualHint($hosts->desiredDomains($servers)),
+            'bootstrap' => $this->bootstrapPayload(),
+        ]);
+    }
+
     public function destroyExtra(Request $request, array $params = []): Response
     {
         $hosts = new HostsSync();
@@ -195,6 +224,35 @@ final class DomainController extends Controller
             'hosts_status' => $hosts->status(),
             'pending_sync' => $hosts->pendingSync(),
             'manual' => $hosts->manualHint($hosts->desiredDomains($servers)),
+            'bootstrap' => $this->bootstrapPayload(),
+        ]);
+    }
+
+    /**
+     * Put a domain back after the admin password prompt was cancelled.
+     * Does not request another hosts write.
+     */
+    public function restore(Request $request, array $params = []): Response
+    {
+        $hosts = new HostsSync();
+        $body = $request->json();
+        $domain = $hosts->normalizeDomain((string) ($body['domain_name'] ?? ''));
+        $error = $hosts->validateDomain($domain);
+        if ($error !== null) {
+            throw new HttpException('validation.failed', 422, ['domain_name' => $error]);
+        }
+
+        $key = (string) ($body['server_key'] ?? '');
+        $env = new EnvConfig();
+        if ($key !== '') {
+            $env->assignDomain($key, $domain);
+        } else {
+            $hosts->ensureExtra($domain);
+        }
+
+        return Response::json([
+            'domain_name' => $domain,
+            'message_key' => 'hosts.domain_delete_cancelled',
             'bootstrap' => $this->bootstrapPayload(),
         ]);
     }

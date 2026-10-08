@@ -384,26 +384,6 @@ try {
     assert_true($e->errorKey() === 'php_controller.invalid_service', 'invalid php logs service');
 }
 
-use Manager\Support\RemoteAuth;
-
-putenv('MANAGER_REMOTE=0');
-assert_true(RemoteAuth::isRemote() === false, 'remote off by default');
-
-putenv('MANAGER_REMOTE=1');
-putenv('MANAGER_USERNAME=');
-putenv('MANAGER_PASSWORD=');
-assert_true(RemoteAuth::isRemote() === true, 'remote on');
-assert_true(RemoteAuth::isLocked() === true, 'locked without credentials');
-
-putenv('MANAGER_USERNAME=admin');
-putenv('MANAGER_PASSWORD=secret');
-assert_true(RemoteAuth::credentialsConfigured() === true, 'credentials ok');
-assert_true(RemoteAuth::isLocked() === false, 'not locked with credentials');
-
-putenv('MANAGER_REMOTE=0');
-putenv('MANAGER_USERNAME=');
-putenv('MANAGER_PASSWORD=');
-
 use Manager\Models\TerminalSession;
 use Manager\Support\Config;
 
@@ -412,24 +392,31 @@ assert_true(isset($allowed['php8.5_container']), 'default php container allowlis
 assert_true(!isset($allowed['nginx_container']), 'nginx not allowlisted');
 
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/spa-fnb-retail/public')
-        === '/var/www/source_php8.5/spa-fnb-retail',
+    TerminalSession::projectDirFromServerPath('/var/www/source/spa-fnb-retail/public')
+        === '/var/www/source/spa-fnb-retail',
     'terminal cwd strips /public',
 );
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/posapp-yii-backend/web')
-        === '/var/www/source_php8.5/posapp-yii-backend',
+    TerminalSession::projectDirFromServerPath('/var/www/source/posapp-yii-backend/web')
+        === '/var/www/source/posapp-yii-backend',
     'terminal cwd strips /web',
 );
 assert_true(
-    TerminalSession::projectDirFromServerPath('/var/www/source_php7.4/app/webroot')
-        === '/var/www/source_php7.4/app',
+    TerminalSession::projectDirFromServerPath('/var/www/source/app/webroot')
+        === '/var/www/source/app',
     'terminal cwd strips /webroot',
 );
 assert_true(
     TerminalSession::projectDirFromServerPath('/tmp/evil') === '',
     'terminal cwd rejects non-source paths',
 );
+assert_true(
+    TerminalSession::projectDirFromServerPath('/var/www/source_php8.5/app/public') === '',
+    'terminal cwd rejects legacy version path',
+);
+assert_true(PhpVersionId::sourcePrefix('php-8.5') === '/var/www/source', 'shared source prefix 8.5');
+assert_true(PhpVersionId::sourcePrefix('php-7.4') === '/var/www/source', 'shared source prefix 7.4');
+assert_true(PhpVersionId::sourceDirName('php-8.4-alpine') === 'source', 'variant shares source dir');
 
 use Manager\Models\DockerHubPhpTags;
 
@@ -518,6 +505,33 @@ $desired = $hosts->desiredDomains([]);
 assert_true($desired === ['solo.test'], 'desiredDomains extras only');
 $listed = $hosts->listedDomains([], null);
 assert_true(count($listed) === 1 && ($listed[0]['source'] ?? '') === 'hosts', 'listedDomains hosts-only');
+
+$clearEnvPath = $envMissingDir . '/clear-domain-env.json';
+file_put_contents(
+    $clearEnvPath,
+    "{\"SERVER_NAME1\":{\"DOMAIN_NAME\":\"app1.test\",\"APP_NAME\":\"app1\",\"SERVER_PATH\":\"/var/www/source/app1/public\"}}\n",
+);
+$clearEnv = new EnvConfig($clearEnvPath);
+$clearHosts = new HostsSync($hostsTmp);
+$clearHosts->saveExtras(['app1.test', 'other.test']);
+$clearedDomain = $clearHosts->normalizeDomain((string) ($clearEnv->all()['SERVER_NAME1']['DOMAIN_NAME'] ?? ''));
+$clearedServer = $clearEnv->clearDomain('SERVER_NAME1');
+$clearHosts->removeExtra($clearedDomain);
+$afterClear = $clearEnv->all();
+assert_true(isset($afterClear['SERVER_NAME1']), 'clearDomain keeps the server');
+assert_true(($clearedServer['DOMAIN_NAME'] ?? 'x') === '', 'clearDomain blanks DOMAIN_NAME');
+assert_true(($afterClear['SERVER_NAME1']['APP_NAME'] ?? '') === 'app1', 'clearDomain keeps the app');
+assert_true($clearHosts->extras() === ['other.test'], 'server domain delete drops the matching hosts extra');
+$listedAfterClear = $clearHosts->listedDomains($afterClear, null);
+assert_true(
+    count($listedAfterClear) === 1 && ($listedAfterClear[0]['domain_name'] ?? '') === 'other.test',
+    'listedDomains hides a domain cleared from both sources',
+);
+$restored = $clearEnv->assignDomain('SERVER_NAME1', 'app1.test');
+assert_true(($restored['DOMAIN_NAME'] ?? '') === 'app1.test', 'assignDomain restores DOMAIN_NAME');
+assert_true(($clearEnv->assignDomain('SERVER_NAME1', 'other.test')['DOMAIN_NAME'] ?? '') === 'app1.test', 'assignDomain does not replace a different domain');
+$clearHosts->ensureExtra('app1.test');
+assert_true(in_array('app1.test', $clearHosts->extras(), true), 'ensureExtra puts a hosts name back');
 
 assert_true(HostsSync::normalizeWriteToken('DEADBEEFcafe') === 'deadbeefcafe', 'normalizeWriteToken lowercases hex');
 assert_true(HostsSync::normalizeWriteToken('not a token!') === '', 'normalizeWriteToken rejects junk');
@@ -614,7 +628,7 @@ $envSsl = new EnvConfig($tmpEnv);
 $vOff = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
 ], []);
 assert_true(($vOff['server']['SSL_ENABLED'] ?? true) === false, 'validate default ssl off');
@@ -623,7 +637,7 @@ assert_true(!isset($vOff['server']['SSL_MODE']), 'no ssl mode when off');
 $vOn = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
 ], []);
@@ -633,7 +647,7 @@ assert_true(($vOn['server']['SSL_MODE'] ?? '') === 'generated', 'default mode ge
 $vUp = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
     'ssl_certificate' => 'x',
@@ -644,7 +658,7 @@ assert_true(($vUp['server']['SSL_MODE'] ?? '') === 'uploaded', 'both pems set up
 $vOne = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
     'ssl_certificate' => 'x',
@@ -655,7 +669,7 @@ $existing = ['SERVER_NAME1' => $vOn['server']];
 $vKeep = $envSsl->validate([
     'app_name' => 'app-one',
     'domain_name' => 'app-one.test',
-    'server_path' => '/var/www/source_php8.5/app-one/public',
+    'server_path' => '/var/www/source/app-one/public',
     'php_version' => 'php-8.5',
     'enabled' => false,
 ], $existing, 'SERVER_NAME1');
@@ -670,7 +684,7 @@ $sslC = new SslCertificates($proj);
 $validated = $envC->validate([
     'app_name' => 'ctrl-app',
     'domain_name' => 'ctrl.test',
-    'server_path' => '/var/www/source_php8.5/ctrl-app/public',
+    'server_path' => '/var/www/source/ctrl-app/public',
     'php_version' => 'php-8.5',
     'ssl_enabled' => true,
 ], []);
@@ -947,5 +961,182 @@ assert_true(isset($boot['php_controller_daemon']['container']), 'bootstrap daemo
 assert_true($boot['php_controller_daemon']['container'] === 'php_controller_container', 'bootstrap daemon container');
 assert_true(in_array($boot['php_controller_daemon']['state'], ['running', 'stopped', 'not_created'], true), 'bootstrap daemon state');
 assert_true(array_key_exists('start_available', $boot['php_controller_daemon']), 'bootstrap start_available');
+
+use Manager\Models\SourceLogs;
+
+assert_true(SourceLogs::normalizeRelative('storage/logs') === 'storage/logs', 'log path keeps relative dir');
+assert_true(SourceLogs::normalizeRelative('/storage/logs/') === 'storage/logs', 'log path trims slashes');
+assert_true(SourceLogs::normalizeRelative('../secret') === null, 'log path rejects traversal');
+assert_true(SourceLogs::normalizeRelative('storage//logs') === null, 'log path rejects empty segment');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop/public') === 'laravel', 'detect laravel from public');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop/web') === 'yii', 'detect yii from web');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop/webroot') === 'cakephp', 'detect cakephp from webroot');
+assert_true(SourceLogs::detectFramework('/var/www/source/shop') === 'plain', 'detect plain project root');
+assert_true(SourceLogs::frameworkOf(['SERVER_PATH' => '/var/www/source/shop/public']) === 'laravel', 'old source guesses laravel');
+assert_true(
+    SourceLogs::effectiveRelative(['SERVER_PATH' => '/var/www/source/shop/public']) === 'storage/logs',
+    'old source uses laravel preset',
+);
+assert_true(
+    SourceLogs::effectiveRelative([
+        'SERVER_PATH' => '/var/www/source/shop/public',
+        'FRAMEWORK' => 'symfony',
+        'LOG_PATH' => 'var/log/custom.log',
+    ]) === 'var/log/custom.log',
+    'log path override wins',
+);
+
+$sourceRoot = sys_get_temp_dir() . '/mgr-source-logs-' . bin2hex(random_bytes(4));
+$appDir = $sourceRoot . '/server/source/shop';
+mkdir($appDir . '/storage/logs', 0775, true);
+file_put_contents($appDir . '/storage/logs/laravel.log', "hello log\nline two\n");
+file_put_contents($appDir . '/storage/logs/queue.log', "queue\n");
+$outside = sys_get_temp_dir() . '/mgr-source-logs-out-' . bin2hex(random_bytes(4));
+mkdir($outside, 0775, true);
+file_put_contents($outside . '/secret.log', "secret\n");
+symlink($outside . '/secret.log', $appDir . '/storage/logs/secret.log');
+$envFile = $sourceRoot . '/env.json';
+$shop = [
+    'APP_NAME' => 'shop',
+    'DOMAIN_NAME' => 'shop.test',
+    'SERVER_PATH' => '/var/www/source/shop/public',
+    'CONTAINER_PHP_VERSION' => 'php8.5_container',
+    'ENABLED' => true,
+    'SSL_ENABLED' => false,
+];
+file_put_contents($envFile, json_encode(['SERVER_NAME2' => $shop], JSON_THROW_ON_ERROR));
+$sourceLogs = new SourceLogs($sourceRoot, new EnvConfig($envFile));
+assert_true(
+    $sourceLogs->hostProjectDir('/var/www/source/shop/public') === $appDir,
+    'host path maps container source dir',
+);
+$described = $sourceLogs->describe('SERVER_NAME2', $shop);
+assert_true($described['framework'] === 'laravel', 'missing framework detects laravel');
+assert_true($described['framework_stored'] === false, 'detected framework is not stored');
+assert_true($described['kind'] === 'directory', 'laravel preset is a directory');
+assert_true(count($described['files']) === 2, 'symlink outside project is skipped');
+$names = array_column($described['files'], 'name');
+assert_true(in_array('laravel.log', $names, true) && !in_array('secret.log', $names, true), 'only inside log files');
+$read = $sourceLogs->read('SERVER_NAME2', 'laravel.log', 50);
+assert_true(str_contains((string) ($read['log']['content'] ?? ''), 'hello log'), 'tail reads laravel.log');
+$cleared = $sourceLogs->clear('SERVER_NAME2', 'laravel.log');
+assert_true(($cleared['log']['content'] ?? 'x') === '', 'clear truncates log file');
+assert_true(is_file($appDir . '/storage/logs/laravel.log'), 'clear keeps the file');
+$written = $sourceLogs->write('SERVER_NAME2', 'laravel.log', "edited line\n");
+assert_true(($written['log']['content'] ?? '') === "edited line\n", 'write replaces log contents');
+assert_true(($written['log']['full'] ?? false) === true, 'write returns the full file');
+$deleted = $sourceLogs->delete('SERVER_NAME2', 'laravel.log');
+assert_true(!is_file($appDir . '/storage/logs/laravel.log'), 'delete removes the log file');
+$left = array_column($deleted['source']['files'] ?? [], 'name');
+assert_true(!in_array('laravel.log', $left, true) && in_array('queue.log', $left, true), 'delete drops only that file');
+try {
+    $sourceLogs->delete('SERVER_NAME2', 'secret.log');
+    assert_true(false, 'delete rejects file outside the list');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'source_logs.file_missing', 'outside log file is missing');
+}
+try {
+    $sourceLogs->saveConfig('SERVER_NAME2', 'custom', '../etc/passwd');
+    assert_true(false, 'save rejects traversal');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'validation.failed', 'traversal is validation failed');
+    assert_true(isset($e->fields()['log_path']), 'traversal error on log_path');
+}
+try {
+    $sourceLogs->saveConfig('SERVER_NAME2', 'custom', '');
+    assert_true(false, 'custom framework requires a path');
+} catch (HttpException $e) {
+    assert_true(isset($e->fields()['log_path']), 'empty custom path is required');
+}
+$saved = $sourceLogs->saveConfig('SERVER_NAME2', 'symfony', 'var/log');
+assert_true($saved['framework'] === 'symfony' && $saved['log_path'] === 'var/log', 'save stores framework and path');
+$storedServers = json_decode((string) file_get_contents($envFile), true);
+assert_true(($storedServers['SERVER_NAME2']['FRAMEWORK'] ?? '') === 'symfony', 'env keeps FRAMEWORK');
+assert_true(($storedServers['SERVER_NAME2']['LOG_PATH'] ?? '') === 'var/log', 'env keeps LOG_PATH');
+
+$envKeep = new EnvConfig($envFile);
+$kept = $envKeep->validate([
+    'app_name' => 'shop',
+    'domain_name' => 'shop.test',
+    'server_path' => '/var/www/source/shop/public',
+    'php_version' => 'php-8.5',
+    'enabled' => true,
+], ['SERVER_NAME2' => $storedServers['SERVER_NAME2']], 'SERVER_NAME2');
+assert_true(($kept['server']['FRAMEWORK'] ?? '') === 'symfony', 'validate keeps FRAMEWORK');
+assert_true(($kept['server']['LOG_PATH'] ?? '') === 'var/log', 'validate keeps LOG_PATH');
+$clearedPath = $envKeep->validate([
+    'app_name' => 'shop',
+    'domain_name' => 'shop.test',
+    'server_path' => '/var/www/source/shop/public',
+    'php_version' => 'php-8.5',
+    'framework' => 'laravel',
+    'log_path' => '',
+], ['SERVER_NAME2' => $storedServers['SERVER_NAME2']], 'SERVER_NAME2');
+assert_true(($clearedPath['server']['FRAMEWORK'] ?? '') === 'laravel', 'validate stores framework');
+assert_true(!isset($clearedPath['server']['LOG_PATH']), 'empty log_path clears override');
+
+$hasSourceLogs = false;
+foreach ($routes as $route) {
+    if (($route[0] ?? null) === 'GET' && ($route[1] ?? null) === '/sources/logs') {
+        $hasSourceLogs = true;
+        break;
+    }
+}
+assert_true($hasSourceLogs, 'GET /sources/logs route registered');
+
+$hasLogStream = false;
+foreach ($routes as $route) {
+    if (($route[0] ?? null) === 'GET' && str_contains((string) ($route[1] ?? ''), '/logs/stream')) {
+        $hasLogStream = true;
+        break;
+    }
+}
+assert_true($hasLogStream, 'GET source log stream route registered');
+
+$hasSupervisorStream = false;
+foreach ($routes as $route) {
+    if (
+        ($route[0] ?? null) === 'GET'
+        && str_contains((string) ($route[1] ?? ''), '/supervisor/')
+        && str_ends_with((string) ($route[1] ?? ''), '/logs/stream')
+    ) {
+        $hasSupervisorStream = true;
+        break;
+    }
+}
+assert_true($hasSupervisorStream, 'GET supervisor log stream route registered');
+
+$supRoot = sys_get_temp_dir() . '/mgr-sup-' . bin2hex(random_bytes(4));
+mkdir($supRoot . '/compose', 0775, true);
+mkdir($supRoot . '/logs/supervisor-8.5', 0775, true);
+file_put_contents($supRoot . '/compose/php-8.5.yml', "name: test\n");
+file_put_contents($supRoot . '/logs/supervisor-8.5/supervisord.log', "ready\n");
+$supervisorLogs = new SupervisorRuntime($supRoot, $supRoot);
+$supervisorLogPath = $supervisorLogs->resolveLogPath('supervisor-8.5', 'supervisord.log');
+assert_true(str_ends_with($supervisorLogPath, '/supervisord.log'), 'supervisor log path resolves');
+try {
+    $supervisorLogs->resolveLogPath('supervisor-8.5', '../compose/php-8.5.yml');
+    assert_true(false, 'supervisor log rejects traversal');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'supervisor.invalid_log', 'supervisor log rejects traversal');
+}
+
+$followFile = sys_get_temp_dir() . '/mgr-follow-' . bin2hex(random_bytes(4)) . '.log';
+file_put_contents($followFile, "one\n");
+$followLogs = new SourceLogs();
+$followStat = stat($followFile);
+$followInode = (int) ($followStat['ino'] ?? 0);
+$followOffset = (int) ($followStat['size'] ?? 0);
+$idle = $followLogs->readFollowChunk($followFile, $followOffset, $followInode);
+assert_true(($idle['event'] ?? '') === 'append' && ($idle['content'] ?? 'x') === '', 'follow idle sends no bytes');
+file_put_contents($followFile, "two\n", FILE_APPEND);
+$appended = $followLogs->readFollowChunk($followFile, $followOffset, $followInode);
+assert_true(($appended['content'] ?? '') === "two\n", 'follow appends new bytes');
+file_put_contents($followFile, 'x');
+$reset = $followLogs->readFollowChunk($followFile, 100, $followInode);
+assert_true(($reset['event'] ?? '') === 'reset' && ($reset['content'] ?? '') === 'x', 'follow reset after truncate');
+unlink($followFile);
+$gone = $followLogs->readFollowChunk($followFile, 0, $followInode);
+assert_true(($gone['event'] ?? '') === 'gone', 'follow ends when file disappears');
 
 echo "All checks passed\n";

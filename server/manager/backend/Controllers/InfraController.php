@@ -9,6 +9,7 @@ use Manager\Http\Response;
 use Manager\Models\ComposeFileRuntime;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
+use Manager\Models\PhpControllerDaemon;
 
 final class InfraController extends Controller
 {
@@ -27,9 +28,10 @@ final class InfraController extends Controller
 
     public function index(Request $request, array $params = []): Response
     {
-        $runtime = new InfraRuntime();
-
-        return Response::json($this->infraServicesPayload($runtime));
+        return Response::json(array_merge(
+            $this->infraPayload(),
+            ['php_controller_daemon' => (new PhpControllerDaemon())->status()],
+        ));
     }
 
     public function action(Request $request, array $params = []): Response

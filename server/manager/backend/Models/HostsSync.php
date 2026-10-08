@@ -6,7 +6,6 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
-use Manager\Support\RemoteAuth;
 
 final class HostsSync
 {
@@ -19,7 +18,7 @@ final class HostsSync
 
     public static function writeEnabled(): bool
     {
-        return !RemoteAuth::isRemote();
+        return true;
     }
 
     public function status(): ?array
@@ -106,11 +105,6 @@ final class HostsSync
 
     public function request(bool $forceAdmin = false, string $focusDomain = '', string $writeToken = ''): void
     {
-        // Remote Manager runs on a server: OS hosts helpers / protocol writes do not apply.
-        if (!self::writeEnabled()) {
-            return;
-        }
-
         if (!is_dir($this->runtimePath) && !mkdir($this->runtimePath, 0775, true) && !is_dir($this->runtimePath)) {
             throw new HttpException('error.runtime_directory', 500);
         }
@@ -237,6 +231,47 @@ final class HostsSync
         if (file_put_contents($this->extraPath(), $json, LOCK_EX) === false) {
             throw new HttpException('error.hosts_extra_write', 500);
         }
+    }
+
+    /**
+     * Drop one hosts-only extra. No-op when it is not listed.
+     */
+    public function removeExtra(string $domain): void
+    {
+        $domain = $this->normalizeDomain($domain);
+        if ($domain === '') {
+            return;
+        }
+
+        $extras = $this->extras();
+        $next = array_values(array_filter(
+            $extras,
+            static fn (string $item): bool => $item !== $domain,
+        ));
+        if (count($next) === count($extras)) {
+            return;
+        }
+
+        $this->saveExtras($next);
+    }
+
+    /**
+     * Put a hosts-only name back. No hosts-file write.
+     */
+    public function ensureExtra(string $domain): void
+    {
+        $domain = $this->normalizeDomain($domain);
+        if ($domain === '') {
+            return;
+        }
+
+        $extras = $this->extras();
+        if (in_array($domain, $extras, true)) {
+            return;
+        }
+
+        $extras[] = $domain;
+        $this->saveExtras($extras);
     }
 
     public function normalizeDomain(string $domain): string

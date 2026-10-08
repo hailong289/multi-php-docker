@@ -1,0 +1,157 @@
+name: Build and Push Images
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "docker_files/nginx.Dockerfile"
+      - "docker_files/php8.5.Dockerfile"
+      - "docker_files/php8.4.Dockerfile"
+      - "docker_files/php8.3.Dockerfile"
+      - "docker_files/php8.2.Dockerfile"
+      - "docker_files/php8.1.Dockerfile"
+      - "docker_files/php8.0.Dockerfile"
+      - "docker_files/php7.Dockerfile"
+      - "docker_files/mysql.Dockerfile"
+      - "docker_files/postgres.Dockerfile"
+      - "docker_files/redis.Dockerfile"
+      - "docker_files/rabbitMQ.Dockerfile"
+      - "docker_files/kafka.Dockerfile"
+      - "docker_files/mailpit.Dockerfile"
+      - "docker_files/minio.Dockerfile"
+      - "nginx/examples/**"
+      - "scripts/**"
+      - "env.example.json"
+      - ".dockerignore"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Hub tag to publish, or all
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - nginx
+          - php-8.5
+          - php-8.4
+          - php-8.3
+          - php-8.2
+          - php-8.1
+          - php-8.0
+          - php-7.4
+          - mysql
+          - postgres
+          - redis-alpine
+          - rabbitmq-3-management
+          - kafka
+          - mailpit
+          - minio
+
+# Only keep the latest push build; cancel older in-progress runs on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.set.outputs.images }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Choose images
+        id: set
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE_CHOICE: ${{ inputs.image }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+
+          catalog = [
+              {"tag": "nginx", "file": "./docker_files/nginx.Dockerfile", "watch": ["docker_files/nginx.Dockerfile", "nginx/examples/", "scripts/", "env.example.json", ".dockerignore"]},
+              {"tag": "php-8.5", "file": "./docker_files/php8.5.Dockerfile", "watch": ["docker_files/php8.5.Dockerfile"]},
+              {"tag": "php-8.4", "file": "./docker_files/php8.4.Dockerfile", "watch": ["docker_files/php8.4.Dockerfile"]},
+              {"tag": "php-8.3", "file": "./docker_files/php8.3.Dockerfile", "watch": ["docker_files/php8.3.Dockerfile"]},
+              {"tag": "php-8.2", "file": "./docker_files/php8.2.Dockerfile", "watch": ["docker_files/php8.2.Dockerfile"]},
+              {"tag": "php-8.1", "file": "./docker_files/php8.1.Dockerfile", "watch": ["docker_files/php8.1.Dockerfile"]},
+              {"tag": "php-8.0", "file": "./docker_files/php8.0.Dockerfile", "watch": ["docker_files/php8.0.Dockerfile"]},
+              {"tag": "php-7.4", "file": "./docker_files/php7.Dockerfile", "watch": ["docker_files/php7.Dockerfile"]},
+              {"tag": "mysql", "file": "./docker_files/mysql.Dockerfile", "watch": ["docker_files/mysql.Dockerfile"]},
+              {"tag": "postgres", "file": "./docker_files/postgres.Dockerfile", "watch": ["docker_files/postgres.Dockerfile"]},
+              {"tag": "redis-alpine", "file": "./docker_files/redis.Dockerfile", "watch": ["docker_files/redis.Dockerfile"]},
+              {"tag": "rabbitmq-3-management", "file": "./docker_files/rabbitMQ.Dockerfile", "watch": ["docker_files/rabbitMQ.Dockerfile"]},
+              {"tag": "kafka", "file": "./docker_files/kafka.Dockerfile", "watch": ["docker_files/kafka.Dockerfile"]},
+              {"tag": "mailpit", "file": "./docker_files/mailpit.Dockerfile", "watch": ["docker_files/mailpit.Dockerfile"]},
+              {"tag": "minio", "file": "./docker_files/minio.Dockerfile", "watch": ["docker_files/minio.Dockerfile"]},
+          ]
+
+          def matches(watch, path):
+              return path == watch or (watch.endswith("/") and path.startswith(watch))
+
+          event = os.environ["EVENT_NAME"]
+          choice = os.environ.get("IMAGE_CHOICE") or "all"
+          before = os.environ.get("BEFORE_SHA") or ""
+          if event == "workflow_dispatch":
+              selected = catalog if choice == "all" else [item for item in catalog if item["tag"] == choice]
+          elif not before or set(before) == {"0"}:
+              print("Previous commit is unknown; skip automatic builds.")
+              selected = []
+          else:
+              diff = subprocess.check_output(["git", "diff", "--name-only", before, "HEAD"], text=True).splitlines()
+              selected = [
+                  item for item in catalog
+                  if any(matches(watch, path) for watch in item["watch"] for path in diff)
+              ]
+              print("Changed files:")
+              print("\n".join(diff) or "(none)")
+
+          images = [{"tag": item["tag"], "file": item["file"]} for item in selected]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write("images=" + json.dumps(images, separators=(",", ":")) + "\n")
+          print(json.dumps(images, indent=2))
+          PY
+
+  build-and-push:
+    needs: select
+    if: needs.select.outputs.images != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.select.outputs.images) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: "long301001/multi-php-docker:${{ matrix.tag }}"
+          cache-from: type=gha,scope=${{ matrix.tag }}
+          cache-to: type=gha,scope=${{ matrix.tag }},mode=max

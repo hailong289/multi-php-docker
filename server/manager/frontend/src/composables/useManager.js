@@ -1,11 +1,25 @@
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { apiGet, apiSend, setCsrfToken } from '../api'
+import { apiGet, apiRelativeUrl, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
 import { launchHostsWriteProtocol, newHostsWriteToken } from '../lib/hostsProtocol'
+import { HOSTS_WRITE_TIMEOUT_MS, hostsWritePollState } from '../lib/hostsWriteWait'
 import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 import { addToast, toastSeverityFromType } from '../lib/toast'
 import { confirmDialog } from '../lib/confirm'
+import { SOURCE_PREFIX } from '../lib/frameworkPaths'
+
+const STATUS_STREAM_PATH = '/api/status/stream'
+const STATUS_STREAM_EVENTS = ['servers', 'nginx', 'hosts', 'php', 'infra', 'supervisor']
+const STATUS_FALLBACK_MS = 5000
+
+/** @type {EventSource|null} */
+let statusStreamSource = null
+let statusStreamsWanted = false
+let statusStreamScope = 'all'
+let statusFallbackTimer = null
+/** @type {Set<(payload: object) => void>} */
+const hostsStreamWaiters = new Set()
 
 const reloadMessageKeys = {
   'Nginx templates were generated and reloaded successfully.': 'reload.status.generated',
@@ -23,6 +37,9 @@ const busy = ref(false)
 const pendingAction = ref(null)
 const modalOpen = ref(false)
 const bootstrapped = ref(false)
+const fullLoaded = ref(false)
+const phpScreenLoaded = ref(false)
+const infraScreenLoaded = ref(false)
 
 const data = reactive({
   servers: {},
@@ -47,7 +64,7 @@ const data = reactive({
 const form = reactive({
   app_name: '',
   domain_name: '',
-  server_path: '/var/www/source_php8.5/',
+  server_path: `${SOURCE_PREFIX}/`,
   php_version: 'php-8.5',
   enabled: true,
   ssl_enabled: false,
@@ -64,6 +81,80 @@ const domainModalOpen = ref(false)
 const domainModalMode = ref('add')
 const domainEditingKey = ref(null)
 const domainFieldErrors = ref({})
+/** Domains just removed. Hides a row if a stale status payload puts the name back. */
+const suppressedDomains = ref({})
+const DOMAIN_SUPPRESS_MS = 8000
+/** Domain delete waiting on the admin password. Cancel restores this name. */
+let domainDeleteRollback = null
+/** Keeps the domain row on screen, with a loading state, until hosts write finishes. */
+const domainDeleteHold = ref(null)
+
+function hostsStatusMatchesRollback(status) {
+  if (!domainDeleteRollback || !status) return false
+  const want = String(domainDeleteRollback.requestId || '').toLowerCase()
+  const got = String(status.request_id || '').toLowerCase()
+  if (!want || !got) return false
+  return want === got
+}
+
+function keepHeldServerDomain(servers) {
+  const hold = domainDeleteHold.value
+  if (!hold?.serverKey || !servers?.[hold.serverKey]) return servers
+  const current = servers[hold.serverKey]
+  if (String(current?.DOMAIN_NAME || '').trim()) return servers
+  return {
+    ...servers,
+    [hold.serverKey]: { ...current, DOMAIN_NAME: hold.domain_name },
+  }
+}
+
+function keepHeldHostsExtra(extras) {
+  const hold = domainDeleteHold.value
+  if (!hold || hold.serverKey || !hold.domain_name) return extras
+  const list = Array.isArray(extras) ? extras : []
+  if (list.some((item) => String(item).toLowerCase() === hold.domain_name)) return list
+  return [...list, hold.domain_name]
+}
+
+function releaseHeldDomain() {
+  const hold = domainDeleteHold.value
+  if (!hold) return
+  domainDeleteHold.value = null
+  if (hold.serverKey && data.servers?.[hold.serverKey]) {
+    data.servers = {
+      ...data.servers,
+      [hold.serverKey]: { ...data.servers[hold.serverKey], DOMAIN_NAME: '' },
+    }
+  }
+  if (!hold.serverKey && Array.isArray(data.hosts_extras)) {
+    data.hosts_extras = data.hosts_extras.filter(
+      (item) => String(item).toLowerCase() !== hold.domain_name,
+    )
+  }
+  suppressDomain(hold.domain_name)
+}
+
+function suppressDomain(name) {
+  const key = String(name || '').trim().toLowerCase()
+  if (!key) return
+  const token = (suppressedDomains.value[key] || 0) + 1
+  suppressedDomains.value = { ...suppressedDomains.value, [key]: token }
+  setTimeout(() => {
+    if (suppressedDomains.value[key] !== token) return
+    const next = { ...suppressedDomains.value }
+    delete next[key]
+    suppressedDomains.value = next
+  }, DOMAIN_SUPPRESS_MS)
+}
+
+function releaseDomain(name) {
+  const key = String(name || '').trim().toLowerCase()
+  if (!key || !Object.prototype.hasOwnProperty.call(suppressedDomains.value, key)) return
+  const next = { ...suppressedDomains.value }
+  delete next[key]
+  suppressedDomains.value = next
+}
+
 const hostsManualOpen = ref(false)
 const hostsManual = ref(null)
 const hostsProgress = ref(null)
@@ -82,12 +173,13 @@ export function useManager() {
 
   const domainEntries = computed(() => {
     const states = data.hosts_status?.domains || {}
+    const hidden = suppressedDomains.value
     const rows = []
     const seen = new Set()
 
     for (const [key, server] of Object.entries(data.servers)) {
       const domainName = (server.DOMAIN_NAME || '').toLowerCase()
-      if (!domainName) continue
+      if (!domainName || hidden[domainName]) continue
       seen.add(domainName)
       rows.push({
         key,
@@ -102,7 +194,8 @@ export function useManager() {
 
     for (const domainName of data.hosts_extras || []) {
       const normalized = String(domainName || '').toLowerCase()
-      if (!normalized || seen.has(normalized)) continue
+      if (!normalized || seen.has(normalized) || hidden[normalized]) continue
+      seen.add(normalized)
       rows.push({
         key: `hosts:${normalized}`,
         source: 'hosts',
@@ -114,8 +207,29 @@ export function useManager() {
       })
     }
 
+    const hold = domainDeleteHold.value
+    if (
+      hold?.domain_name
+      && !seen.has(hold.domain_name)
+      && !rows.some((row) => row.key === hold.key)
+    ) {
+      rows.push({
+        key: hold.key,
+        source: hold.source,
+        app_name: hold.app_name,
+        domain_name: hold.domain_name,
+        hosts_state: data.hosts_status
+          ? states[hold.domain_name] || 'missing'
+          : 'unknown',
+      })
+    }
+
     return rows
   })
+
+  function isDomainDeleteHolding(key) {
+    return !!key && domainDeleteHold.value?.key === key
+  }
 
   function trKey(key, params = {}) {
     if (!key) return ''
@@ -161,24 +275,149 @@ export function useManager() {
   }
 
   function applyBootstrap(payload) {
-    data.servers = payload.servers || {}
-    data.php_versions = payload.php_versions || {}
-    data.apply_command = payload.apply_command || ''
-    data.nginx_status = payload.nginx_status || null
-    data.nginx_management = payload.nginx_management || null
-    data.hosts_status = payload.hosts_status || null
-    data.hosts_extras = payload.hosts_extras || []
-    data.hosts_write_enabled = payload.hosts_write_enabled !== false
-    data.pending_sync = !!payload.pending_sync
-    data.php_controllers = payload.php_controllers || { targets: {}, statuses: {} }
-    data.infra_services = payload.infra_services || { targets: {}, statuses: {}, compose_files: [] }
-    data.supervisor_services = payload.supervisor_services || { targets: {}, statuses: {} }
-    data.php_controller_daemon = payload.php_controller_daemon || {
-      container: 'php_controller_container',
-      state: 'running',
-      start_available: false,
-    }
+    applySubsystem('servers', payload)
+    applySubsystem('nginx', payload)
+    applySubsystem('hosts', payload)
+    applySubsystem('php', payload)
+    applySubsystem('infra', payload)
+    applySubsystem('supervisor', payload)
+    if (payload.profiles !== undefined) data.profiles = payload.profiles
     if (payload.csrf_token) setCsrfToken(payload.csrf_token)
+  }
+
+  function applySubsystem(id, payload) {
+    if (!payload || typeof payload !== 'object') return
+    switch (id) {
+      case 'servers':
+        if (payload.servers) data.servers = keepHeldServerDomain(payload.servers)
+        if (payload.php_versions) data.php_versions = payload.php_versions
+        if (payload.profiles !== undefined) data.profiles = payload.profiles
+        if (payload.apply_command !== undefined) data.apply_command = payload.apply_command || ''
+        break
+      case 'nginx':
+        if (payload.nginx_status !== undefined) data.nginx_status = payload.nginx_status
+        if (payload.nginx_management !== undefined) {
+          const next = payload.nginx_management
+          data.nginx_management = {
+            ...(data.nginx_management || {}),
+            ...next,
+            logs: next.logs
+              ? {
+                  ...(data.nginx_management?.logs || {}),
+                  ...next.logs,
+                }
+              : data.nginx_management?.logs,
+          }
+        }
+        break
+      case 'hosts':
+        if (payload.hosts_status !== undefined) data.hosts_status = payload.hosts_status
+        if (payload.hosts_extras !== undefined) data.hosts_extras = keepHeldHostsExtra(payload.hosts_extras)
+        if (payload.hosts_write_enabled !== undefined) {
+          data.hosts_write_enabled = payload.hosts_write_enabled !== false
+        }
+        if (payload.pending_sync !== undefined) data.pending_sync = !!payload.pending_sync
+        if (hostsStatusMatchesRollback(payload.hosts_status)) {
+          if (payload.hosts_status.status === 'success') {
+            releaseHeldDomain()
+            domainDeleteRollback = null
+          } else if (
+            payload.hosts_status.status === 'error'
+            && payload.hosts_status.message_key === 'hosts.elevation_denied'
+          ) {
+            void restoreCancelledDomainDelete()
+          }
+        }
+        for (const waiter of hostsStreamWaiters) waiter(payload)
+        break
+      case 'php':
+        if (payload.php_controllers) data.php_controllers = payload.php_controllers
+        if (payload.php_controller_daemon) data.php_controller_daemon = payload.php_controller_daemon
+        break
+      case 'infra':
+        if (payload.infra_services) data.infra_services = payload.infra_services
+        break
+      case 'supervisor':
+        if (payload.supervisor_services) data.supervisor_services = payload.supervisor_services
+        break
+      default:
+        break
+    }
+  }
+
+  function stopStatusFallback() {
+    if (statusFallbackTimer) {
+      clearInterval(statusFallbackTimer)
+      statusFallbackTimer = null
+    }
+  }
+
+  function startStatusFallback() {
+    if (statusFallbackTimer || !statusStreamsWanted) return
+    statusFallbackTimer = setInterval(() => {
+      if (!statusStreamsWanted) return
+      if (statusStreamScope === 'php') loadPhpScreen({ silent: true })
+      else if (statusStreamScope === 'infra') loadInfraScreen({ silent: true })
+      else loadBootstrap({ silent: true })
+    }, STATUS_FALLBACK_MS)
+  }
+
+  function closeStatusStream() {
+    if (statusStreamSource) {
+      statusStreamSource.close()
+      statusStreamSource = null
+    }
+  }
+
+  function openStatusStream() {
+    closeStatusStream()
+    if (!statusStreamsWanted) return
+    const path = statusStreamScope === 'php'
+      ? '/api/status/php/stream'
+      : statusStreamScope === 'infra'
+        ? '/api/status/infra/stream'
+        : STATUS_STREAM_PATH
+    const es = new EventSource(apiRelativeUrl(path), { withCredentials: true })
+    if (statusStreamScope === 'all') {
+      for (const id of STATUS_STREAM_EVENTS) {
+        es.addEventListener(id, (ev) => {
+          try {
+            applySubsystem(id, JSON.parse(ev.data))
+            stopStatusFallback()
+          } catch (_) {}
+        })
+      }
+    } else {
+      const scope = statusStreamScope
+      es.onmessage = (ev) => {
+        try {
+          applySubsystem(scope, JSON.parse(ev.data))
+          stopStatusFallback()
+        } catch (_) {}
+      }
+    }
+    es.addEventListener('reconnect', () => {
+      closeStatusStream()
+      if (statusStreamsWanted) openStatusStream()
+    })
+    es.onerror = () => {
+      startStatusFallback()
+    }
+    statusStreamSource = es
+  }
+
+  function startStatusStreams(scope = 'all') {
+    if (statusStreamsWanted && statusStreamScope === scope) return
+    statusStreamScope = scope
+    statusStreamsWanted = true
+    stopStatusFallback()
+    openStatusStream()
+  }
+
+  function stopStatusStreams() {
+    statusStreamsWanted = false
+    closeStatusStream()
+    stopStatusFallback()
   }
 
   function versionFromContainer(container) {
@@ -197,9 +436,7 @@ export function useManager() {
     fieldErrors.value = {}
     form.app_name = ''
     form.domain_name = ''
-    form.server_path = data.php_versions['php-8.5']?.source_prefix
-      ? `${data.php_versions['php-8.5'].source_prefix}/`
-      : '/var/www/source_php8.5/'
+    form.server_path = `${SOURCE_PREFIX}/`
     form.php_version = 'php-8.5'
     form.enabled = true
     form.ssl_enabled = false
@@ -234,11 +471,6 @@ export function useManager() {
   }
 
   async function loadBootstrap({ silent = false } = {}) {
-    if (authState.remote && (!authState.authenticated || authState.locked)) {
-      bootstrapped.value = false
-      if (!silent) loading.value = false
-      return
-    }
     if (!silent) {
       loading.value = true
       fatalError.value = ''
@@ -247,19 +479,10 @@ export function useManager() {
       const payload = await apiGet('/api/bootstrap')
       applyBootstrap(payload)
       bootstrapped.value = true
+      fullLoaded.value = true
+      phpScreenLoaded.value = true
+      infraScreenLoaded.value = true
     } catch (error) {
-      if (error?.status === 401 && authState.remote) {
-        applySessionPayload({
-          remote: true,
-          authenticated: false,
-          locked: authState.locked,
-          domain: authState.domain,
-        })
-        bootstrapped.value = false
-        const { default: router } = await import('../router')
-        await router.push({ name: 'login' })
-        return
-      }
       if (!silent) {
         fatalError.value = translateApiError(error)
       }
@@ -270,26 +493,65 @@ export function useManager() {
     }
   }
 
-  async function logout() {
-    try {
-      const result = await apiSend('POST', '/api/logout', {})
-      if (result.csrf_token) setCsrfToken(result.csrf_token)
-    } catch (_) {
-      /* still clear local auth */
-    }
-    applySessionPayload({
-      remote: authState.remote,
-      authenticated: false,
-      locked: authState.locked,
-      domain: authState.domain,
-      hosts_write_enabled: authState.hosts_write_enabled,
-    })
-    bootstrapped.value = false
-    const { default: router } = await import('../router')
-    await router.push({ name: 'login' })
+  function screenScope(routeName) {
+    if (routeName === 'php-versions') return 'php'
+    if (routeName === 'services') return 'infra'
+    return 'all'
   }
 
-  async function saveServer() {
+  async function loadPhpScreen({ silent = false } = {}) {
+    if (!silent) {
+      loading.value = true
+      fatalError.value = ''
+    }
+    try {
+      applySubsystem('php', await apiGet('/api/php-controllers'))
+      bootstrapped.value = true
+      phpScreenLoaded.value = true
+    } catch (error) {
+      if (!silent) fatalError.value = translateApiError(error)
+    } finally {
+      if (!silent) loading.value = false
+    }
+  }
+
+  async function loadInfraScreen({ silent = false } = {}) {
+    if (!silent) {
+      loading.value = true
+      fatalError.value = ''
+    }
+    try {
+      const payload = await apiGet('/api/infra-services')
+      applySubsystem('infra', payload)
+      if (payload.php_controller_daemon) data.php_controller_daemon = payload.php_controller_daemon
+      bootstrapped.value = true
+      infraScreenLoaded.value = true
+    } catch (error) {
+      if (!silent) fatalError.value = translateApiError(error)
+    } finally {
+      if (!silent) loading.value = false
+    }
+  }
+
+  async function loadForRoute(routeName) {
+    const scope = screenScope(routeName)
+    if (scope === 'php') {
+      return loadPhpScreen({ silent: phpScreenLoaded.value || fullLoaded.value })
+    }
+    if (scope === 'infra') {
+      return loadInfraScreen({ silent: infraScreenLoaded.value || fullLoaded.value })
+    }
+    if (!fullLoaded.value) return loadBootstrap()
+  }
+
+  async function refreshForRoute(routeName) {
+    const scope = screenScope(routeName)
+    if (scope === 'php') return loadPhpScreen({ silent: true })
+    if (scope === 'infra') return loadInfraScreen({ silent: true })
+    return loadBootstrap({ silent: true })
+  }
+
+  async function saveServer(extra = {}) {
     busy.value = true
     pendingAction.value = { kind: 'save' }
     fieldErrors.value = {}
@@ -301,6 +563,9 @@ export function useManager() {
         php_version: form.php_version,
         enabled: form.enabled,
         ssl_enabled: !!form.ssl_enabled,
+      }
+      if (!editingKey.value && extra.framework) {
+        body.framework = extra.framework
       }
       if (form.ssl_certificate) body.ssl_certificate = form.ssl_certificate
       if (form.ssl_private_key) body.ssl_private_key = form.ssl_private_key
@@ -398,28 +663,112 @@ export function useManager() {
     }
   }
 
+  async function restoreCancelledDomainDelete() {
+    const pending = domainDeleteRollback
+    if (!pending || pending.restoring) return
+    pending.restoring = true
+    domainDeleteRollback = null
+    try {
+      const result = await apiSend('POST', '/api/domains/restore', {
+        domain_name: pending.domain,
+        server_key: pending.serverKey || '',
+      })
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      else await loadBootstrap({ silent: true })
+      domainDeleteHold.value = null
+      showToast('failure', t('hosts.domain_delete_cancelled'))
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    }
+  }
+
+  function armDomainDeleteRollback(domain, serverKey, requestId) {
+    const name = String(domain || '').trim().toLowerCase()
+    if (!name || !data.hosts_write_enabled) {
+      domainDeleteRollback = null
+      domainDeleteHold.value = null
+      return
+    }
+    domainDeleteRollback = {
+      domain: name,
+      serverKey: serverKey || '',
+      requestId: requestId || '',
+      restoring: false,
+    }
+    domainDeleteHold.value = {
+      key: serverKey || `hosts:${name}`,
+      source: serverKey ? 'server' : 'hosts',
+      app_name: serverKey ? (data.servers?.[serverKey]?.APP_NAME || '') : '',
+      domain_name: name,
+      serverKey: serverKey || '',
+    }
+  }
+
   async function deleteDomain(key) {
     if (!String(key).startsWith('hosts:')) {
       showToast('failure', t('error.hosts_only_delete'))
       return
     }
-    if (!(await confirmDialog(t('domains.confirm_delete'), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     const domain = String(key).slice('hosts:'.length)
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
+    const write = beginHostsWrite()
+    armDomainDeleteRollback(domain, '', write.token)
     try {
-      const write = beginHostsWrite()
       const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`, {
         hosts_write_token: write.token,
       })
       if (domainEditingKey.value === key) closeDomainModal()
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       else await loadBootstrap({ silent: true })
-      showToast('success', trKey(result.message_key || 'hosts.domain_removed'))
       if (data.hosts_write_enabled) {
-        await finishHostsWrite(result, write)
+        const outcome = await finishHostsWrite(result, { ...write, quietDeny: true })
+        if (!outcome?.denied && outcome?.status?.status === 'success') {
+          releaseHeldDomain()
+          showToast('success', trKey(result.message_key || 'hosts.domain_removed'))
+        }
+      } else {
+        domainDeleteRollback = null
+        domainDeleteHold.value = null
+        showToast('success', trKey(result.message_key || 'hosts.domain_removed'))
       }
     } catch (error) {
+      domainDeleteRollback = null
+      domainDeleteHold.value = null
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  async function detachServerDomain(key) {
+    const domainName = String(data.servers[key]?.DOMAIN_NAME || '').toLowerCase()
+    busy.value = true
+    pendingAction.value = { kind: 'delete', key }
+    const write = beginHostsWrite()
+    armDomainDeleteRollback(domainName, key, write.token)
+    try {
+      const result = await apiSend('DELETE', `/api/domains/${key}`, {
+        hosts_write_token: write.token,
+      })
+      if (domainEditingKey.value === key) closeDomainModal()
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      else await loadBootstrap({ silent: true })
+      if (data.hosts_write_enabled) {
+        const outcome = await finishHostsWrite(result, { ...write, quietDeny: true })
+        if (!outcome?.denied && outcome?.status?.status === 'success') {
+          releaseHeldDomain()
+          showToast('success', trKey(result.message_key || 'hosts.domain_removed_keep_server'))
+        }
+      } else {
+        domainDeleteRollback = null
+        domainDeleteHold.value = null
+        showToast('success', trKey(result.message_key || 'hosts.domain_removed_keep_server'))
+      }
+    } catch (error) {
+      domainDeleteRollback = null
+      domainDeleteHold.value = null
       showToast('failure', translateApiError(error))
     } finally {
       busy.value = false
@@ -433,7 +782,7 @@ export function useManager() {
       await deleteDomain(item.key)
       return
     }
-    await deleteServer(item.key, 'domains.confirm_delete_server')
+    await detachServerDomain(item.key)
   }
 
   async function reloadNginx() {
@@ -500,7 +849,7 @@ export function useManager() {
       toastFromResult(result)
       if (result.php_controllers) data.php_controllers = result.php_controllers
       if (action === 'delete' || action === 'delete-image') {
-        await loadBootstrap({ silent: true })
+        await loadPhpScreen({ silent: true })
         return
       }
       await waitForPullProgress({
@@ -522,7 +871,6 @@ export function useManager() {
       const result = await apiSend('POST', '/api/php-controller/start', {})
       toastFromResult(result)
       if (result.php_controller_daemon) data.php_controller_daemon = result.php_controller_daemon
-      await loadBootstrap({ silent: true })
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -761,62 +1109,45 @@ export function useManager() {
     await pollPullProgress()
   }
 
-  async function waitForHostsResult(previousUpdatedAt, maxAttempts = 5) {
-    let latestBusy = null
-    let pendingSync = false
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      hostsProgress.value = {
-        attempt,
-        maxAttempts,
-        message_key: 'hosts.progress_checking',
+  function waitForHostsStream({ previousUpdatedAt, requestId }) {
+    if (!statusStreamsWanted) startStatusStreams()
+    return new Promise((resolve) => {
+      let settled = false
+      let timer = null
+      const finish = (outcome) => {
+        if (settled) return
+        settled = true
+        hostsStreamWaiters.delete(onHosts)
+        if (timer) clearTimeout(timer)
+        resolve(outcome)
       }
-      await sleep(1000)
-      try {
-        const payload = await apiGet('/api/hosts/status')
-        pendingSync = !!payload.pending_sync
-        data.pending_sync = pendingSync
-        const status = payload.hosts_status
-        if (!status?.updated_at) {
+      const onHosts = (payload) => {
+        const status = payload?.hosts_status || null
+        const pendingSync = !!payload?.pending_sync
+        if (status?.message_key) {
           hostsProgress.value = {
-            attempt,
-            maxAttempts,
-            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
+            attempt: 0,
+            maxAttempts: 0,
+            message_key: status.message_key,
           }
-          continue
         }
-        if (previousUpdatedAt && status.updated_at === previousUpdatedAt) {
-          hostsProgress.value = {
-            attempt,
-            maxAttempts,
-            message_key: pendingSync ? 'hosts.progress_waiting' : 'hosts.progress_waiting',
-          }
-          continue
-        }
-        data.hosts_status = status
-        if (status.status === 'busy' || (pendingSync && status.status === 'success')) {
-          latestBusy = status.status === 'busy' ? status : latestBusy
-          hostsProgress.value = {
-            attempt,
-            maxAttempts,
-            message_key: status.message_key || 'hosts.processing',
-          }
-          continue
-        }
-        hostsProgress.value = {
-          attempt,
-          maxAttempts,
-          message_key: status.message_key || 'hosts.progress_done',
-        }
-        return { status, pendingSync: false }
-      } catch (_) {
-        hostsProgress.value = {
-          attempt,
-          maxAttempts,
-          message_key: 'hosts.progress_retry',
-        }
+        const state = hostsWritePollState({
+          status,
+          pendingSync,
+          previousUpdatedAt,
+          requestId,
+        })
+        if (state === 'done') finish({ status, pendingSync: false })
       }
-    }
-    return { status: latestBusy, pendingSync }
+      hostsStreamWaiters.add(onHosts)
+      timer = setTimeout(() => {
+        finish({ status: data.hosts_status, pendingSync: !!data.pending_sync })
+      }, HOSTS_WRITE_TIMEOUT_MS)
+      onHosts({
+        hosts_status: data.hosts_status,
+        pending_sync: data.pending_sync,
+      })
+    })
   }
 
   function beginHostsWrite() {
@@ -834,20 +1165,30 @@ export function useManager() {
 
     hostsProgress.value = {
       attempt: 0,
-      maxAttempts: 45,
+      maxAttempts: 0,
       message_key: launched ? 'hosts.progress_protocol' : 'hosts.progress_starting',
     }
 
     try {
-      const outcome = await waitForHostsResult(previousUpdatedAt, 45)
+      const outcome = await waitForHostsStream({
+        previousUpdatedAt,
+        requestId: write.token,
+      })
       const status = outcome?.status || null
       await loadBootstrap({ silent: true })
       data.pending_sync = !!outcome?.pendingSync || !!data.pending_sync
 
       if (status?.status === 'success') {
         data.pending_sync = false
+        if (hostsStatusMatchesRollback(status)) domainDeleteRollback = null
         showToast('success', trKey(status.message_key || 'hosts.sync_success'))
-        return
+        return { status, pendingSync: false }
+      }
+
+      if (status?.status === 'error' && status?.message_key === 'hosts.elevation_denied') {
+        if (domainDeleteRollback) await restoreCancelledDomainDelete()
+        else if (!write.quietDeny) showToast('failure', t('hosts.elevation_denied'))
+        return { status, pendingSync: false, denied: true }
       }
 
       if (outcome?.pendingSync || data.pending_sync) {
@@ -899,6 +1240,7 @@ export function useManager() {
         result = await apiSend('PUT', `/api/domains/${editingKeySnapshot}`, body)
       }
       closeDomainModal()
+      releaseDomain(body.domain_name)
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_added'))
@@ -918,10 +1260,6 @@ export function useManager() {
   }
 
   async function writeDomainHostsAdmin(domainName) {
-    if (!data.hosts_write_enabled) {
-      showToast('failure', t('error.hosts_write_disabled_remote'))
-      return
-    }
     const domain = String(domainName || '').toLowerCase()
     if (!domain) return
     busy.value = true
@@ -1149,7 +1487,7 @@ export function useManager() {
       toastFromResult(result)
       if (result.infra_services) data.infra_services = result.infra_services
       if (action === 'delete' || action === 'delete-image' || action === 'stop' || action === 'restart') {
-        await loadBootstrap({ silent: true })
+        await loadInfraScreen({ silent: true })
         return result
       }
       await waitForPullProgress({
@@ -1160,12 +1498,12 @@ export function useManager() {
       })
       const deadline = Date.now() + 90_000
       while (Date.now() < deadline) {
-        await loadBootstrap({ silent: true })
+        await loadInfraScreen({ silent: true })
         const row = data.infra_services?.compose_files?.find((file) => file.name === item.name)
         if ((row?.state || 'busy') !== 'busy') break
         await sleep(1500)
       }
-      await loadBootstrap({ silent: true })
+      await loadInfraScreen({ silent: true })
       return result
     } catch (error) {
       showToast('failure', translateApiError(error))
@@ -1243,17 +1581,6 @@ export function useManager() {
     return state === 'not_created' || state === 'error'
   }
 
-  watch(
-    () => form.php_version,
-    (version) => {
-      const prefix = data.php_versions[version]?.source_prefix
-      if (!prefix || editingKey.value) return
-      if (!form.server_path || form.server_path.startsWith('/var/www/source_php')) {
-        form.server_path = `${prefix}/`
-      }
-    },
-  )
-
   return {
     loading,
     fatalError,
@@ -1279,9 +1606,14 @@ export function useManager() {
     dismissPullProgress,
     serverEntries,
     domainEntries,
+    isDomainDeleteHolding,
     versionLabel,
     loadBootstrap,
-    logout,
+    loadForRoute,
+    refreshForRoute,
+    screenScope,
+    startStatusStreams,
+    stopStatusStreams,
     openAddModal,
     openHostsDomainAdd,
     closeModal,

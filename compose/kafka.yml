@@ -1,13 +1,10 @@
 services:
   kafka:
-    image: long301001/multi-php-docker:kafka
+    image: multi-php-local:kafka
     profiles: ["kafka"]
     build:
       context: .
       dockerfile: ./docker_files/kafka.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: kafka_container
     hostname: kafka
     environment:

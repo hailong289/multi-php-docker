@@ -66,13 +66,10 @@ services:
     restart: "no"
 
   nginx:
-    image: long301001/multi-php-docker:nginx
+    image: multi-php-local:nginx
     build:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: nginx_container
     ports:
       - "80:80"
@@ -81,6 +78,7 @@ services:
       - ./server:/var/www
       - ./scripts:/var/scripts
       - ./nginx/examples:/etc/nginx/examples
+      - ./nginx/welcome:/usr/share/nginx/welcome:ro
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
       - ./nginx/ssl:/etc/nginx/ssl
@@ -88,21 +86,18 @@ services:
       - .:/var/host-project:ro
     environment:
       ENV_JSON_FILE: /var/host-project/env.json
-      MANAGER_REMOTE: ${MANAGER_REMOTE:-0}
-      MANAGER_USERNAME: ${MANAGER_USERNAME:-}
-      MANAGER_PASSWORD: ${MANAGER_PASSWORD:-}
-      MANAGER_DOMAIN: ${MANAGER_DOMAIN:-}
     command: ["sh", "-c", "/var/scripts/nginx/auto-add-template.sh && exec /var/scripts/docker/entrypoint.sh"]
     depends_on:
       env-init:
         condition: service_completed_successfully
-      php-8.5:
-        condition: service_started
     networks:
       - app-network
 
   manager:
-    image: long301001/multi-php-docker:manager
+    image: multi-php-local:manager
+    build:
+      context: .
+      dockerfile: ./docker_files/manager.Dockerfile
     container_name: manager_container
     ports:
       - "127.0.0.1:8080:8080"
@@ -119,12 +114,8 @@ services:
       MANAGER_PHP_CONTROLLER_PATH: /runtime/php-controller
       MANAGER_NGINX_LOGS_PATH: /nginx-logs
       MANAGER_DOCKER_SOCK: /var/run/docker.sock
-      MANAGER_REMOTE: ${MANAGER_REMOTE:-0}
-      MANAGER_USERNAME: ${MANAGER_USERNAME:-}
-      MANAGER_PASSWORD: ${MANAGER_PASSWORD:-}
-      MANAGER_DOMAIN: ${MANAGER_DOMAIN:-}
-      # php -S is otherwise single-threaded; terminal poll+input must overlap.
-      PHP_CLI_SERVER_WORKERS: "8"
+      # php -S is otherwise single-threaded; terminal + status SSE + actions must overlap.
+      PHP_CLI_SERVER_WORKERS: "12"
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     depends_on:
       env-init:

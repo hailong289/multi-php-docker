@@ -1,13 +1,10 @@
 services:
   postgres:
-    image: long301001/multi-php-docker:postgres
+    image: multi-php-local:postgres
     profiles: ["postgres"]
     build:
       context: .
       dockerfile: ./docker_files/postgres.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: postgres_container
     environment:
       POSTGRES_USER: postgres

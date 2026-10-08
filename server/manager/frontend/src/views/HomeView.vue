@@ -13,8 +13,10 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { useManager } from '../composables/useManager'
 import HomePinnedSection from '../components/HomePinnedSection.vue'
+import DomainNameCombobox from '../components/DomainNameCombobox.vue'
 import {
   FRAMEWORK_PRESETS,
+  SOURCE_PREFIX,
   buildDocRoot,
   buildProjectDir,
   buildServerPath,
@@ -47,6 +49,8 @@ const {
   nginxStatusText,
   nginxStatusOk,
   isPending,
+  phpServiceState,
+  stateLabel,
 } = useManager()
 
 const frameworkId = ref('laravel')
@@ -58,9 +62,33 @@ function openTerminal(item) {
   router.push({ name: 'terminal', params: { serverKey: item.key } })
 }
 
-const sourcePrefix = computed(
-  () => data.php_versions?.[form.php_version]?.source_prefix || '/var/www/source_php8.5',
-)
+function openSourceLogs(item) {
+  router.push({ name: 'source-logs', params: { serverKey: item.key } })
+}
+
+function serverPhpState(server) {
+  const container = server?.CONTAINER_PHP_VERSION || ''
+  if (!container) return 'not_created'
+  const match = Object.entries(data.php_versions || {}).find(
+    ([, config]) => config?.container === container,
+  )
+  if (!match) return 'not_created'
+  return phpServiceState(match[0])
+}
+
+function serverPhpRunning(server) {
+  return serverPhpState(server) === 'running'
+}
+
+function phpStateSeverity(state) {
+  if (state === 'running') return 'success'
+  if (state === 'stopped') return 'secondary'
+  if (state === 'error') return 'danger'
+  if (state === 'busy') return 'warn'
+  return 'contrast'
+}
+
+const sourcePrefix = computed(() => SOURCE_PREFIX)
 
 const nginxReloadAvailable = computed(() => data.nginx_management?.state === 'running')
 
@@ -170,8 +198,9 @@ async function onSslFile(kind, event) {
 }
 
 function onSubmit() {
+  form.domain_name = String(form.domain_name || '').trim().toLowerCase()
   syncServerPathFromParts()
-  saveServer()
+  saveServer(editingKey.value ? {} : { framework: frameworkId.value })
 }
 </script>
 
@@ -248,10 +277,13 @@ function onSubmit() {
               rounded
             />
             <br />
-            <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
-              http://{{ item.server.DOMAIN_NAME }}
-            </a>
-            <template v-if="isSslEnabled(item.server)">
+            <template v-if="item.server.DOMAIN_NAME">
+              <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
+                http://{{ item.server.DOMAIN_NAME }}
+              </a>
+            </template>
+            <span v-else>{{ t('servers.no_domain') }}</span>
+            <template v-if="item.server.DOMAIN_NAME && isSslEnabled(item.server)">
               <br />
               <a :href="'https://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
                 https://{{ item.server.DOMAIN_NAME }}
@@ -288,6 +320,12 @@ function onSubmit() {
         <Column :header="t('table.php')">
           <template #body="{ data: item }">
             <code>{{ item.server.CONTAINER_PHP_VERSION }}</code>
+            <Tag
+              class="home-inline-tag"
+              :value="stateLabel(serverPhpState(item.server))"
+              :severity="phpStateSeverity(serverPhpState(item.server))"
+              rounded
+            />
           </template>
         </Column>
         <Column :header="t('table.document_root')">
@@ -321,8 +359,18 @@ function onSubmit() {
                 type="button"
                 size="small"
                 :label="t('action.terminal')"
-                :disabled="busy"
+                :disabled="busy || !serverPhpRunning(item.server)"
+                :title="
+                  serverPhpRunning(item.server) ? '' : t('terminal.container_not_running')
+                "
                 @click="openTerminal(item)"
+              />
+              <Button
+                type="button"
+                size="small"
+                :label="t('action.logs')"
+                :disabled="busy"
+                @click="openSourceLogs(item)"
               />
               <Button
                 type="button"
@@ -373,12 +421,7 @@ function onSubmit() {
         <small v-if="fieldErrors.app_name" class="p-error">{{ fieldErrors.app_name }}</small>
 
         <label>{{ t('form.domain') }}</label>
-        <InputText
-          v-model="form.domain_name"
-          :placeholder="t('form.server_domain_placeholder')"
-          required
-          fluid
-        />
+        <DomainNameCombobox v-model="form.domain_name" />
         <small v-if="fieldErrors.domain_name" class="p-error">{{ fieldErrors.domain_name }}</small>
 
         <label>{{ t('form.php_version') }}</label>

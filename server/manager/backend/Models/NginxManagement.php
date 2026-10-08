@@ -44,7 +44,7 @@ final class NginxManagement
         if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
             $status = array_merge($status, array_intersect_key($decoded, $status));
         }
-        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
+        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart', 'create'])) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
         } else {
@@ -59,7 +59,7 @@ final class NginxManagement
 
     public function requestAction(string $action): string
     {
-        if (!in_array($action, ['start', 'stop', 'restart'], true)) {
+        if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
             throw new HttpException('nginx.invalid_action', 400);
         }
         $this->daemon()->assertRunning();
@@ -114,7 +114,9 @@ final class NginxManagement
         $test = $runtime . '/nginx.test.log';
         $reload = $runtime . '/nginx.reload.log';
         $operation = (is_file($test) && (!is_file($reload) || filemtime($test) >= filemtime($reload))) ? $test : $reload;
+
         return [
+            'action' => $this->tailFile($this->newestControllerActionLog()),
             'operation' => $this->tailFile($operation),
             'error' => $this->tailFile($logs . '/error.log'),
             'access' => $this->tailFile($logs . '/access.log'),
@@ -122,20 +124,49 @@ final class NginxManagement
     }
 
     /**
+     * Newest php-controller nginx.last-{start|restart|stop}.log (contains docker logs on failed start).
+     */
+    private function newestControllerActionLog(): string
+    {
+        $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/') . '/status';
+        $best = '';
+        $bestMtime = -1;
+        foreach (['nginx.last-start.log', 'nginx.last-restart.log', 'nginx.last-stop.log'] as $name) {
+            $path = $base . '/' . $name;
+            if (!is_file($path)) {
+                continue;
+            }
+            $mtime = (int) filemtime($path);
+            if ($mtime >= $bestMtime) {
+                $bestMtime = $mtime;
+                $best = $path;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
      * Truncate one global nginx manager log panel file.
      *
-     * @param 'operation'|'error'|'access' $name
+     * @param 'action'|'operation'|'error'|'access' $name
      * @return list<string> cleared basenames
      */
     public function clearGlobalLog(string $name): array
     {
-        if (!in_array($name, ['operation', 'error', 'access'], true)) {
+        if (!in_array($name, ['action', 'operation', 'error', 'access'], true)) {
             throw new HttpException('nginx.global_clear_invalid', 400);
         }
 
         $runtime = rtrim($this->runtimePath ?: Config::runtimePath(), '/');
         $logs = rtrim($this->logsPath ?: Config::nginxLogsPath(), '/');
+        $controllerStatus = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/') . '/status';
         $paths = match ($name) {
+            'action' => [
+                $controllerStatus . '/nginx.last-start.log',
+                $controllerStatus . '/nginx.last-restart.log',
+                $controllerStatus . '/nginx.last-stop.log',
+            ],
             'operation' => [
                 $runtime . '/nginx.test.log',
                 $runtime . '/nginx.reload.log',

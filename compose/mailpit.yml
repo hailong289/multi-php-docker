@@ -1,13 +1,10 @@
 services:
   mailpit:
-    image: long301001/multi-php-docker:mailpit
+    image: multi-php-local:mailpit
     profiles: ["mailpit"]
     build:
       context: .
       dockerfile: ./docker_files/mailpit.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: mailpit_container
     hostname: mailpit
     ports:

@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Manager\Controllers\AuthController;
 use Manager\Controllers\BootstrapController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HostsController;
@@ -10,15 +9,22 @@ use Manager\Controllers\InfraController;
 use Manager\Controllers\NginxController;
 use Manager\Controllers\PhpControllerController;
 use Manager\Controllers\ServerController;
+use Manager\Controllers\SourceLogController;
 use Manager\Controllers\SessionController;
+use Manager\Controllers\StatusController;
 use Manager\Controllers\SupervisorController;
 use Manager\Controllers\TerminalController;
 
 return [
     ['GET', '/session', [SessionController::class, 'show']],
-    ['POST', '/login', [AuthController::class, 'login']],
-    ['POST', '/logout', [AuthController::class, 'logout']],
     ['GET', '/bootstrap', [BootstrapController::class, 'show']],
+    ['GET', '/status/stream', [StatusController::class, 'stream']],
+    ['GET', '/status/servers/stream', [StatusController::class, 'streamServers']],
+    ['GET', '/status/nginx/stream', [StatusController::class, 'streamNginx']],
+    ['GET', '/status/hosts/stream', [StatusController::class, 'streamHosts']],
+    ['GET', '/status/php/stream', [StatusController::class, 'streamPhp']],
+    ['GET', '/status/infra/stream', [StatusController::class, 'streamInfra']],
+    ['GET', '/status/supervisor/stream', [StatusController::class, 'streamSupervisor']],
     ['GET', '/nginx/status', [NginxController::class, 'status']],
     ['GET', '/nginx/management', [NginxController::class, 'management']],
     ['GET', '/nginx/templates', [NginxController::class, 'templates']],
@@ -29,16 +35,18 @@ return [
     ['GET', '/nginx/domain-logs/(?P<domain>[a-zA-Z0-9][a-zA-Z0-9._-]{0,253})', [NginxController::class, 'domainLogShow']],
     ['POST', '/nginx/domain-logs/(?P<domain>[a-zA-Z0-9][a-zA-Z0-9._-]{0,253})/clear', [NginxController::class, 'domainLogClear']],
     ['POST', '/nginx/logs/clear', [NginxController::class, 'globalLogClear']],
-    ['POST', '/nginx/actions/(?P<action>start|stop|restart)', [NginxController::class, 'action']],
+    ['POST', '/nginx/actions/(?P<action>start|stop|restart|create)', [NginxController::class, 'action']],
     ['POST', '/nginx/test', [NginxController::class, 'test']],
     ['POST', '/nginx/reload', [NginxController::class, 'reload']],
     ['GET', '/hosts/status', [HostsController::class, 'status']],
     ['POST', '/hosts/sync', [HostsController::class, 'sync']],
     ['GET', '/domains', [DomainController::class, 'index']],
     ['POST', '/domains', [DomainController::class, 'store']],
+    ['POST', '/domains/restore', [DomainController::class, 'restore']],
     ['PUT', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'updateExtra']],
     ['DELETE', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'destroyExtra']],
     ['PUT', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'update']],
+    ['DELETE', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'destroy']],
     ['GET', '/infra-services', [InfraController::class, 'index']],
     ['GET', '/infra-services/compose-files', [InfraController::class, 'composeFiles']],
     ['POST', '/infra-services/compose-files', [InfraController::class, 'composeFileCreate']],
@@ -55,6 +63,7 @@ return [
     ['POST', '/infra-services/(?P<service>mysql|postgres|redis|rabbitmq|kafka|mailpit|minio)/(?P<action>start|stop|restart|create|pull-recreate|delete|delete-image)', [InfraController::class, 'action']],
     ['GET', '/supervisor', [SupervisorController::class, 'index']],
     ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)', [SupervisorController::class, 'details']],
+    ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/logs/stream', [SupervisorController::class, 'streamLog']],
     ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/action-logs', [SupervisorController::class, 'actionLogs']],
     ['POST', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/clear-log', [SupervisorController::class, 'clearLog']],
     ['GET', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/configs', [SupervisorController::class, 'configs']],
@@ -82,6 +91,13 @@ return [
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/extensions/(?P<name>[a-z0-9_]+)/uninstall', [PhpControllerController::class, 'uninstallExtension']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/extensions/(?P<name>[a-z0-9_]+)/enable', [PhpControllerController::class, 'enableExtension']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/extensions/(?P<name>[a-z0-9_]+)/disable', [PhpControllerController::class, 'disableExtension']],
+    ['GET', '/sources/logs', [SourceLogController::class, 'index']],
+    ['PUT', '/sources/(?P<key>SERVER_NAME\d+)/log-config', [SourceLogController::class, 'updateConfig']],
+    ['POST', '/sources/(?P<key>SERVER_NAME\d+)/logs/clear', [SourceLogController::class, 'clear']],
+    ['PUT', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'update']],
+    ['DELETE', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'destroy']],
+    ['GET', '/sources/(?P<key>SERVER_NAME\d+)/logs/stream', [SourceLogController::class, 'stream']],
+    ['GET', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'show']],
     ['POST', '/servers', [ServerController::class, 'store']],
     ['PUT', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'update']],
     ['DELETE', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'destroy']],

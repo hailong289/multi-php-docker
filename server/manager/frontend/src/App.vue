@@ -12,17 +12,18 @@ import AppearanceMenu from './components/AppearanceMenu.vue'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useManager } from './composables/useManager'
 import { useTour } from './composables/useTour'
-import { authState } from './lib/authState'
 import { applyThemeMode, readStoredThemeMode } from './lib/appearance'
 
 const { t, locale } = useI18n()
 const route = useRoute()
 const {
   fatalError,
-  loadBootstrap,
+  loadForRoute,
+  refreshForRoute,
+  screenScope,
+  startStatusStreams,
+  stopStatusStreams,
   bootstrapped,
-  logout,
-  dockerStatusBusy,
   data,
   stateLabel,
   startPhpControllerDaemon,
@@ -30,12 +31,7 @@ const {
 } = useManager()
 const { startCurrentTour } = useTour()
 
-const showChrome = computed(() => {
-  if (route.meta?.public || route.name === 'login') return false
-  if (!route.meta?.manager) return false
-  if (authState.remote && (!authState.authenticated || authState.locked)) return false
-  return true
-})
+const showChrome = computed(() => route.meta?.manager === true)
 
 const PHP_CONTROLLER_BANNER_ROUTES = new Set([
   'nginx',
@@ -56,11 +52,7 @@ const showPhpControllerBanner = computed(() => {
   return PHP_CONTROLLER_BANNER_ROUTES.has(route.name)
 })
 
-const accessBadge = computed(() => {
-  if (!authState.remote) return t('header.local_only')
-  if (authState.domain) return t('header.remote', { domain: authState.domain })
-  return t('header.remote_unnamed')
-})
+const accessBadge = computed(() => t('header.local_only'))
 
 const localeOptions = [
   { label: 'VI', value: 'vi' },
@@ -111,11 +103,6 @@ const navItems = computed(() => [
   },
 ])
 
-let statusPollTimer = null
-
-const STATUS_POLL_IDLE_MS = 5000
-const STATUS_POLL_BUSY_MS = 2000
-
 function onSystemThemeChange() {
   if (readStoredThemeMode() === 'system') applyThemeMode('system')
 }
@@ -134,50 +121,43 @@ function updateTitle() {
   document.title = pageKey ? `${t(pageKey)} · ${t('page.title')}` : t('page.title')
 }
 
-function shouldPollStatus() {
+function shouldStreamStatus() {
   return document.visibilityState === 'visible' && bootstrapped.value && showChrome.value
 }
 
-function pollStatusOnce() {
-  if (shouldPollStatus()) loadBootstrap({ silent: true })
-}
-
-function stopStatusPoll() {
-  if (statusPollTimer) {
-    clearInterval(statusPollTimer)
-    statusPollTimer = null
-  }
-}
-
-function startStatusPoll() {
-  stopStatusPoll()
-  const ms = dockerStatusBusy.value ? STATUS_POLL_BUSY_MS : STATUS_POLL_IDLE_MS
-  statusPollTimer = setInterval(pollStatusOnce, ms)
+function syncStatusTransport() {
+  if (shouldStreamStatus()) startStatusStreams(screenScope(route.name))
+  else stopStatusStreams()
 }
 
 onMounted(async () => {
   applyThemeMode(readStoredThemeMode())
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onSystemThemeChange)
   updateTitle()
-  if (showChrome.value && !bootstrapped.value && route.meta?.manager) {
-    await loadBootstrap()
+  if (showChrome.value && route.meta?.manager) {
+    await loadForRoute(route.name)
   }
   document.addEventListener('visibilitychange', onVisibilityRefresh)
-  startStatusPoll()
+  syncStatusTransport()
 })
 
 onUnmounted(() => {
   matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', onSystemThemeChange)
   document.removeEventListener('visibilitychange', onVisibilityRefresh)
-  stopStatusPoll()
+  stopStatusStreams()
 })
 
 function onVisibilityRefresh() {
-  if (shouldPollStatus()) loadBootstrap({ silent: true })
+  if (shouldStreamStatus()) {
+    refreshForRoute(route.name)
+    startStatusStreams(screenScope(route.name))
+  } else {
+    stopStatusStreams()
+  }
 }
 
-watch(dockerStatusBusy, () => {
-  startStatusPoll()
+watch([bootstrapped, showChrome], () => {
+  syncStatusTransport()
 })
 
 watch(locale, () => {
@@ -186,10 +166,10 @@ watch(locale, () => {
 
 watch(
   () => [showChrome.value, route.name],
-  async ([chrome]) => {
-    if (chrome && !bootstrapped.value && route.meta?.manager) {
-      await loadBootstrap()
-    }
+  async ([chrome, name]) => {
+    if (!chrome || !route.meta?.manager) return
+    await loadForRoute(name)
+    syncStatusTransport()
   },
 )
 
@@ -197,7 +177,7 @@ watch(() => route.fullPath, updateTitle)
 </script>
 
 <template>
-  <main class="shell" :class="{ 'shell-login': !showChrome }">
+  <main class="shell">
     <header v-if="showChrome" class="app-header" data-tour="app-header">
       <div>
         <h1>{{ t('header.title') }}</h1>
@@ -205,15 +185,6 @@ watch(() => route.fullPath, updateTitle)
       </div>
       <div class="header-actions">
         <Tag :value="accessBadge" severity="info" rounded />
-        <Button
-          v-if="authState.remote"
-          type="button"
-          :label="t('login.logout')"
-          severity="secondary"
-          outlined
-          size="small"
-          @click="logout"
-        />
         <Button
           type="button"
           data-tour="tour-replay"

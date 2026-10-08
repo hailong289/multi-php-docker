@@ -15,7 +15,11 @@ fi
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "jq command not found. Cài đặt jq..."
-    apt-get update && apt-get install -y jq
+    if [ -f /etc/alpine-release ]; then
+        apk add --no-cache jq
+    else
+        apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
+    fi
     echo "jq đã được cài đặt thành công."
 else
     echo "jq đã được cài đặt."
@@ -61,14 +65,28 @@ current_domain_from_template() {
     sed -n 's/^[[:space:]]*server_name[[:space:]]\{1,\}\([^;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
 
-# "    root /var/www/source_php8.2/app/public;" → path
+# "    root /var/www/source/app/public;" → path
 current_root_from_template() {
     sed -n 's/^[[:space:]]*root[[:space:]]\{1,\}\([^;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
 
-# "        fastcgi_pass php8.2_container:9000;" → php8.2_container
+# "        set $php_upstream php8.2_container:9000;" → php8.2_container
+# Older files used "fastcgi_pass php8.2_container:9000;".
 current_php_from_template() {
+    upstream=$(sed -n 's/^[[:space:]]*set[[:space:]]\{1,\}\$php_upstream[[:space:]]\{1,\}\([^:;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1)
+    if [ -n "$upstream" ]; then
+        printf '%s\n' "$upstream"
+        return
+    fi
     sed -n 's/^[[:space:]]*fastcgi_pass[[:space:]]\{1,\}\([^:;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
+}
+
+# Literal fastcgi_pass hostnames are resolved at startup and stop Nginx when
+# that PHP container does not exist yet.
+php_upstream_is_deferred() {
+    passes=$(grep -c 'fastcgi_pass' "$1" || true)
+    deferred=$(grep -c 'fastcgi_pass[[:space:]]\{1,\}\$php_upstream;' "$1" || true)
+    [ "$passes" -gt 0 ] && [ "$passes" = "$deferred" ]
 }
 
 is_ssl_enabled() {
@@ -141,13 +159,19 @@ for key in $keys; do
     DOCKER_SOURCE_PATH=$(jq -r --arg key "$key" '.[$key].SERVER_PATH' "$JSON_FILE")
     DOCKER_PHP_VERSION=$(jq -r --arg key "$key" '.[$key].CONTAINER_PHP_VERSION' "$JSON_FILE")
 
-    if [ -z "$DOCKER_APP_NAME" ] || [ -z "$DOCKER_HOSTNAME" ] || [ -z "$DOCKER_SOURCE_PATH" ]; then
+    if [ -z "$DOCKER_APP_NAME" ] || [ "$DOCKER_APP_NAME" = "null" ] || [ -z "$DOCKER_SOURCE_PATH" ] || [ "$DOCKER_SOURCE_PATH" = "null" ]; then
         echo "Biến môi trường bị thiếu: $key"
         continue
     fi
 
     printf '%s\n' "$DOCKER_APP_NAME" >> "$desired_list"
     OUTPUT_FILE="$OUTPUT_DIR/${DOCKER_APP_NAME}.template"
+
+    # Domain removed: keep the server and its existing nginx file.
+    if [ -z "$DOCKER_HOSTNAME" ] || [ "$DOCKER_HOSTNAME" = "null" ]; then
+        echo "Giữ máy chủ (không có domain): $OUTPUT_FILE"
+        continue
+    fi
     WANT_SSL=0
     if is_ssl_enabled "$key" && ssl_files_present "$DOCKER_APP_NAME"; then
         WANT_SSL=1
@@ -175,6 +199,9 @@ for key in $keys; do
         if [ "$CURRENT_PHP" != "$DOCKER_PHP_VERSION" ]; then
             REASONS="${REASONS} php($CURRENT_PHP→$DOCKER_PHP_VERSION)"
         fi
+        if ! php_upstream_is_deferred "$OUTPUT_FILE"; then
+            REASONS="${REASONS} php_resolve"
+        fi
         if [ "$CURRENT_SSL" != "$WANT_SSL" ]; then
             REASONS="${REASONS} ssl($CURRENT_SSL→$WANT_SSL)"
         fi
@@ -195,81 +222,31 @@ for key in $keys; do
     echo "Tạo config nginx thành công: $OUTPUT_FILE"
 done
 
-inject_manager_locations() {
-    target="$1"
-    snippet="$2"
-    [ -f "$target" ] && [ -f "$snippet" ] || return 0
-    if grep -q 'location ^~ /server-manage/' "$target" 2>/dev/null; then
-        return 0
-    fi
-    tmp=$(mktemp)
-    # Drop the last closing brace of the server block, append Manager locations, re-close.
-    sed '$ d' "$target" > "$tmp"
-    cat "$snippet" >> "$tmp"
-    echo "}" >> "$tmp"
-    mv "$tmp" "$target"
-    echo "Injected Manager /server-manage into $target"
-}
-
-# Xóa template không còn trong danh sách app enabled (giữ manager.template riêng)
+# Xóa template không còn trong danh sách app enabled
 for existing in "$OUTPUT_DIR"/*.template; do
     [ -e "$existing" ] || break
     base=$(basename "$existing" .template)
-    if [ "$base" = "manager" ]; then
-        continue
-    fi
     if ! grep -Fxq "$base" "$desired_list"; then
         echo "Xóa template orphan/disabled: $existing"
         rm -f "$existing"
     fi
 done
 
-MANAGER_REMOTE_RAW=$(printf '%s' "${MANAGER_REMOTE:-0}" | tr '[:upper:]' '[:lower:]')
-MANAGER_DOMAIN_VAL="${MANAGER_DOMAIN:-}"
-MANAGER_USER_VAL="${MANAGER_USERNAME:-}"
-MANAGER_PASS_VAL="${MANAGER_PASSWORD:-}"
-MANAGER_TEMPLATE="$OUTPUT_DIR/manager.template"
-MANAGER_EXAMPLE="/etc/nginx/examples/manager_proxy_example.txt"
-MANAGER_SNIPPET="/etc/nginx/examples/manager_location_snippet.txt"
+# Không có máy chủ: một server mặc định phục vụ trang giới thiệu.
+WELCOME_ROOT="${NGINX_WELCOME_ROOT:-/usr/share/nginx/welcome}"
+WELCOME_TEMPLATE="$OUTPUT_DIR/_welcome.template"
+if [ ! -s "$desired_list" ]; then
+    cat > "$WELCOME_TEMPLATE" <<EOF
+server {
+    listen 80 default_server;
+    server_name _;
+    root ${WELCOME_ROOT};
+    index index.html;
 
-case "$MANAGER_REMOTE_RAW" in
-  1|true|yes|on)
-    if [ -n "$MANAGER_DOMAIN_VAL" ] && [ -n "$MANAGER_USER_VAL" ] && [ -n "$MANAGER_PASS_VAL" ]; then
-      # Inject /server-manage into every site so "/" stays the website (incl. bare IP).
-      for existing in "$OUTPUT_DIR"/*.template; do
-        [ -e "$existing" ] || break
-        base=$(basename "$existing" .template)
-        [ "$base" = "manager" ] && continue
-        inject_manager_locations "$existing" "$MANAGER_SNIPPET"
-      done
-
-      domain_has_site=0
-      for key in $keys; do
-        if ! is_enabled "$key"; then
-          continue
-        fi
-        site_domain=$(jq -r --arg key "$key" '.[$key].DOMAIN_NAME // empty' "$JSON_FILE")
-        if [ "$site_domain" = "$MANAGER_DOMAIN_VAL" ]; then
-          domain_has_site=1
-          break
-        fi
-      done
-
-      if [ "$domain_has_site" -eq 0 ] && [ -f "$MANAGER_EXAMPLE" ]; then
-        # No site on this hostname yet — expose Manager only under /server-manage.
-        sed -e "s|\${MANAGER_DOMAIN}|${MANAGER_DOMAIN_VAL}|g" \
-          "$MANAGER_EXAMPLE" > "$MANAGER_TEMPLATE"
-        echo "Wrote manager proxy template for ${MANAGER_DOMAIN_VAL} (/server-manage only)"
-      else
-        rm -f "$MANAGER_TEMPLATE"
-        echo "MANAGER_DOMAIN matches a site vhost; Manager is available at /server-manage on that host"
-      fi
-    else
-      rm -f "$MANAGER_TEMPLATE"
-      echo "MANAGER_REMOTE enabled but domain/credentials incomplete; skipped manager proxy" >&2
-    fi
-    ;;
-  *)
-    rm -f "$MANAGER_TEMPLATE"
-    ;;
-esac
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+EOF
+    echo "Không có máy chủ; phục vụ trang giới thiệu: $WELCOME_TEMPLATE"
+fi

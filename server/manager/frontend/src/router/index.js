@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DomainsView from '../views/DomainsView.vue'
 import HomeView from '../views/HomeView.vue'
-import LoginView from '../views/LoginView.vue'
 import PhpVersionsView from '../views/PhpVersionsView.vue'
 import PhpVersionCatalogView from '../views/PhpVersionCatalogView.vue'
 import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
@@ -11,6 +10,7 @@ import ServicesView from '../views/ServicesView.vue'
 import ComposeYamlView from '../views/ComposeYamlView.vue'
 import PhpComposeYamlView from '../views/PhpComposeYamlView.vue'
 import ServiceLogsView from '../views/ServiceLogsView.vue'
+import SourceLogsView from '../views/SourceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
 import TerminalView from '../views/TerminalView.vue'
 import { apiGet, setCsrfToken } from '../api'
@@ -21,12 +21,6 @@ const BASE = '/server-manage/'
 const router = createRouter({
   history: createWebHistory(BASE),
   routes: [
-    {
-      path: '/login',
-      name: 'login',
-      component: LoginView,
-      meta: { public: true, titleKey: 'login.title' },
-    },
     {
       path: '/',
       name: 'home',
@@ -44,6 +38,12 @@ const router = createRouter({
       name: 'domains',
       component: DomainsView,
       meta: { titleKey: 'nav.domains', manager: true },
+    },
+    {
+      path: '/source-logs/:serverKey',
+      name: 'source-logs',
+      component: SourceLogsView,
+      meta: { titleKey: 'source_logs.title', manager: true },
     },
     {
       path: '/nginx',
@@ -143,19 +143,7 @@ router.beforeEach(async (to) => {
   try {
     await ensureSession()
   } catch (_) {
-    applySessionPayload({
-      remote: false,
-      authenticated: true,
-      locked: false,
-      domain: '',
-    })
-  }
-
-  if (authState.remote && (!authState.authenticated || authState.locked) && !to.meta.public) {
-    return { name: 'login' }
-  }
-  if (authState.remote && authState.authenticated && !authState.locked && to.name === 'login') {
-    return { name: 'home' }
+    applySessionPayload({})
   }
 
   return true

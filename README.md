@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO. All PHP 7.4–8.5 versions use ready-to-use multi-architecture images from Docker Hub (`long301001/multi-php-docker`); `docker-compose.yml` does not build those PHP images. The Server Manager UI is published as `long301001/multi-php-docker:manager` (frontend is built inside that image). PHP 8.5 runs by default; the other PHP versions use separate Compose profiles and remain off by default. Dockerfiles remain in the repository as references or for creating custom images. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
+This repository provides a local development environment with Nginx, PHP 7.4, PHP 8.0–8.5, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO. Development services use local images named `multi-php-local` (Compose builds them from the Dockerfiles in this repo). The Server Manager UI is `multi-php-local:manager` (the frontend is built when that image is built). `docker compose up -d` starts Server Manager and PHP Controller, and runs the one-shot `env-init` service (it creates `env.json` when that file is missing, then exits). Nginx, every PHP version (including 8.5), and the other services use Compose profiles and stay off until you start them. Nginx generates virtual hosts from a local `env.json` based on [`env.example.json`](env.example.json), allowing multiple projects to use different domains and PHP versions.
 
 ## Demo videos
 
@@ -35,29 +35,29 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
 | Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
-PHP 8.5 is the default version. `docker compose up -d` starts only PHP 8.5; PHP 7.4, 8.0, 8.1, 8.2, 8.3, and 8.4 are assigned to separate profiles and remain disabled by default. MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor also use separate profiles: they are not started until you enable the matching profile.
+`docker compose up -d` starts Nginx, Server Manager, and PHP Controller, and runs one-shot `env-init` first (creates `env.json` only when it is missing). PHP 8.5 (`php-8.5`), the other PHP versions, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor each use a Compose profile and stay off until you start them from Server Manager or with `--profile`.
 
-The following images are provided:
+Local images (`multi-php-local`):
 
 | Service | Image |
 | --- | --- |
-| `nginx` | `long301001/multi-php-docker:nginx` |
-| `php-8.0`, `supervisor-8.0` | `long301001/multi-php-docker:php-8.0` |
-| `php-8.1`, `supervisor-8.1` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.5`, `supervisor-8.5` | `long301001/multi-php-docker:php-8.5` |
-| `manager` | `long301001/multi-php-docker:manager` |
-| `php-8.4`, `supervisor-8.4` | `long301001/multi-php-docker:php-8.4` |
-| `php-8.3`, `supervisor-8.3` | `long301001/multi-php-docker:php-8.3` |
-| `php-8.2`, `supervisor-8.2` | `long301001/multi-php-docker:php-8.2` |
-| `php-7.4` | `long301001/multi-php-docker:php-7.4` |
+| `nginx` | `multi-php-local:nginx` |
+| `php-8.0`, `supervisor-8.0` | `multi-php-local:php-8.0` |
+| `php-8.1`, `supervisor-8.1` | `multi-php-local:php-8.1` |
+| `php-8.5`, `supervisor-8.5` | `multi-php-local:php-8.5` |
+| `manager` | `multi-php-local:manager` |
+| `php-8.4`, `supervisor-8.4` | `multi-php-local:php-8.4` |
+| `php-8.3`, `supervisor-8.3` | `multi-php-local:php-8.3` |
+| `php-8.2`, `supervisor-8.2` | `multi-php-local:php-8.2` |
+| `php-7.4` | `multi-php-local:php-7.4` |
 | `php-controller` | `docker:cli` |
-| `mysql` | `long301001/multi-php-docker:mysql` |
-| `postgres` | `long301001/multi-php-docker:postgres` |
-| `redis` | `long301001/multi-php-docker:redis-alpine` |
-| `rabbitmq` | `long301001/multi-php-docker:rabbitmq-3-management` |
-| `kafka` | `long301001/multi-php-docker:kafka` |
-| `mailpit` | `long301001/multi-php-docker:mailpit` |
-| `minio` | `long301001/multi-php-docker:minio` |
+| `mysql` | `multi-php-local:mysql` |
+| `postgres` | `multi-php-local:postgres` |
+| `redis` | `multi-php-local:redis-alpine` |
+| `rabbitmq` | `multi-php-local:rabbitmq-3-management` |
+| `kafka` | `multi-php-local:kafka` |
+| `mailpit` | `multi-php-local:mailpit` |
+| `minio` | `multi-php-local:minio` |
 | `env-init` | `alpine:latest` |
 
 ## Requirements
@@ -83,55 +83,43 @@ git clone <repository-url>
 cd <repository-folder>
 ```
 
-`env.json` is machine-specific and must not be pushed to Git. Only `env.example.json` is committed as the template. On the first Compose run, `env-init` copies `env.example.json` to `env.json` if the file is missing; an existing file is never overwritten. After the stack is up, add and edit projects in Server Manager instead of editing `env.json` by hand.
+`env.json` is machine-specific and must not be pushed to Git. Only `env.example.json` is committed as the template. On the first `docker compose up`, `env-init` copies `env.example.json` to `env.json` if the file is missing; an existing file is never overwritten. After the stack is up, add and edit projects in Server Manager instead of editing `env.json` by hand.
 
-### 2. Place the source code in the correct directory
+### 2. Place the source code in `server/source`
 
-- PHP 8.5: `server/source_php8.5/<project-name>`
-- PHP 8.4: `server/source_php8.4/<project-name>`
-- PHP 8.3: `server/source_php8.3/<project-name>`
-- PHP 8.2: `server/source_php8.2/<project-name>`
-- PHP 8.1: `server/source_php8.1/<project-name>`
-- PHP 8.0: `server/source_php8.0/<project-name>`
-- PHP 7.4: `server/source_php7.4/<project-name>`
+Every PHP version mounts the same host directory:
 
-Each directory is mounted at the matching `/var/www/source_php<version>` path inside its container.
+```text
+server/source/<project-name>
+```
+
+Inside each PHP and Supervisor container that directory is `/var/www/source`. Pick the PHP version per site in Server Manager; changing the version does not move the files. For an existing checkout that still uses `server/source_php*`, run `./scripts/migrate-source-path.sh` once before recreating the containers.
 
 ```text
 server/
-├── source_php8.5/
-│   └── my-php85-app/
-├── source_php8.4/
-│   └── my-php84-app/
-├── source_php8.3/
-│   └── my-php83-app/
-├── source_php8.2/
-│   └── my-php82-app/
-├── source_php8.1/
-│   └── my-php81-app/
-├── source_php8.0/
-│   └── my-php80-app/
-└── source_php7.4/
+└── source/
+    ├── my-php85-app/
+    ├── my-php80-app/
     └── my-php7-app/
 ```
 
-### 3. Pull images and start the environment
+### 3. Build local images and start the environment
 
-On the first run, pull the images and start. Zero-config startup does not require a `.env` file:
+On the first run, build the `multi-php-local` images and start. Zero-config startup does not require a `.env` file:
 
 ```powershell
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
 macOS / Linux / WSL:
 
 ```bash
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
-This starts PHP 8.5, Nginx, Server Manager, and PHP Controller. Optional PHP versions (7.4, 8.0, 8.1, 8.2, 8.3, 8.4), MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor stay off until you start them from Server Manager.
+This starts Server Manager and PHP Controller. `env-init` runs first and exits after ensuring `env.json` exists. Nginx, PHP (including 8.5), MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor stay off until you start them from Server Manager.
 
 `php-controller` infers `HOST_PROJECT_PATH` from the `/project` bind mount. Existing `.env` values remain supported as backward-compatible overrides, but they are not required.
 
@@ -144,7 +132,7 @@ docker compose ps
 
 ### 4. Open Server Manager
 
-The Manager UI is baked into `long301001/multi-php-docker:manager`. Clone and `docker compose pull` is enough — you do not need Node.js or `npm run build` on the host. Built Vite files under `server/manager/public/` are gitignored.
+The Manager UI lives in the local image `multi-php-local:manager`. `docker compose build manager` builds the frontend inside that image — you do not need a separate `npm run build` on the host. Built Vite files under `server/manager/public/` are gitignored.
 
 Open:
 
@@ -153,7 +141,7 @@ Open:
 Use this UI to manage virtual servers, PHP versions, hosts, Nginx, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor. First-run order:
 
 1. **Add a server** — application name, domain (for example `my-php85-app.test`), PHP version, and document root. For Laravel or a framework with a public directory, point the document root at `public`, `webroot`, or the folder that contains `index.php`. Manager writes `env.json`; you do not need to edit that file by hand.
-2. **Start PHP if needed** — PHP 8.5 is already running. For another version, open **PHP versions** → **Create** → **Start**.
+2. **Start Nginx and PHP** — open **Nginx** and **PHP versions**, then **Create** and **Start** the versions this site uses. Nothing except Server Manager and PHP Controller is running yet.
 3. **Write hosts** — once per machine, register the helper (not required to start Docker). Then in Manager use **Add domain** / **Write hosts (Admin)**.
 
 Windows (once):
@@ -216,26 +204,26 @@ Server Manager can:
 - Manage Nginx from a dedicated menu: **Start**, **Stop**, **Restart**, run `nginx -t`, **Apply & Reload**, and inspect up to 200 recent test/reload, error, and access log lines.
 - Enable **HTTPS** per site (opt-in). Leave the certificate files empty to generate a self-signed cert, or upload a `.crt`/`.pem` and `.key`. HTTP (port 80) and HTTPS (port 443) both keep serving; browsers warn on self-signed certs. Click **Apply & Reload Nginx** after changing SSL. Certificates are stored in `nginx/ssl/<app-name>/` and are not committed to Git. After pulling this change, recreate Nginx once (`docker compose up -d nginx`) so `./nginx/ssl` is mounted.
 
-The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. PHP 8.5 is created by default. For an optional PHP container that has never been created, click **Create** in the UI (equivalent to `docker compose --profile … create …`), then use **Start**. You can still create manually:
+The **PHP Versions** card shows `Running`, `Stopped`, `Not created`, or `Processing`. No PHP container is created by `docker compose up -d`. Click **Create** in the UI (equivalent to `docker compose --profile … create …`), then use **Start**. You can still create manually:
 
 ```bash
 docker compose --profile php-8.1 create php-8.1
 ```
 
 **Add version** opens the Hub catalog. Installing a catalog tag (for example alpine) scaffolds Compose/Dockerfile files and **builds** a local image; on Windows, Docker Desktop DNS can interrupt that build — see **Troubleshooting → Windows: Install / Create PHP version**.
-Then refresh Server Manager to use the controls. The controller accepts PHP 8.5–7.4 (`php-8.x` compose services) plus Create (profiled services only), Start, Stop, and Restart; it does not delete containers. The controller infers the repository path on the Docker host from the `/project` mount; `HOST_PROJECT_PATH` in `.env` is only a backward-compatible override.
+Then refresh Server Manager to use the controls. The controller accepts PHP 8.5–7.4 (`php-8.x` compose services) plus Create, Start, Stop, and Restart; it does not delete containers. The controller infers the repository path on the Docker host from the `/project` mount; `HOST_PROJECT_PATH` in `.env` is only a backward-compatible override.
 
 ### PHP extensions from Manager
 
 The PHP version **Details** page can enable/disable `extension=` lines in the mounted `configs/php*/php.ini` and install a curated set of extensions into a *running* container via `php-controller`. Runtime installs do **not** survive container recreate; bake permanent extensions into a custom image/Dockerfile instead.
 
-The `php-controller` service publishes no ports and mounts `/var/run/docker.sock` to run allowlisted Compose actions. Server Manager may also mount the Docker socket **read-only** for live container status. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source and never expose Manager without authentication and HTTPS.
+The `php-controller` service publishes no ports and mounts `/var/run/docker.sock` to run allowlisted Compose actions. Server Manager may also mount the Docker socket **read-only** for live container status. Docker socket access is effectively root-level access to the Docker host, so only run the stack from trusted source. Manager listens on `127.0.0.1:8080` only.
 
 PHP and Nginx container **actions** still go through a fixed allowlist in `php-controller` via a shared runtime directory. When **Apply & Reload Nginx** is clicked, the UI writes a signal file to `runtime/`; a watcher inside the Nginx container regenerates templates, runs `nginx -t`, and reloads only when the configuration is valid. If validation fails, the previous configuration is restored.
 
-By default the UI is published only on `127.0.0.1:8080` (CSRF protection, no login). For optional remote access on a primary server, see **Remote Server Manager** below.
+The UI is published only on `127.0.0.1:8080` (CSRF protection, no login).
 
-After adding, editing, or deleting a server, click **Apply & Reload Nginx**. PHP 8.5 does not need a container restart. If the server uses an optional PHP version, **Create** and **Start** that version in the UI first (or run the profile command the UI shows). Refresh the page to see the latest result below the button. Detailed errors are written to `runtime/nginx.reload.log`; `runtime/` contains temporary data and is ignored by Git.
+After adding, editing, or deleting a server, click **Apply & Reload Nginx**. Start Nginx and the site's PHP version in the UI first (or run the profile command the UI shows). Refresh the page to see the latest result below the button. Detailed errors are written to `runtime/nginx.reload.log`; `runtime/` contains temporary data and is ignored by Git.
 
 Stop the UI separately when it is not needed:
 
@@ -258,25 +246,25 @@ Each project uses one `SERVER_NAME<N>` entry:
   "SERVER_NAME1": {
     "APP_NAME": "my-php80-app",
     "DOMAIN_NAME": "my-php80-app.test",
-    "SERVER_PATH": "/var/www/source_php8.0/my-php80-app/public",
+    "SERVER_PATH": "/var/www/source/my-php80-app/public",
     "CONTAINER_PHP_VERSION": "php8.0_container"
   },
   "SERVER_NAME2": {
     "APP_NAME": "my-php81-app",
     "DOMAIN_NAME": "my-php81-app.test",
-    "SERVER_PATH": "/var/www/source_php8.1/my-php81-app/public",
+    "SERVER_PATH": "/var/www/source/my-php81-app/public",
     "CONTAINER_PHP_VERSION": "php8.1_container"
   },
   "SERVER_NAME3": {
     "APP_NAME": "my-php82-app",
     "DOMAIN_NAME": "my-php82-app.test",
-    "SERVER_PATH": "/var/www/source_php8.2/my-php82-app/public",
+    "SERVER_PATH": "/var/www/source/my-php82-app/public",
     "CONTAINER_PHP_VERSION": "php8.2_container"
   },
   "SERVER_NAME4": {
     "APP_NAME": "my-php7-app",
     "DOMAIN_NAME": "my-php7-app.test",
-    "SERVER_PATH": "/var/www/source_php7.4/my-php7-app/public",
+    "SERVER_PATH": "/var/www/source/my-php7-app/public",
     "CONTAINER_PHP_VERSION": "php7.4_container"
   }
 }
@@ -324,9 +312,11 @@ The script reads every `DOMAIN_NAME` in `env.json` (plus `runtime/hosts.extra.js
 
 ### PHP, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor profiles
 
-Each optional PHP version has a Compose profile with the same name (`php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
+Nginx starts with `docker compose up -d`. Every PHP version has a Compose profile with the same name (`php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`):
 
 ```bash
+docker compose up -d nginx
+docker compose --profile php-8.5 up -d php-8.5
 docker compose --profile php-8.4 up -d
 docker compose --profile php-8.3 up -d
 docker compose --profile php-8.2 up -d
@@ -370,35 +360,6 @@ docker compose --profile supervisor-7.4 up -d supervisor-7.4
 
 The UI supports Create / Start / Stop / Restart and live log viewing under `logs/supervisor*` (manual refresh or Follow).
 
-## Remote Server Manager (opt-in)
-
-By default Manager listens on `127.0.0.1:8080` without login (CSRF only).
-
-To use Manager on a primary server behind Nginx:
-
-1. Copy [`.env.example`](.env.example) to `.env` and set:
-   - `MANAGER_REMOTE=1`
-   - `MANAGER_USERNAME` / `MANAGER_PASSWORD` (use a strong password)
-   - `MANAGER_DOMAIN` (DNS A/AAAA record pointing at the server)
-2. Terminate TLS for that domain (certificate on Nginx, a reverse proxy, or a tunnel). The generated vhost listens on port 80 and proxies to `manager:8080` on the Docker network — put HTTPS in front.
-3. Recreate services so env is applied:
-
-```bash
-docker compose up -d nginx manager
-```
-
-4. Open `https://MANAGER_DOMAIN/server-manage` and sign in.
-
-If `MANAGER_DOMAIN` is a bare server IP and that IP is also a site in `env.json`, `/` keeps serving the site and Manager is only at `/server-manage`.
-
-Fail-closed: if `MANAGER_REMOTE=1` but username/password/domain are incomplete, Nginx does **not** write `manager.template`, and the API returns locked/unauthorized for protected routes.
-
-Security notes:
-
-- Remote Manager can control containers and may have read-only Docker socket status — treat credentials like root access.
-- Prefer firewall / IP allowlists in addition to login.
-- Do **not** publish host port `0.0.0.0:8080`; keep the loopback mapping unless you intentionally add a hardened edge.
-
 ## Common commands
 
 ### View logs
@@ -427,17 +388,16 @@ docker compose down
 docker compose restart nginx
 ```
 
-### Update images from the registry
+### Rebuild local images
 
 ```bash
-# Pull the newest content for the configured tags
-docker compose pull
+docker compose build
 docker compose up -d
 ```
 
-### Build custom images
+### Change an image
 
-To change extensions, packages, or configuration inside an image, change `image` to your own name and add `build` to the corresponding service. Do not keep a `long301001/multi-php-docker:*` name for a custom image.
+Development images are already `multi-php-local:*` and already declare `build`. To change extensions, packages, or configuration, edit the matching Dockerfile and rebuild that service.
 
 Example for a custom PHP 8.5 image:
 
@@ -470,7 +430,7 @@ Valid service names: `env-init`, `nginx`, `php-8.5`, `php-8.4`, `php-8.3`, `php-
 
 ## Running background workers with Supervisor
 
-The `php-8.5` and `supervisor-8.5` services both use the provided `long301001/multi-php-docker:php-8.5` image. They also mount the same source directory at `server/source_php8.5` and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
+The `php-8.5` and `supervisor-8.5` services both use the local `multi-php-local:php-8.5` image. They also mount the shared source directory at `server/source` (`/var/www/source` in the container) and the same `php.ini`. Supervisor runs workers in its own container; it does not control processes inside the PHP-FPM container.
 
 ### Create a worker configuration
 
@@ -484,7 +444,7 @@ Update `directory` and `command` in `worker.conf` for the project. Laravel examp
 
 ```ini
 [program:app_worker]
-directory=/var/www/source_php8.5/my-project
+directory=/var/www/source/my-project
 command=php artisan queue:work --sleep=3 --tries=3 --timeout=90
 numprocs=1
 autostart=true
@@ -498,7 +458,7 @@ Create multiple `.conf` files in `configs/supervisor.d/php8.5/` to run workers f
 ### Start and manage workers
 
 ```bash
-# Start PHP-FPM and Supervisor from the provided image
+# Start PHP-FPM and Supervisor from the local image
 docker compose --profile supervisor-8.5 up -d supervisor-8.5
 
 # View worker status
@@ -524,12 +484,12 @@ Each Supervisor container contains one PHP runtime. PHP (+ Supervisor) lives in 
 
 | PHP-FPM service | Supervisor service | File | Shared image |
 | --- | --- | --- | --- |
-| `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `long301001/multi-php-docker:php-8.5` |
-| `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `long301001/multi-php-docker:php-8.4` |
-| `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `long301001/multi-php-docker:php-8.3` |
-| `php-8.2` | `supervisor-8.2` | `compose/php-8.2.yml` | `long301001/multi-php-docker:php-8.2` |
-| `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `long301001/multi-php-docker:php-8.1` |
-| `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `long301001/multi-php-docker:php-8.0` |
+| `php-8.5` | `supervisor-8.5` | `compose/php-8.5.yml` | `multi-php-local:php-8.5` |
+| `php-8.4` | `supervisor-8.4` | `compose/php-8.4.yml` | `multi-php-local:php-8.4` |
+| `php-8.3` | `supervisor-8.3` | `compose/php-8.3.yml` | `multi-php-local:php-8.3` |
+| `php-8.2` | `supervisor-8.2` | `compose/php-8.2.yml` | `multi-php-local:php-8.2` |
+| `php-8.1` | `supervisor-8.1` | `compose/php-8.1.yml` | `multi-php-local:php-8.1` |
+| `php-8.0` | `supervisor-8.0` | `compose/php-8.0.yml` | `multi-php-local:php-8.0` |
 | `php-7.4` | `supervisor-7.4` | `compose/php-7.4.yml` | PHP 7.4 image (must include Supervisor) |
 
 Do not add `build` to a Supervisor service. For a custom image, only the matching PHP-FPM service declares `build`; the Supervisor service reuses the same image name to prevent duplicate builds.
@@ -555,15 +515,7 @@ Same pattern for profiles `php-8.4` / `supervisor-8.4`, `php-8.2` / `supervisor-
 The provided PHP 7.4 image does not currently include Supervisor. To run `supervisor-7.4`, create a custom image: add `supervisor` to the package list in `docker_files/php7.Dockerfile`, change the image of `php-7.4` (and `supervisor-7.4` in `compose/php-7.4.yml`) to your own name, and add `build` as described under **Build custom images**.
 
 ```dockerfile
-RUN apt-get update && apt-get install -y \
-    supervisor \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libzip-dev \
-    libxml2-dev \
-    unzip \
-    curl
+RUN apk add --no-cache supervisor
 ```
 
 ```bash
@@ -641,7 +593,7 @@ Applications running directly on the host should use `127.0.0.1` and the host po
 
 ## Adding or changing a project
 
-1. Place the source code in the appropriate PHP directory.
+1. Place the source code in `server/source/<project-name>`.
 2. In Server Manager, add or edit the server, write hosts if the domain is new, then **Apply & Reload Nginx**.
 
 CLI alternative (without the UI):
@@ -665,12 +617,12 @@ PHP 7.4 and 8.0–8.5 are already shipped. Use this section for a newer release 
 cp docker_files/php8.5.Dockerfile docker_files/php8.6.Dockerfile
 ```
 
-Change the base image (for example `FROM php:8.6-fpm`). Keep or adjust packages and extensions; current 8.x images typically include `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl`, and Redis. Install `pdo_pgsql` / `pgsql` from Server Manager when the project uses PostgreSQL.
+Change the base image (for example `FROM php:8.6-fpm-alpine`). Keep or adjust packages and extensions; current 8.x images typically include `pdo_mysql`, `mysqli`, `gd`, `zip`, `sockets`, `pcntl`, and Redis. Install `pdo_pgsql` / `pgsql` from Server Manager when the project uses PostgreSQL.
 
-### 2. Create PHP config, source, and Supervisor dirs
+### 2. Create PHP config and Supervisor dirs
 
 ```bash
-mkdir -p configs/php8.6 server/source_php8.6 configs/supervisor.d/php8.6 logs/supervisor-8.6
+mkdir -p configs/php8.6 configs/supervisor.d/php8.6 logs/supervisor-8.6
 cp configs/php8.5/php.ini configs/php8.6/php.ini
 cp configs/supervisor.d/worker.conf.example configs/supervisor.d/php8.6/worker.conf
 ```
@@ -793,7 +745,7 @@ services:
     image: <dockerhub-username>/server-php:8.2-v1.0.0
     build:
       context: .
-      dockerfile: ./docker_files/php8.Dockerfile
+      dockerfile: ./docker_files/php8.2.Dockerfile
       platforms:
         - linux/amd64
         - linux/arm64
@@ -885,7 +837,7 @@ Tham khảo tài liệu chính thức: [Docker Compose Build Specification](http
 
 ### Windows: Install / Create PHP version from Server Manager fails
 
-Bundled PHP versions (`php-7.4` … `php-8.5`) use ready-made Hub images and usually only need **Create** → **Start**. Versions you **Install** from the Manager catalog (exact tags such as alpine/trixie) generate a Dockerfile and must **build** a local image (`multi-php-local:…`) before the container can be created. That build pulls a base image from Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
+Bundled PHP versions (`php-7.4` … `php-8.5`) and versions you **Install** from the Manager catalog both use local images `multi-php-local:…`. The first run must **build** before the container can be created. That build pulls a base image from Docker Hub (`php:…-fpm` / `…-fpm-alpine`).
 
 On **Windows Docker Desktop**, this step sometimes fails even when general internet works. Typical log lines (under `php-controller-runtime/status/`):
 
@@ -914,9 +866,11 @@ Get-Content .\php-controller-runtime\status\last-create-error.log -Tail 40
 Get-Content .\php-controller-runtime\status\<service>.last-install-version.log -Tail 40
 ```
 
-4. If Desktop DNS keeps failing: restart Docker Desktop, or temporarily change DNS (for example `8.8.8.8` / `1.1.1.1`) in Docker Desktop → Settings → Resources → Network, then retry.
+4. `php-controller` retries a build or pull up to 4 times when the log is this DNS failure. Restart the `php-controller` container after updating the script so the next Create uses the retry.
 
-5. Prefer a bundled Hub version when you do not need a specific patch/alpine/trixie tag — no local Dockerfile build is required.
+5. If it still reports `192.168.65.7:53 … network is unreachable`, that address is Docker Desktop's internal DNS, not the host network. Turn off **Use kernel networking for UDP** (Docker Desktop → Settings → Resources → Network) and Apply & Restart. Or restart Docker Desktop; on Windows, `wsl --shutdown` then start Docker again. Switching DNS to `8.8.8.8` only helps a real lookup timeout, not a missing route to `192.168.65.7`.
+
+6. Prefer a bundled Hub version when you do not need a specific patch/alpine/trixie tag — no local Dockerfile build is required.
 
 Optional: run `scripts\hosts\ensure_hosts_env.ps1` once so `.env` gets `HOST_PROJECT_PATH` with forward slashes (`D:/…`). That path is used when `php-controller` rewrites bind mounts for Create/Install.
 
@@ -960,13 +914,7 @@ If Docker once bind-mounted a missing `env.json` as a **directory**, delete that
 │   └── macos/               # MultiPhpHosts.app (protocol helper, gitignored)
 ├── server/
 │   ├── manager/             # Manager source (UI is baked into the manager image)
-│   ├── source_php7.4/       # PHP 7.4 projects
-│   ├── source_php8.0/       # PHP 8.0 projects
-│   ├── source_php8.1/       # PHP 8.1 projects
-│   ├── source_php8.2/       # PHP 8.2 projects
-│   ├── source_php8.3/       # PHP 8.3 projects
-│   ├── source_php8.4/       # PHP 8.4 projects
-│   └── source_php8.5/       # PHP 8.5 projects
+│   └── source/              # Projects for every PHP version
 ├── docker-compose.yml       # Root: include + nginx/manager/php-controller/env-init
 ├── env.example.json         # Committed project/domain template
 └── env.json                 # Local configuration ignored by Git

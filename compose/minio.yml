@@ -1,13 +1,10 @@
 services:
   minio:
-    image: long301001/multi-php-docker:minio
+    image: multi-php-local:minio
     profiles: ["minio"]
     build:
       context: .
       dockerfile: ./docker_files/minio.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: minio_container
     hostname: minio
     command: server /data --console-address ":9001"
