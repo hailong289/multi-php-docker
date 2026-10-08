@@ -514,7 +514,6 @@ handle_compose_file_request() {
                     ;;
                 start)
                     if [ -n "$container" ] && docker start "$container" >>"$log_file" 2>&1; then
-                        sleep 2
                         if container_running "$container"; then
                             ok=1
                         else
@@ -529,7 +528,6 @@ handle_compose_file_request() {
                     ;;
                 restart)
                     if [ -n "$container" ] && docker restart "$container" >>"$log_file" 2>&1; then
-                        sleep 2
                         if container_running "$container"; then
                             ok=1
                         else
@@ -654,11 +652,20 @@ write_status() {
     mv "$temp_file" "$STATUS_DIR/$service.json"
 }
 
-refresh_service() {
-    service="$1"
-    container=$(container_for_service "$service") || return
-    state=$(container_state "$container")
-    write_status "$service" "$state" "php_controller.status_refreshed" ""
+# One `docker ps` for every managed service. Per-container inspect on each
+# idle tick blocked the request queue (start sat behind ~20 inspects).
+refresh_managed_services() {
+    snapshot=$(docker ps -a --format '{{.Names}}|{{.State}}' 2>/dev/null) || return 0
+    for service in $(list_managed_services); do
+        container=$(container_for_service "$service") || continue
+        line=$(printf '%s\n' "$snapshot" | grep -m 1 "^${container}|" || true)
+        case "$line" in
+            "${container}|running") state="running" ;;
+            "") state="not_created" ;;
+            *) state="stopped" ;;
+        esac
+        write_status "$service" "$state" "php_controller.status_refreshed" ""
+    done
 }
 
 reject_request() {
@@ -793,13 +800,15 @@ parse_request_fields() {
     return 0
 }
 
-for service in $(list_managed_services); do
-    refresh_service "$service"
-done
+refresh_managed_services
 
+last_refresh=0
 while true; do
+    handled=0
     for request_file in "$REQUEST_DIR"/*.json; do
         [ -e "$request_file" ] || break
+        handled=1
+        state=""
         request=$(tr -d '\r\n' < "$request_file")
 
         if printf '%s' "$request" | grep -q '"compose_file"'; then
@@ -997,8 +1006,8 @@ while true; do
             start_log_file="$STATUS_DIR/$service.last-start.log"
             : >"$start_log_file"
             if docker start "$container" >>"$start_log_file" 2>&1; then
-                sleep 2
-                if container_running "$container"; then
+                state=$(container_state "$container")
+                if [ "$state" = "running" ]; then
                     ok=1
                 else
                     docker logs --tail 40 "$container" >>"$start_log_file" 2>&1 || true
@@ -1026,7 +1035,9 @@ while true; do
             ok=1
         fi
 
-        state=$(container_state "$container")
+        if [ -z "$state" ]; then
+            state=$(container_state "$container")
+        fi
         if [ "$action" = "delete" ] && [ "$ok" -eq 1 ]; then
             state="not_created"
         fi
@@ -1042,17 +1053,21 @@ while true; do
             write_status "$service" "$state" "php_controller.action_failed" "$request_id"
         fi
         rm -f "$request_file"
-
-        for refresh_target in $(list_managed_services); do
-            [ "$refresh_target" = "$service" ] || refresh_service "$refresh_target"
-        done
     done
-    # Keep status files in sync with Docker even when no requests arrive
-    # (e.g. containers stopped from OrbStack / docker CLI).
-    for refresh_target in $(list_managed_services); do
-        refresh_service "$refresh_target"
-    done
-    # Background sleep so SIGTERM is delivered to the shell promptly (wait is interruptible).
-    sleep 1 &
+    # A start file that arrived during this pass must be handled before the
+    # status refresh. docker ps plus rewriting every service was sitting on
+    # the next Khởi động.
+    set -- "$REQUEST_DIR"/*.json
+    if [ -e "$1" ]; then
+        continue
+    fi
+    now=$(date +%s)
+    if [ $((now - last_refresh)) -ge 2 ]; then
+        refresh_managed_services
+        last_refresh=$now
+    fi
+    # Short sleep so a new start file is picked up quickly. Background sleep
+    # keeps SIGTERM delivered to this shell (wait is interruptible).
+    sleep 0.1 &
     wait $! || true
 done

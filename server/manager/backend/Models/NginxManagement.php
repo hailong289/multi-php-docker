@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\ContainerControl;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 use Manager\Support\JsonFile;
@@ -65,6 +66,23 @@ final class NginxManagement
         $this->daemon()->assertRunning();
 
         $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/');
+        if (in_array($action, ['start', 'stop', 'restart'], true)) {
+            $state = ContainerControl::apply('nginx_container', $action);
+            if ($state === null) {
+                $key = match ($action) {
+                    'stop' => 'nginx.stop_failed',
+                    'restart' => 'nginx.restart_failed',
+                    default => 'nginx.start_failed',
+                };
+                throw new HttpException($key, 502);
+            }
+            if (!ContainerControl::writeStatus($base, 'nginx', $state, 'php_controller.action_success')) {
+                throw new HttpException('nginx.request_failed', 500);
+            }
+
+            return bin2hex(random_bytes(16));
+        }
+
         $dir = $base . '/requests';
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
             throw new HttpException('nginx.request_failed', 500);

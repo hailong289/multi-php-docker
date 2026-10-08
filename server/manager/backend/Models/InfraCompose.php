@@ -6,8 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
-use Manager\Support\DockerExec;
-use Manager\Support\DockerLiveState;
+use Manager\Support\DockerImageIndex;
 
 /**
  * List/read/write/delete *.yml|*.yaml under compose/.
@@ -285,7 +284,7 @@ YAML;
             $state = $this->stateForActionMeta($name, $meta);
             $primary = $meta['compose_services'][0] ?? [];
             $image = $primary['image'] ?? null;
-            $imagePresent = is_string($image) && $image !== '' && DockerLiveState::available() && DockerExec::imageExists($image);
+            $imagePresent = is_string($image) && $image !== '' && DockerImageIndex::contains($image);
             $files[] = [
                 'name' => $name,
                 'relative_path' => 'compose/' . $name,
