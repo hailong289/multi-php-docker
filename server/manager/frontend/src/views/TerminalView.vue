@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -12,6 +12,19 @@ const router = useRouter()
 const { data, loading, loadBootstrap, bootstrapped, showToast } = useManager()
 
 const serverKey = computed(() => String(route.params.serverKey || ''))
+const expanded = ref(false)
+
+function toggleExpanded() {
+  expanded.value = !expanded.value
+}
+
+watch(expanded, (value) => {
+  document.body.style.overflow = value ? 'hidden' : ''
+})
+
+onBeforeUnmount(() => {
+  document.body.style.overflow = ''
+})
 
 const serverEntry = computed(() => {
   const key = serverKey.value
@@ -56,7 +69,11 @@ watch(
 </script>
 
 <template>
-  <section class="panel terminal-page" data-tour="terminal-panel">
+  <section
+    class="panel terminal-page"
+    :class="{ 'is-expanded': expanded }"
+    data-tour="terminal-panel"
+  >
     <div class="panel-heading nginx-heading">
       <div class="php-detail-heading">
         <Button
@@ -74,6 +91,18 @@ watch(
           <h2>{{ t('terminal.page_title') }}</h2>
           <p>{{ pageTitle }}</p>
         </div>
+      </div>
+      <div class="panel-heading-actions">
+        <Button
+          type="button"
+          :icon="expanded ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"
+          severity="secondary"
+          text
+          rounded
+          :aria-label="expanded ? t('terminal.collapse') : t('terminal.expand')"
+          :title="expanded ? t('terminal.collapse') : t('terminal.expand')"
+          @click="toggleExpanded"
+        />
       </div>
     </div>
 
