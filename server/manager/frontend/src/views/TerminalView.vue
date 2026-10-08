@@ -74,7 +74,7 @@ watch(
     :class="{ 'is-expanded': expanded }"
     data-tour="terminal-panel"
   >
-    <div class="panel-heading nginx-heading">
+    <div v-show="!expanded" class="panel-heading nginx-heading">
       <div class="php-detail-heading">
         <Button
           type="button"
@@ -115,5 +115,17 @@ watch(
         @close="goHome"
       />
     </div>
+    <Button
+      v-if="expanded"
+      type="button"
+      class="terminal-collapse"
+      icon="pi pi-window-minimize"
+      severity="secondary"
+      text
+      rounded
+      :aria-label="t('terminal.collapse')"
+      :title="t('terminal.collapse')"
+      @click="toggleExpanded"
+    />
   </section>
 </template>
