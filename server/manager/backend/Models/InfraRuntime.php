@@ -178,6 +178,10 @@ final class InfraRuntime
         if (in_array($action, ['start', 'stop', 'restart'], true)) {
             $state = ContainerControl::apply((string) self::SERVICES[$service]['container'], $action);
             if ($state === null) {
+                $detail = ContainerControl::lastDetail();
+                if ($detail !== '') {
+                    throw new HttpException('services.container_control_failed', 502, [], ['detail' => $detail]);
+                }
                 throw new HttpException('services.request_failed', 502);
             }
             if (!ContainerControl::writeStatus($this->basePath, $service, $state, 'php_controller.action_success')) {
