@@ -349,10 +349,52 @@ final class PhpControllerController extends Controller
         ]);
     }
 
+    public function showDaemon(Request $request, array $params = []): Response
+    {
+        return Response::json([
+            'php_controller_daemon' => (new PhpControllerDaemon())->details(),
+        ]);
+    }
+
     public function startDaemon(Request $request, array $params = []): Response
     {
         $result = (new PhpControllerDaemon())->start();
 
         return Response::json($result);
+    }
+
+    public function createDaemon(Request $request, array $params = []): Response
+    {
+        $result = (new PhpControllerDaemon())->create();
+
+        return Response::json($result);
+    }
+
+    public function stopDaemon(Request $request, array $params = []): Response
+    {
+        $result = (new PhpControllerDaemon())->stop();
+
+        return Response::json($result);
+    }
+
+    public function restartDaemon(Request $request, array $params = []): Response
+    {
+        $result = (new PhpControllerDaemon())->restart();
+
+        return Response::json($result);
+    }
+
+    public function removeDaemon(Request $request, array $params = []): Response
+    {
+        $result = (new PhpControllerDaemon())->remove();
+
+        return Response::json($result);
+    }
+
+    public function daemonLogs(Request $request, array $params = []): Response
+    {
+        $tail = (int) $request->queryParam('tail', 300);
+
+        return Response::json((new PhpControllerDaemon())->logs($tail));
     }
 }
