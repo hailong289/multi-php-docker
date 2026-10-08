@@ -261,6 +261,8 @@ export const vi = {
   'terminal.page_title': 'Terminal',
   'terminal.close': 'Đóng',
   'terminal.back': 'Quay lại',
+  'terminal.expand': 'Mở rộng terminal',
+  'terminal.collapse': 'Thu gọn terminal',
   'terminal.connecting': 'Đang kết nối…',
   'terminal.disconnected': 'Phiên đã kết thúc',
   'terminal.ready': 'Đã kết nối',

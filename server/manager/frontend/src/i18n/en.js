@@ -261,6 +261,8 @@ export const en = {
   'terminal.page_title': 'Terminal',
   'terminal.close': 'Close',
   'terminal.back': 'Back',
+  'terminal.expand': 'Expand terminal',
+  'terminal.collapse': 'Collapse terminal',
   'terminal.connecting': 'Connecting…',
   'terminal.disconnected': 'Session ended',
   'terminal.ready': 'Connected',
