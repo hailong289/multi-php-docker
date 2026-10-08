@@ -2946,8 +2946,60 @@ select:focus:not([class*='p-']) {
 }
 
 .terminal-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   padding: 10px 12px 16px;
   background: var(--p-content-background, var(--panel-strong, var(--panel)));
+}
+
+.terminal-search {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-bottom: 8px;
+}
+
+.terminal-search-input.p-inputtext {
+  width: min(18rem, 100%);
+  height: 2rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.terminal-search-count {
+  flex: 0 0 auto;
+  min-width: 3.2rem;
+  padding: 0 0.25rem;
+  color: var(--p-text-muted-color, var(--muted));
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.terminal-search-count.is-empty {
+  color: var(--p-orange-400, #fb923c);
+}
+
+.terminal-page.is-expanded .terminal-search {
+  margin: 0;
+  padding: 0.35rem 2.75rem 0.35rem 0.55rem;
+  background: color-mix(in srgb, var(--log-bg, #0b1220) 92%, #fff 8%);
+  border-bottom: 1px solid color-mix(in srgb, var(--log-fg, #e2e8f0) 16%, transparent);
+}
+
+.terminal-page.is-expanded .terminal-search-input.p-inputtext {
+  background: transparent;
+  color: var(--log-fg, #e2e8f0);
+  border-color: color-mix(in srgb, var(--log-fg, #e2e8f0) 24%, transparent);
+}
+
+.terminal-page.is-expanded .terminal-search .p-button {
+  color: var(--log-muted, #94a3b8);
+}
+
+.terminal-page.is-expanded .terminal-search-count {
+  color: var(--log-muted, #94a3b8);
 }
 
 .terminal-panel-page .terminal-screen {
@@ -2978,8 +3030,10 @@ select:focus:not([class*='p-']) {
   height: 100dvh;
   max-height: 100dvh;
   margin: 0;
+  border: 0;
   border-radius: 0;
   overflow: hidden;
+  background: var(--log-bg, #0f172a);
 }
 
 .terminal-page.is-expanded .terminal-page-body {
@@ -2988,6 +3042,11 @@ select:focus:not([class*='p-']) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0;
+}
+
+.terminal-page.is-expanded .terminal-panel-header {
+  display: none;
 }
 
 .terminal-page.is-expanded .terminal-panel-page {
@@ -3002,12 +3061,31 @@ select:focus:not([class*='p-']) {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: 0;
 }
 
 .terminal-page.is-expanded .terminal-host {
-  flex: 1;
-  height: auto;
+  flex: 1 1 auto;
+  height: 0;
   min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.terminal-collapse.p-button {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 6;
+  width: 2rem;
+  height: 2rem;
+  color: var(--log-muted, #94a3b8);
+  background: color-mix(in srgb, var(--log-bg, #0f172a) 72%, transparent);
+}
+
+.terminal-collapse.p-button:hover {
+  color: var(--log-fg, #e2e8f0);
+  background: color-mix(in srgb, var(--log-fg, #e2e8f0) 12%, var(--log-bg, #0f172a));
 }
 
 .terminal-host .xterm {
