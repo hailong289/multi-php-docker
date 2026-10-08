@@ -1,12 +1,14 @@
 <script setup>
 import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon } from '@xterm/addon-search'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { apiRelativeUrl, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { terminalThemeFromDocument } from '../lib/monaco'
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import Tag from 'primevue/tag'
 
 const props = defineProps({
@@ -18,12 +20,27 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 const { showToast, translateApiError } = useManager()
 
+const panelEl = ref(null)
 const hostEl = ref(null)
+const searchInputEl = ref(null)
 const status = ref('connecting')
 const sessionId = ref('')
 const cwdLabel = ref('')
+const searchQuery = ref('')
+const resultIndex = ref(-1)
+const resultCount = ref(0)
 let term = null
 let fitAddon = null
+let searchAddon = null
+
+const searchDecorations = {
+  matchBackground: '#854d0e',
+  matchBorder: '#facc15',
+  matchOverviewRuler: '#facc15',
+  activeMatchBackground: '#ca8a04',
+  activeMatchBorder: '#fef08a',
+  activeMatchColorOverviewRuler: '#fef08a',
+}
 let offset = 0
 let closed = false
 let resizeTimer = null
@@ -52,6 +69,67 @@ function statusLabelKey() {
 
 function applyTerminalTheme() {
   term?.options && (term.options.theme = terminalThemeFromDocument())
+}
+
+function focusSearch() {
+  const el = searchInputEl.value?.$el || searchInputEl.value
+  el?.focus?.()
+  el?.select?.()
+}
+
+function searchOptions(incremental) {
+  return {
+    incremental,
+    decorations: searchDecorations,
+  }
+}
+
+function clearSearchResults() {
+  searchAddon?.clearDecorations()
+  resultIndex.value = -1
+  resultCount.value = 0
+}
+
+function runSearch(direction) {
+  const query = searchQuery.value
+  if (!searchAddon || !query) {
+    clearSearchResults()
+    return
+  }
+  if (direction === 'previous') searchAddon.findPrevious(query, searchOptions(false))
+  else searchAddon.findNext(query, searchOptions(direction === 'incremental'))
+}
+
+watch(searchQuery, (query) => {
+  if (!searchAddon) return
+  if (!query) {
+    clearSearchResults()
+    return
+  }
+  searchAddon.findNext(query, searchOptions(true))
+})
+
+function onSearchKeydown(ev) {
+  if (ev.key === 'Escape') {
+    ev.preventDefault()
+    ev.stopPropagation()
+    searchQuery.value = ''
+    clearSearchResults()
+    term?.focus()
+    return
+  }
+  if (ev.key !== 'Enter') return
+  ev.preventDefault()
+  runSearch(ev.shiftKey ? 'previous' : 'next')
+}
+
+function onFindShortcut(ev) {
+  if (ev.altKey || ev.shiftKey || !(ev.metaKey || ev.ctrlKey)) return
+  if (ev.key.toLowerCase() !== 'f') return
+  if (!panelEl.value?.contains(ev.target)) return
+  ev.preventDefault()
+  ev.stopPropagation()
+  focusSearch()
 }
 
 function bytesToBase64(bytes) {
@@ -327,6 +405,7 @@ function teardownIo() {
   themeObserver?.disconnect()
   themeObserver = null
   window.removeEventListener('resize', onWinResize)
+  window.removeEventListener('keydown', onFindShortcut, true)
   hostEl.value?.removeEventListener('keydown', onHostKeyDown, true)
   hostEl.value?.removeEventListener('compositionstart', onImeNoise, true)
   hostEl.value?.removeEventListener('compositionupdate', onImeNoise, true)
@@ -362,6 +441,7 @@ onMounted(async () => {
     status.value = 'ready'
 
     term = new Terminal({
+      allowProposedApi: true,
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -369,7 +449,13 @@ onMounted(async () => {
       theme: terminalThemeFromDocument(),
     })
     fitAddon = new FitAddon()
+    searchAddon = new SearchAddon()
     term.loadAddon(fitAddon)
+    term.loadAddon(searchAddon)
+    searchAddon.onDidChangeResults(({ resultIndex: index, resultCount: count }) => {
+      resultIndex.value = index
+      resultCount.value = count
+    })
     term.open(hostEl.value)
     fitAddon.fit()
     applyEnglishImeAttrs(hostEl.value)
@@ -383,6 +469,7 @@ onMounted(async () => {
     hostEl.value.addEventListener('beforeinput', onBeforeInput, true)
     hostEl.value.addEventListener('mousedown', () => term?.focus())
     window.addEventListener('resize', onWinResize)
+    window.addEventListener('keydown', onFindShortcut, true)
     hostObserver = new ResizeObserver(() => onWinResize())
     hostObserver.observe(hostEl.value)
     themeObserver = new MutationObserver(() => applyTerminalTheme())
@@ -414,6 +501,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section
+    ref="panelEl"
     class="terminal-panel"
     :class="{ 'terminal-panel-page': page }"
     data-tour="docker-terminal"
@@ -443,6 +531,52 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div class="terminal-screen">
+      <form class="terminal-search" @submit.prevent>
+        <InputText
+          ref="searchInputEl"
+          v-model="searchQuery"
+          class="terminal-search-input"
+          type="search"
+          :placeholder="$t('terminal.search_placeholder')"
+          autocomplete="off"
+          @keydown="onSearchKeydown"
+        />
+        <span
+          v-if="searchQuery"
+          class="terminal-search-count"
+          :class="{ 'is-empty': resultCount === 0 }"
+        >{{
+          resultCount === 0
+            ? $t('terminal.search_none')
+            : resultIndex >= 0
+              ? `${resultIndex + 1}/${resultCount}`
+              : String(resultCount)
+        }}</span>
+        <Button
+          type="button"
+          icon="pi pi-chevron-up"
+          severity="secondary"
+          text
+          rounded
+          size="small"
+          :disabled="!searchQuery"
+          :aria-label="$t('terminal.search_prev')"
+          :title="$t('terminal.search_prev')"
+          @click="runSearch('previous')"
+        />
+        <Button
+          type="button"
+          icon="pi pi-chevron-down"
+          severity="secondary"
+          text
+          rounded
+          size="small"
+          :disabled="!searchQuery"
+          :aria-label="$t('terminal.search_next')"
+          :title="$t('terminal.search_next')"
+          @click="runSearch('next')"
+        />
+      </form>
       <div ref="hostEl" class="terminal-host" lang="en" />
     </div>
   </section>
