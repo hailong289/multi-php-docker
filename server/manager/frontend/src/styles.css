@@ -2968,6 +2968,48 @@ select:focus:not([class*='p-']) {
   height: min(68vh, 700px);
 }
 
+.terminal-page.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.terminal-page.is-expanded .terminal-page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.terminal-page.is-expanded .terminal-panel-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-page.is-expanded .terminal-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-page.is-expanded .terminal-host {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
 .terminal-host .xterm {
   height: 100%;
 }
