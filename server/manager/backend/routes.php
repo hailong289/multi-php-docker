@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Manager\Controllers\BootstrapController;
+use Manager\Controllers\DockerConnectionController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HostsController;
 use Manager\Controllers\InfraController;
@@ -72,7 +73,16 @@ return [
     ['PUT', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/configs/(?P<name>[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}\\.conf)', [SupervisorController::class, 'configSave']],
     ['DELETE', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/configs/(?P<name>[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}\\.conf)', [SupervisorController::class, 'configDelete']],
     ['POST', '/supervisor/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?)?)/(?P<action>start|stop|restart|create)', [SupervisorController::class, 'action']],
+    ['GET', '/php-controller', [PhpControllerController::class, 'showDaemon']],
+    ['POST', '/php-controller/create', [PhpControllerController::class, 'createDaemon']],
     ['POST', '/php-controller/start', [PhpControllerController::class, 'startDaemon']],
+    ['POST', '/php-controller/stop', [PhpControllerController::class, 'stopDaemon']],
+    ['POST', '/php-controller/restart', [PhpControllerController::class, 'restartDaemon']],
+    ['POST', '/php-controller/remove', [PhpControllerController::class, 'removeDaemon']],
+    ['GET', '/php-controller/logs', [PhpControllerController::class, 'daemonLogs']],
+    ['GET', '/docker-connection', [DockerConnectionController::class, 'show']],
+    ['PUT', '/docker-connection', [DockerConnectionController::class, 'update']],
+    ['POST', '/docker-connection/test', [DockerConnectionController::class, 'test']],
     ['GET', '/php-controllers', [PhpControllerController::class, 'index']],
     ['GET', '/php-controllers/available-versions', [PhpControllerController::class, 'availableVersions']],
     ['POST', '/php-controllers/install-version', [PhpControllerController::class, 'installVersion']],

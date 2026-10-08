@@ -132,6 +132,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./scripts:/scripts:ro
       - ./php-controller-runtime:/runtime
+      # Optional TLS certs / SSH keys for remote Docker (paths configured in Manager UI).
+      - ./.docker-remote:/docker-remote:ro
       # Long syntax avoids "too many colons" with Windows D:/ paths in short form.
       - type: bind
         source: ${HOST_PROJECT_PATH:-.}

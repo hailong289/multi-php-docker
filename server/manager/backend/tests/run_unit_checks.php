@@ -15,6 +15,7 @@ spl_autoload_register(static function (string $class): void {
 });
 
 use Manager\Http\HttpException;
+use Manager\Models\DockerConnection;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\ComposeFileParser;
@@ -868,6 +869,53 @@ $startOk = $started->start();
 assert_true($startOk['message_key'] === 'php_controller.daemon_started', 'start 204 key');
 assert_true($startOk['php_controller_daemon']['state'] === 'running', 'start 204 reports running');
 assert_true($startOk['php_controller_daemon']['start_available'] === false, 'start 204 not startable');
+assert_true($startOk['php_controller_daemon']['create_available'] === false, 'start 204 not creatable');
+assert_true($runningStatus['create_available'] === false, 'daemon running not creatable');
+assert_true($missingStatus['create_available'] === true, 'daemon missing is creatable');
+
+$createState = 'not_created';
+$createStateful = new PhpControllerDaemon(
+    static function () use (&$createState): string {
+        return $createState;
+    },
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    static function () use (&$createState): bool {
+        $createState = 'running';
+
+        return true;
+    },
+);
+$createOkResult = $createStateful->create();
+assert_true($createOkResult['message_key'] === 'php_controller.daemon_created', 'create ok key');
+assert_true($createOkResult['php_controller_daemon']['state'] === 'running', 'create ok state');
+assert_true($createOkResult['php_controller_daemon']['create_available'] === false, 'create ok not creatable');
+
+$createAlready = new PhpControllerDaemon(static fn (): string => 'stopped');
+$createAlreadyResult = $createAlready->create();
+assert_true($createAlreadyResult['message_key'] === 'php_controller.daemon_already_installed', 'create already key');
+
+$createFail = new PhpControllerDaemon(
+    static fn (): string => 'not_created',
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    static fn (): bool => false,
+);
+try {
+    $createFail->create();
+    assert_true(false, 'create fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_create_failed', 'create fail key');
+    assert_true($e->status() === 502, 'create fail 502');
+}
 
 $started304 = new PhpControllerDaemon(
     static fn (): string => 'stopped',
@@ -897,6 +945,149 @@ try {
 } catch (HttpException $e) {
     assert_true($e->errorKey() === 'php_controller.daemon_start_failed', 'start 500 key');
     assert_true($e->status() === 502, 'start 500 502');
+}
+
+$stopAlready = new PhpControllerDaemon(static fn (): string => 'stopped');
+$stopAlreadyResult = $stopAlready->stop();
+assert_true($stopAlreadyResult['message_key'] === 'php_controller.daemon_already_stopped', 'stop already key');
+assert_true($stopAlreadyResult['php_controller_daemon']['state'] === 'stopped', 'stop already state');
+
+$stopOk = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    static fn (): bool => true,
+);
+$stopOkResult = $stopOk->stop();
+assert_true($stopOkResult['message_key'] === 'php_controller.daemon_stopped', 'stop ok key');
+assert_true($stopOkResult['php_controller_daemon']['state'] === 'stopped', 'stop ok state');
+assert_true($stopOkResult['php_controller_daemon']['start_available'] === true, 'stop ok startable');
+
+$stopFail = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    static fn (): bool => false,
+);
+try {
+    $stopFail->stop();
+    assert_true(false, 'stop fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_stop_failed', 'stop fail key');
+    assert_true($e->status() === 502, 'stop fail 502');
+}
+
+try {
+    $missingDaemon->stop();
+    assert_true(false, 'stop missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'stop missing key');
+}
+
+$restartOk = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    static fn (): bool => true,
+);
+$restartOkResult = $restartOk->restart();
+assert_true($restartOkResult['message_key'] === 'php_controller.daemon_restarted', 'restart ok key');
+assert_true($restartOkResult['php_controller_daemon']['state'] === 'running', 'restart ok state');
+
+$restartFail = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    null,
+    null,
+    static fn (): bool => false,
+);
+try {
+    $restartFail->restart();
+    assert_true(false, 'restart fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_restart_failed', 'restart fail key');
+}
+
+try {
+    $missingDaemon->restart();
+    assert_true(false, 'restart missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'restart missing key');
+}
+
+$removeOk = new PhpControllerDaemon(
+    static fn (): string => 'stopped',
+    null,
+    null,
+    null,
+    static fn (): bool => true,
+);
+$removeOkResult = $removeOk->remove();
+assert_true($removeOkResult['message_key'] === 'php_controller.daemon_removed', 'remove ok key');
+assert_true($removeOkResult['php_controller_daemon']['state'] === 'not_created', 'remove ok state');
+
+$removeFail = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    null,
+    static fn (): bool => false,
+);
+try {
+    $removeFail->remove();
+    assert_true(false, 'remove fail must 502');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_remove_failed', 'remove fail key');
+}
+
+try {
+    $missingDaemon->remove();
+    assert_true(false, 'remove missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'remove missing key');
+}
+
+$nullLifecycle = new PhpControllerDaemon(static fn (): ?string => null);
+try {
+    $nullLifecycle->stop();
+    assert_true(false, 'stop probe-null must 503');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_docker_unavailable', 'stop probe-null key');
+    assert_true($e->status() === 503, 'stop probe-null 503');
+}
+
+$detailsDaemon = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    null,
+    null,
+    static fn (): array => [
+        'Config' => ['Image' => 'docker:cli'],
+        'Created' => '2026-01-01T00:00:00Z',
+        'State' => ['StartedAt' => '2026-01-02T00:00:00Z'],
+    ],
+);
+$details = $detailsDaemon->details();
+assert_true($details['image'] === 'docker:cli', 'details image');
+assert_true($details['created'] === '2026-01-01T00:00:00Z', 'details created');
+assert_true($details['started_at'] === '2026-01-02T00:00:00Z', 'details started_at');
+
+$logsDaemon = new PhpControllerDaemon(
+    static fn (): string => 'running',
+    null,
+    null,
+    null,
+    null,
+    null,
+    static fn (int $tail): string => "line\n",
+);
+$logs = $logsDaemon->logs(50);
+assert_true($logs['container'] === 'php_controller_container', 'logs container');
+assert_true($logs['content'] === "line\n", 'logs content');
+
+try {
+    $missingDaemon->logs();
+    assert_true(false, 'logs missing must 409');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'logs missing key');
 }
 
 $phpTmp = sys_get_temp_dir() . '/php-runtime-' . bin2hex(random_bytes(4));
@@ -957,15 +1148,174 @@ file_put_contents($phpTmp . '/requests/ddd__php-8.5__start.json', "{}\n");
 $phpStatusesDown = $phpStopped->statuses();
 assert_true(($phpStatusesDown['php-8.5']['state'] ?? '') !== 'busy', 'PHP not busy overlay when daemon down');
 
+$dcDefaults = DockerConnection::defaults();
+assert_true($dcDefaults['mode'] === DockerConnection::MODE_LOCAL, 'docker connection default mode local');
+assert_true($dcDefaults['tcp']['port'] === 2376, 'docker connection default tcp port');
+assert_true($dcDefaults['ssh']['port'] === 22, 'docker connection default ssh port');
+assert_true($dcDefaults['remote_project_path'] === '', 'docker connection default remote path empty');
+
+$dcNormalized = DockerConnection::normalize([
+    'mode' => 'bogus',
+    'tcp' => ['host' => '  example.com ', 'port' => 99999, 'tls' => false],
+    'ssh' => ['user' => ' u ', 'host' => ' h ', 'port' => 0],
+    'remote_project_path' => '/tmp/project/',
+]);
+assert_true($dcNormalized['mode'] === DockerConnection::MODE_LOCAL, 'normalize falls back to local');
+assert_true($dcNormalized['tcp']['host'] === 'example.com', 'normalize trims tcp host');
+assert_true($dcNormalized['tcp']['port'] === 65535, 'normalize clamps tcp port high');
+assert_true($dcNormalized['tcp']['tls'] === false, 'normalize keeps tls false');
+assert_true($dcNormalized['ssh']['user'] === 'u', 'normalize trims ssh user');
+assert_true($dcNormalized['ssh']['port'] === 1, 'normalize clamps ssh port low');
+assert_true($dcNormalized['remote_project_path'] === '/tmp/project', 'normalize trims remote trailing slash');
+
+$dcLocal = new DockerConnection(static fn (): array => DockerConnection::defaults());
+$dcLocal->validate(DockerConnection::defaults());
+assert_true(true, 'validate accepts local defaults');
+
+try {
+    $dcLocal->validate(DockerConnection::normalize([
+        'mode' => DockerConnection::MODE_TCP,
+        'tcp' => ['host' => '', 'port' => 2376, 'tls' => false],
+        'remote_project_path' => '/remote/project',
+    ]));
+    assert_true(false, 'validate tcp must require host');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'docker_connection.tcp_host_required', 'tcp host required key');
+}
+
+try {
+    $dcLocal->validate(DockerConnection::normalize([
+        'mode' => DockerConnection::MODE_TCP,
+        'tcp' => ['host' => 'docker.example', 'port' => 2376, 'tls' => true, 'ca' => '', 'cert' => '', 'key' => ''],
+        'remote_project_path' => '/remote/project',
+    ]));
+    assert_true(false, 'validate tcp tls must require files');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'docker_connection.tls_files_required', 'tls files required key');
+}
+
+try {
+    $dcLocal->validate(DockerConnection::normalize([
+        'mode' => DockerConnection::MODE_SSH,
+        'ssh' => ['user' => '', 'host' => 'remote', 'port' => 22, 'identity_file' => ''],
+        'remote_project_path' => '/remote/project',
+    ]));
+    assert_true(false, 'validate ssh must require user/host');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'docker_connection.ssh_required', 'ssh required key');
+}
+
+try {
+    $dcLocal->validate(DockerConnection::normalize([
+        'mode' => DockerConnection::MODE_TCP,
+        'tcp' => ['host' => 'docker.example', 'port' => 2375, 'tls' => false],
+        'remote_project_path' => '',
+    ]));
+    assert_true(false, 'validate remote must require project path');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'docker_connection.remote_project_required', 'remote project required key');
+}
+
+$dcTlsDir = sys_get_temp_dir() . '/docker-tls-' . bin2hex(random_bytes(4));
+mkdir($dcTlsDir, 0775, true);
+$dcCa = $dcTlsDir . '/ca.pem';
+$dcCert = $dcTlsDir . '/cert.pem';
+$dcKey = $dcTlsDir . '/key.pem';
+file_put_contents($dcCa, "ca\n");
+file_put_contents($dcCert, "cert\n");
+file_put_contents($dcKey, "key\n");
+$dcId = $dcTlsDir . '/id_ed25519';
+file_put_contents($dcId, "key\n");
+
+$dcTcpOk = DockerConnection::normalize([
+    'mode' => DockerConnection::MODE_TCP,
+    'tcp' => ['host' => 'docker.example', 'port' => 2376, 'tls' => true, 'ca' => $dcCa, 'cert' => $dcCert, 'key' => $dcKey],
+    'remote_project_path' => '/opt/web',
+]);
+$dcLocal->validate($dcTcpOk);
+assert_true(true, 'validate accepts complete tcp_tls');
+assert_true(DockerConnection::labelFor($dcTcpOk) === 'tcp://docker.example:2376', 'tcp label');
+assert_true(DockerConnection::projectPathFor($dcTcpOk) === '/opt/web', 'tcp project path');
+
+$dcSshOk = DockerConnection::normalize([
+    'mode' => DockerConnection::MODE_SSH,
+    'ssh' => ['user' => 'deploy', 'host' => 'builder', 'port' => 2222, 'identity_file' => $dcId],
+    'remote_project_path' => '/opt/web',
+]);
+$dcLocal->validate($dcSshOk);
+assert_true(true, 'validate accepts complete ssh');
+assert_true(DockerConnection::labelFor($dcSshOk) === 'ssh://deploy@builder:2222', 'ssh label');
+assert_true(DockerConnection::projectPathFor(DockerConnection::defaults()) === null, 'local project path null');
+
+$dcRuntime = sys_get_temp_dir() . '/docker-conn-rt-' . bin2hex(random_bytes(4));
+$dcPhpRt = sys_get_temp_dir() . '/docker-conn-php-' . bin2hex(random_bytes(4));
+mkdir($dcRuntime, 0775, true);
+mkdir($dcPhpRt, 0775, true);
+$prevRuntime = getenv('MANAGER_RUNTIME_PATH');
+$prevPhpCtrl = getenv('MANAGER_PHP_CONTROLLER_PATH');
+putenv('MANAGER_RUNTIME_PATH=' . $dcRuntime);
+putenv('MANAGER_PHP_CONTROLLER_PATH=' . $dcPhpRt);
+$savedCfg = null;
+$dcSaveModel = new DockerConnection(
+    function () use (&$savedCfg): array {
+        return $savedCfg ?? DockerConnection::defaults();
+    },
+    function (array $cfg) use (&$savedCfg): void {
+        $savedCfg = $cfg;
+    },
+);
+$saved = $dcSaveModel->save([
+    'mode' => DockerConnection::MODE_TCP,
+    'tcp' => ['host' => 'docker.example', 'port' => 2376, 'tls' => true, 'ca' => $dcCa, 'cert' => $dcCert, 'key' => $dcKey],
+    'remote_project_path' => '/opt/web',
+]);
+assert_true($saved['mode'] === DockerConnection::MODE_TCP, 'save returns tcp mode');
+assert_true($saved['updated_at'] !== '', 'save sets updated_at');
+assert_true(is_string($savedCfg) === false && is_array($savedCfg), 'save invoked saver');
+$dcEnvFile = $dcPhpRt . '/docker.env';
+assert_true(is_file($dcEnvFile), 'save wrote docker.env');
+$dcEnvBody = (string) file_get_contents($dcEnvFile);
+assert_true(str_contains($dcEnvBody, 'DOCKER_HOST=tcp://docker.example:2376'), 'docker.env DOCKER_HOST');
+assert_true(str_contains($dcEnvBody, 'DOCKER_TLS_VERIFY=1'), 'docker.env TLS verify');
+assert_true(str_contains($dcEnvBody, 'DOCKER_CERT_PATH=' . $dcTlsDir), 'docker.env cert path');
+assert_true(str_contains($dcEnvBody, 'HOST_PROJECT_PATH=/opt/web'), 'docker.env remote project path');
+$dcStatus = $dcSaveModel->status(false);
+assert_true(($dcStatus['effective']['mode'] ?? '') === DockerConnection::MODE_TCP, 'status effective mode');
+assert_true(array_key_exists('reachable', $dcStatus) && $dcStatus['reachable'] === null, 'status without probe leaves reachable null');
+if ($prevRuntime === false) {
+    putenv('MANAGER_RUNTIME_PATH');
+} else {
+    putenv('MANAGER_RUNTIME_PATH=' . $prevRuntime);
+}
+if ($prevPhpCtrl === false) {
+    putenv('MANAGER_PHP_CONTROLLER_PATH');
+} else {
+    putenv('MANAGER_PHP_CONTROLLER_PATH=' . $prevPhpCtrl);
+}
+
 $routes = require dirname(__DIR__) . '/routes.php';
-$hasPhpControllerStart = false;
+$phpControllerRouteKeys = [];
+$dockerConnectionRouteKeys = [];
 foreach ($routes as $route) {
-    if (($route[0] ?? null) === 'POST' && ($route[1] ?? null) === '/php-controller/start') {
-        $hasPhpControllerStart = true;
-        break;
+    if (($route[1] ?? '') === '/php-controller'
+        || str_starts_with((string) ($route[1] ?? ''), '/php-controller/')) {
+        $phpControllerRouteKeys[] = ($route[0] ?? '') . ' ' . ($route[1] ?? '');
+    }
+    if (($route[1] ?? '') === '/docker-connection'
+        || str_starts_with((string) ($route[1] ?? ''), '/docker-connection/')) {
+        $dockerConnectionRouteKeys[] = ($route[0] ?? '') . ' ' . ($route[1] ?? '');
     }
 }
-assert_true($hasPhpControllerStart, 'POST /php-controller/start route registered');
+assert_true(in_array('GET /php-controller', $phpControllerRouteKeys, true), 'GET /php-controller route registered');
+assert_true(in_array('POST /php-controller/create', $phpControllerRouteKeys, true), 'POST /php-controller/create route registered');
+assert_true(in_array('POST /php-controller/start', $phpControllerRouteKeys, true), 'POST /php-controller/start route registered');
+assert_true(in_array('POST /php-controller/stop', $phpControllerRouteKeys, true), 'POST /php-controller/stop route registered');
+assert_true(in_array('POST /php-controller/restart', $phpControllerRouteKeys, true), 'POST /php-controller/restart route registered');
+assert_true(in_array('POST /php-controller/remove', $phpControllerRouteKeys, true), 'POST /php-controller/remove route registered');
+assert_true(in_array('GET /php-controller/logs', $phpControllerRouteKeys, true), 'GET /php-controller/logs route registered');
+assert_true(in_array('GET /docker-connection', $dockerConnectionRouteKeys, true), 'GET /docker-connection route registered');
+assert_true(in_array('PUT /docker-connection', $dockerConnectionRouteKeys, true), 'PUT /docker-connection route registered');
+assert_true(in_array('POST /docker-connection/test', $dockerConnectionRouteKeys, true), 'POST /docker-connection/test route registered');
 
 $bootCtrl = new class extends \Manager\Controllers\Controller {
     public function payload(): array

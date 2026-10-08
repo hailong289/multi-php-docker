@@ -866,13 +866,18 @@ export function useManager() {
   }
 
   async function startPhpControllerDaemon() {
-    pendingAction.value = { kind: 'php-daemon', action: 'start' }
+    return phpControllerDaemonAction('start')
+  }
+
+  async function phpControllerDaemonAction(action) {
+    pendingAction.value = { kind: 'php-daemon', action }
     try {
-      const result = await apiSend('POST', '/api/php-controller/start', {})
+      const result = await apiSend('POST', `/api/php-controller/${action}`, {})
       toastFromResult(result)
       if (result.php_controller_daemon) data.php_controller_daemon = result.php_controller_daemon
     } catch (error) {
       showToast('failure', translateApiError(error))
+      return null
     } finally {
       pendingAction.value = null
     }
@@ -1628,6 +1633,7 @@ export function useManager() {
     reloadNginx,
     phpAction,
     startPhpControllerDaemon,
+    phpControllerDaemonAction,
     infraAction,
     supervisorAction,
     openDomainEdit,

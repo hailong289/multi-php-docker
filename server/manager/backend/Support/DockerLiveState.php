@@ -18,19 +18,12 @@ final class DockerLiveState
 
     public static function socketPath(): string
     {
-        $configured = getenv('MANAGER_DOCKER_SOCK');
-        if (is_string($configured) && $configured !== '') {
-            return $configured;
-        }
-
-        return '/var/run/docker.sock';
+        return DockerEndpoint::localSocketPath();
     }
 
     public static function available(): bool
     {
-        $sock = self::socketPath();
-
-        return file_exists($sock);
+        return DockerEndpoint::available();
     }
 
     /**
