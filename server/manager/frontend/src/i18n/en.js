@@ -495,6 +495,7 @@ export const en = {
   'services.invalid_service': 'The selected service is not allowed.',
   'services.invalid_action': 'The selected container action is not allowed.',
   'services.request_failed': 'Unable to send the service container request.',
+  'services.container_control_failed': 'Unable to control the container: {detail}',
   'services.processing': 'The requested container action is being processed.',
   'services.status_unavailable': 'Controller status is not available yet.',
   'services.create_hint': 'Install this container once (pulls the image, then runs docker compose --profile <service> create <service>), then start it.',

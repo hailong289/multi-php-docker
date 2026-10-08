@@ -495,6 +495,7 @@ export const vi = {
   'services.invalid_service': 'Dịch vụ đã chọn không được phép.',
   'services.invalid_action': 'Thao tác container đã chọn không được phép.',
   'services.request_failed': 'Không thể gửi yêu cầu điều khiển container dịch vụ.',
+  'services.container_control_failed': 'Không điều khiển được container: {detail}',
   'services.processing': 'Yêu cầu điều khiển container đang được xử lý.',
   'services.status_unavailable': 'Chưa có trạng thái từ controller.',
   'services.create_hint': 'Cài đặt container này một lần (pull image, rồi chạy docker compose --profile <service> create <service>), sau đó dùng Khởi động.',

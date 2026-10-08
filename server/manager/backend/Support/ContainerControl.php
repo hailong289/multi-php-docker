@@ -57,10 +57,89 @@ final class ContainerControl
         return AtomicFile::write($statusDir . '/' . $service . '.json', $payload);
     }
 
+
+    public static function lastDetail(): string
+    {
+        return DockerEndpoint::lastStatusMessage();
+    }
+
     private static function start(string $container): bool
+    {
+        if (self::startOnce($container)) {
+            return true;
+        }
+        $detail = DockerEndpoint::lastStatusMessage();
+        if (!self::isStaleNetwork($detail) || !self::rebindNetworks($container)) {
+            return false;
+        }
+
+        return self::startOnce($container);
+    }
+
+    private static function startOnce(string $container): bool
     {
         $code = DockerExec::startNamedContainer($container);
 
         return $code === 204 || $code === 304;
+    }
+
+    private static function isStaleNetwork(string $detail): bool
+    {
+        $detail = strtolower($detail);
+
+        return str_contains($detail, 'network') && str_contains($detail, 'not found');
+    }
+
+    /**
+     * The container still names a compose network whose id was recreated.
+     * Disconnect and connect again so start uses the current network.
+     */
+    private static function rebindNetworks(string $container): bool
+    {
+        $raw = DockerEndpoint::request(
+            'GET',
+            '/containers/' . rawurlencode($container) . '/json',
+            null,
+            null,
+            [200],
+        );
+        if ($raw === null) {
+            return false;
+        }
+        try {
+            $info = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return false;
+        }
+        $networks = $info['NetworkSettings']['Networks'] ?? null;
+        if (!is_array($networks) || $networks === []) {
+            return false;
+        }
+
+        $rebound = false;
+        foreach (array_keys($networks) as $name) {
+            if (!is_string($name) || $name === '') {
+                continue;
+            }
+            $payload = json_encode(['Container' => $container, 'Force' => true], JSON_THROW_ON_ERROR);
+            DockerEndpoint::request(
+                'POST',
+                '/networks/' . rawurlencode($name) . '/disconnect',
+                $payload,
+                'application/json',
+                [200, 204],
+            );
+            $connect = json_encode(['Container' => $container], JSON_THROW_ON_ERROR);
+            $ok = DockerEndpoint::request(
+                'POST',
+                '/networks/' . rawurlencode($name) . '/connect',
+                $connect,
+                'application/json',
+                [200, 201, 204],
+            );
+            $rebound = $rebound || $ok !== null;
+        }
+
+        return $rebound;
     }
 }

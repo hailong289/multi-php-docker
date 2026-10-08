@@ -14,6 +14,14 @@ final class DockerEndpoint
     /** @var array<string, mixed>|null */
     private static ?array $cachedConfig = null;
 
+
+    private static string $lastStatusMessage = '';
+
+    public static function lastStatusMessage(): string
+    {
+        return self::$lastStatusMessage;
+    }
+
     public static function reset(): void
     {
         self::$cachedConfig = null;
@@ -207,6 +215,7 @@ final class DockerEndpoint
         ?array $config = null,
         float $timeout = 5.0,
     ): int {
+        self::$lastStatusMessage = '';
         $config ??= self::config();
         if (!self::available($config)) {
             return 0;
@@ -246,6 +255,17 @@ final class DockerEndpoint
             return 0;
         }
 
+        $parts = explode("\r\n\r\n", $response, 2);
+        if (isset($parts[1]) && $parts[1] !== '') {
+            try {
+                $decoded = json_decode($parts[1], true, 16, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                $decoded = null;
+            }
+            if (is_array($decoded) && is_string($decoded['message'] ?? null)) {
+                self::$lastStatusMessage = $decoded['message'];
+            }
+        }
         return (int) $m[1];
     }
 
