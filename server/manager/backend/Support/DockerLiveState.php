@@ -29,7 +29,7 @@ final class DockerLiveState
     /**
      * @return array<string, 'running'|'stopped'|'not_created'>
      */
-    public static function statesByName(int $ttlMs = 1200): array
+    public static function statesByName(int $ttlMs = 400): array
     {
         $now = (int) floor(microtime(true) * 1000);
         if (self::$cache !== null && ($now - self::$cacheAtMs) < $ttlMs) {
@@ -84,6 +84,12 @@ final class DockerLiveState
             return $status;
         }
 
+        // The controller just wrote this file. A cached container list from
+        // before that write would keep the UI on "stopped" for the TTL.
+        if (self::controllerStatusIsFresher($status)) {
+            return $status;
+        }
+
         if (($status['state'] ?? null) !== $live) {
             $status['state'] = $live;
             $status['message_key'] = $refreshedMessageKey;
@@ -91,6 +97,29 @@ final class DockerLiveState
         }
 
         return $status;
+    }
+
+    /**
+     * Status timestamps are whole seconds. Treat that second as newer than a
+     * cache snapshot taken during it, so a just-finished start is visible.
+     *
+     * @param array<string, mixed> $status
+     */
+    private static function controllerStatusIsFresher(array $status): bool
+    {
+        if (self::$cache === null) {
+            return false;
+        }
+        $updated = $status['updated_at'] ?? '';
+        if (!is_string($updated) || $updated === '') {
+            return false;
+        }
+        $ts = strtotime($updated);
+        if ($ts === false) {
+            return false;
+        }
+
+        return (($ts + 1) * 1000) > self::$cacheAtMs;
     }
 
     /** @internal testing */
@@ -111,7 +140,7 @@ final class DockerLiveState
             return [];
         }
 
-        $raw = self::httpGet('/containers/json?all=true');
+        $raw = self::engineGet('/containers/json?all=true');
         if ($raw === null) {
             return [];
         }
@@ -150,8 +179,76 @@ final class DockerLiveState
         return $states;
     }
 
-    private static function httpGet(string $path): ?string
+    public static function engineGet(string $path, int $timeoutSeconds = 2): ?string
     {
-        return DockerEndpoint::request('GET', $path, null, null, [200], null, 1.5);
+        $sock = self::socketPath();
+        $timeoutSeconds = max(1, min(8, $timeoutSeconds));
+        $fp = @stream_socket_client('unix://' . $sock, $errno, $errstr, 1.5);
+        if ($fp === false) {
+            return null;
+        }
+
+        stream_set_timeout($fp, $timeoutSeconds);
+        $request = "GET {$path} HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+        if (fwrite($fp, $request) === false) {
+            fclose($fp);
+
+            return null;
+        }
+
+        $response = stream_get_contents($fp);
+        fclose($fp);
+        if (!is_string($response) || $response === '') {
+            return null;
+        }
+
+        $parts = explode("\r\n\r\n", $response, 2);
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        $headers = $parts[0];
+        if (!preg_match('/^HTTP\/\d\.\d\s+200\b/', $headers)) {
+            return null;
+        }
+
+        $body = $parts[1];
+        if (preg_match('/^Transfer-Encoding:\s*chunked\b/mi', $headers)) {
+            $body = self::decodeChunked($body);
+        }
+
+        return $body;
+    }
+
+    private static function decodeChunked(string $body): string
+    {
+        $out = '';
+        $offset = 0;
+        $len = strlen($body);
+        while ($offset < $len) {
+            $nl = strpos($body, "\r\n", $offset);
+            if ($nl === false) {
+                break;
+            }
+            $sizeLine = substr($body, $offset, $nl - $offset);
+            if (str_contains($sizeLine, ';')) {
+                $sizeLine = explode(';', $sizeLine, 2)[0];
+            }
+            $size = hexdec(trim($sizeLine));
+            $offset = $nl + 2;
+            if ($size === 0) {
+                break;
+            }
+            if ($offset + $size > $len) {
+                break;
+            }
+            $out .= substr($body, $offset, $size);
+            $offset += $size;
+            if (substr($body, $offset, 2) === "\r\n") {
+                $offset += 2;
+            }
+        }
+
+        return $out;
     }
 }

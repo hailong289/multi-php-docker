@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\ContainerControl;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 use Manager\Support\JsonFile;
@@ -44,7 +45,7 @@ final class NginxManagement
         if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
             $status = array_merge($status, array_intersect_key($decoded, $status));
         }
-        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart'])) {
+        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart', 'create'])) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
         } else {
@@ -59,12 +60,29 @@ final class NginxManagement
 
     public function requestAction(string $action): string
     {
-        if (!in_array($action, ['start', 'stop', 'restart'], true)) {
+        if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
             throw new HttpException('nginx.invalid_action', 400);
         }
         $this->daemon()->assertRunning();
 
         $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/');
+        if (in_array($action, ['start', 'stop', 'restart'], true)) {
+            $state = ContainerControl::apply('nginx_container', $action);
+            if ($state === null) {
+                $key = match ($action) {
+                    'stop' => 'nginx.stop_failed',
+                    'restart' => 'nginx.restart_failed',
+                    default => 'nginx.start_failed',
+                };
+                throw new HttpException($key, 502);
+            }
+            if (!ContainerControl::writeStatus($base, 'nginx', $state, 'php_controller.action_success')) {
+                throw new HttpException('nginx.request_failed', 500);
+            }
+
+            return bin2hex(random_bytes(16));
+        }
+
         $dir = $base . '/requests';
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
             throw new HttpException('nginx.request_failed', 500);

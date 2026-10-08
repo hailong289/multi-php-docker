@@ -70,9 +70,6 @@ services:
     build:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: nginx_container
     ports:
       - "80:80"
@@ -81,6 +78,7 @@ services:
       - ./server:/var/www
       - ./scripts:/var/scripts
       - ./nginx/examples:/etc/nginx/examples
+      - ./nginx/welcome:/usr/share/nginx/welcome:ro
       - ./nginx/templates:/etc/nginx/templates
       - ./nginx/logs:/var/log/nginx
       - ./nginx/ssl:/etc/nginx/ssl
@@ -92,8 +90,6 @@ services:
     depends_on:
       env-init:
         condition: service_completed_successfully
-      php-8.5:
-        condition: service_started
     networks:
       - app-network
 
@@ -102,10 +98,6 @@ services:
     build:
       context: .
       dockerfile: ./docker_files/manager.Dockerfile
-      additional_contexts:
-        php85: service:php-8.5
-      args:
-        PHP_BASE_IMAGE: php85
     container_name: manager_container
     ports:
       - "127.0.0.1:8080:8080"

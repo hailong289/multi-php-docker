@@ -8,8 +8,8 @@ final class StatusStream
 {
     private const LIFETIME_SECONDS = 1200;
     private const PING_SECONDS = 15;
-    private const SLEEP_BUSY_US = 1_000_000;
-    private const SLEEP_IDLE_US = 2_500_000;
+    private const SLEEP_BUSY_US = 200_000;
+    private const SLEEP_IDLE_US = 1_500_000;
 
     /**
      * @param callable(): array<string, mixed> $payloadFactory

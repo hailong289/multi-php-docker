@@ -88,6 +88,53 @@ final class EnvConfig
         }
     }
 
+    /**
+     * Drop DOMAIN_NAME only. The server key, app, path, PHP, and SSL stay.
+     *
+     * @return array<string, mixed>
+     */
+    public function clearDomain(string $key): array
+    {
+        $servers = $this->all();
+        if (!isset($servers[$key]) || !is_array($servers[$key])) {
+            throw new HttpException('error.server_missing', 404);
+        }
+
+        $domain = strtolower(trim((string) ($servers[$key]['DOMAIN_NAME'] ?? '')));
+        if ($domain === '') {
+            throw new HttpException('error.domain_missing', 404);
+        }
+
+        $servers[$key]['DOMAIN_NAME'] = '';
+        $this->save($servers);
+
+        return $servers[$key];
+    }
+
+    /**
+     * Put DOMAIN_NAME back after a cancelled hosts write. Does not touch hosts.
+     *
+     * @return array<string, mixed>
+     */
+    public function assignDomain(string $key, string $domain): array
+    {
+        $servers = $this->all();
+        if (!isset($servers[$key]) || !is_array($servers[$key])) {
+            throw new HttpException('error.server_missing', 404);
+        }
+
+        $domain = strtolower(trim($domain));
+        $current = strtolower(trim((string) ($servers[$key]['DOMAIN_NAME'] ?? '')));
+        if ($current !== '' && $current !== $domain) {
+            return $servers[$key];
+        }
+
+        $servers[$key]['DOMAIN_NAME'] = $domain;
+        $this->save($servers);
+
+        return $servers[$key];
+    }
+
     public function nextKey(array $servers): string
     {
         $highest = 0;
@@ -175,6 +222,28 @@ final class EnvConfig
             }
         }
 
+        $frameworkProvided = array_key_exists('framework', $input) || array_key_exists('FRAMEWORK', $input);
+        if ($frameworkProvided) {
+            $framework = strtolower(trim((string) ($input['framework'] ?? $input['FRAMEWORK'] ?? '')));
+        } else {
+            $framework = (string) ($previous['FRAMEWORK'] ?? '');
+        }
+        if ($framework !== '' && !SourceLogs::isFramework($framework)) {
+            $errors['framework'] = ['key' => 'validation.framework'];
+        }
+
+        $logPathProvided = array_key_exists('log_path', $input) || array_key_exists('LOG_PATH', $input);
+        if ($logPathProvided) {
+            $rawLogPath = (string) ($input['log_path'] ?? $input['LOG_PATH'] ?? '');
+        } else {
+            $rawLogPath = (string) ($previous['LOG_PATH'] ?? '');
+        }
+        $logPath = SourceLogs::normalizeRelative($rawLogPath);
+        if ($logPath === null) {
+            $errors['log_path'] = ['key' => 'validation.log_path'];
+            $logPath = '';
+        }
+
         $server = [
             'APP_NAME' => $appName,
             'DOMAIN_NAME' => $domainName,
@@ -185,6 +254,12 @@ final class EnvConfig
         ];
         if ($sslMode !== null) {
             $server['SSL_MODE'] = $sslMode;
+        }
+        if ($framework !== '' && !isset($errors['framework'])) {
+            $server['FRAMEWORK'] = $framework;
+        }
+        if ($logPath !== '' && !isset($errors['log_path'])) {
+            $server['LOG_PATH'] = $logPath;
         }
 
         return [
@@ -222,6 +297,9 @@ final class EnvConfig
     public function applyCommand(array $servers): string
     {
         $profiles = $this->requiredProfiles($servers);
+        $profiles[] = 'nginx';
+        $profiles = array_values(array_unique($profiles));
+        sort($profiles);
         $profileFlags = implode(' ', array_map(
             static fn (string $profile): string => '--profile ' . $profile,
             $profiles

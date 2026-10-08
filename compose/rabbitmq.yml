@@ -5,9 +5,6 @@ services:
     build:
       context: .
       dockerfile: ./docker_files/rabbitMQ.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
     container_name: rabbitmq_container
     ports:
       - "5672:5672"

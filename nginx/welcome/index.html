@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-PHP Docker Serve</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1a1814;
+      --muted: #5c564c;
+      --line: #e3d9cc;
+      --paper: #f3efe6;
+      --card: #fffdf8;
+      --accent: #b84a1f;
+      --accent-ink: #fff8f3;
+      --chip: #efe7db;
+      --shadow: 0 24px 60px rgba(60, 40, 20, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --ink: #f6f1e7;
+        --muted: #b7ad9f;
+        --line: #3a342c;
+        --paper: #12110f;
+        --card: #1c1a17;
+        --accent: #e88a55;
+        --accent-ink: #1a120c;
+        --chip: #2a261f;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(900px 420px at 100% -10%, rgba(184, 74, 31, 0.16), transparent 60%),
+        linear-gradient(180deg, var(--paper), var(--paper));
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(var(--line) 0.8px, transparent 0.8px);
+      background-size: 18px 18px;
+      opacity: 0.55;
+    }
+    .wrap {
+      position: relative;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 2.2rem 1.25rem 3rem;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2.4rem;
+    }
+    .mark {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .mark i {
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 50%;
+      background: #2f9e6b;
+      box-shadow: 0 0 0 4px rgba(47, 158, 107, 0.18);
+    }
+    .tools {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .langs {
+      display: flex;
+      padding: 0.15rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--card);
+    }
+    .langs button {
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      padding: 0.32rem 0.7rem;
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+    .langs button[aria-pressed="true"] {
+      background: var(--ink);
+      color: var(--paper);
+    }
+    .port {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    h1 {
+      margin: 0;
+      font-family: Palatino, "Palatino Linotype", "Iowan Old Style", Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(2.6rem, 6vw, 4.6rem);
+      letter-spacing: -0.03em;
+      line-height: 0.95;
+    }
+    h1 span {
+      display: block;
+      font-weight: 500;
+      color: var(--accent);
+    }
+    .lead {
+      max-width: 38rem;
+      margin: 1.1rem 0 0;
+      color: var(--muted);
+      font-size: 1.08rem;
+      line-height: 1.6;
+    }
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin-top: 1.5rem;
+      padding: 0.85rem 1.15rem;
+      border-radius: 999px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      text-decoration: none;
+      font-weight: 650;
+    }
+    .cta:hover { filter: brightness(1.06); }
+    .services {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 1.6rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .services li {
+      padding: 0.28rem 0.65rem;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .panel {
+      margin-top: 2.4rem;
+      padding: 1.25rem;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+    .panel h2 {
+      margin: 0 0 0.35rem;
+      font-size: 1.15rem;
+    }
+    .panel > p {
+      margin: 0 0 1.1rem;
+      color: var(--muted);
+    }
+    ol.steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: step;
+    }
+    ol.steps li {
+      counter-increment: step;
+      padding: 0.9rem 0.85rem 1rem;
+      border-radius: 14px;
+      background: var(--paper);
+    }
+    ol.steps li::before {
+      content: counter(step, decimal-leading-zero);
+      display: block;
+      margin-bottom: 0.55rem;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+    ol.steps strong {
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    ol.steps p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    code {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    @media (max-width: 800px) {
+      ol.steps { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 520px) {
+      ol.steps { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="mark"><i></i> <span data-i18n="status"></span></div>
+      <div class="tools">
+        <div class="langs" role="group" aria-label="Language">
+          <button type="button" data-lang="vi" aria-pressed="true">VI</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+        <div class="port">127.0.0.1:80</div>
+      </div>
+    </header>
+
+    <h1>Multi-PHP<span>Docker Serve</span></h1>
+    <p class="lead" data-i18n="lead"></p>
+    <a class="cta" href="http://127.0.0.1:8080/server-manage/" data-i18n="cta"></a>
+
+    <ul class="services">
+      <li>PHP 7.4–8.5</li>
+      <li>Nginx</li>
+      <li>MySQL</li>
+      <li>PostgreSQL</li>
+      <li>Redis</li>
+      <li>RabbitMQ</li>
+      <li>Kafka</li>
+      <li>Mailpit</li>
+      <li>MinIO</li>
+    </ul>
+
+    <section class="panel">
+      <h2 data-i18n="panelTitle"></h2>
+      <p data-i18n="panelBody"></p>
+      <ol class="steps">
+        <li>
+          <strong data-i18n="s1t"></strong>
+          <p data-i18n="s1"></p>
+        </li>
+        <li>
+          <strong data-i18n="s2t"></strong>
+          <p data-i18n="s2"></p>
+        </li>
+        <li>
+          <strong data-i18n="s3t"></strong>
+          <p data-i18n="s3"></p>
+        </li>
+        <li>
+          <strong data-i18n="s4t"></strong>
+          <p data-i18n="s4"></p>
+        </li>
+      </ol>
+    </section>
+  </div>
+  <script>
+    const copy = {
+      vi: {
+        status: "Nginx đang chạy",
+        lead: "Môi trường PHP trên máy bạn: Nginx phục vụ domain, mỗi site một phiên bản PHP, và các dịch vụ chỉ bật khi cần.",
+        cta: "Mở Server Manager",
+        panelTitle: "Chưa có máy chủ nào",
+        panelBody: "Trang này hiện vì env.json chưa có virtual server. Thêm một máy chủ rồi Apply & Reload — Nginx sẽ phục vụ domain đó thay cho trang này.",
+        s1t: "Mở manager",
+        s1: "Server Manager tại 127.0.0.1:8080.",
+        s2t: "Thêm máy chủ",
+        s2: "Tên ứng dụng, domain, thư mục mã nguồn, phiên bản PHP.",
+        s3t: "Bật PHP",
+        s3: "Cài và khởi động đúng phiên bản PHP của site.",
+        s4t: "Nạp Nginx",
+        s4: "Apply & Reload, rồi trỏ domain về 127.0.0.1 trong file hosts.",
+      },
+      en: {
+        status: "Nginx is running",
+        lead: "A PHP environment on your machine: Nginx serves each domain, every site can use its own PHP version, and extra services stay off until you need them.",
+        cta: "Open Server Manager",
+        panelTitle: "No server yet",
+        panelBody: "This page is shown because env.json has no virtual server. Add one, then Apply & Reload — Nginx will serve that domain instead of this page.",
+        s1t: "Open the manager",
+        s1: "Server Manager at 127.0.0.1:8080.",
+        s2t: "Add a server",
+        s2: "App name, domain, source directory, and PHP version.",
+        s3t: "Start PHP",
+        s3: "Install and start the PHP version that site uses.",
+        s4t: "Reload Nginx",
+        s4: "Apply & Reload, then point the domain at 127.0.0.1 in the hosts file.",
+      },
+    }
+
+    function applyLang(lang) {
+      const pack = copy[lang] || copy.vi
+      document.documentElement.lang = lang
+      document.querySelectorAll("[data-i18n]").forEach((node) => {
+        node.textContent = pack[node.dataset.i18n] || ""
+      })
+      document.querySelectorAll(".langs button").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.lang === lang ? "true" : "false")
+      })
+      try { localStorage.setItem("welcome-locale", lang) } catch (_) {}
+    }
+
+    function initialLang() {
+      try {
+        const saved = localStorage.getItem("welcome-locale")
+        if (saved === "vi" || saved === "en") return saved
+      } catch (_) {}
+      return (navigator.language || "").toLowerCase().startsWith("vi") ? "vi" : "en"
+    }
+
+    document.querySelector(".langs").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-lang]")
+      if (button) applyLang(button.dataset.lang)
+    })
+    applyLang(initialLang())
+  </script>
+</body>
+</html>

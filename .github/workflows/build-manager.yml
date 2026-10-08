@@ -6,8 +6,7 @@ on:
     paths:
       - "server/manager/**"
       - "docker_files/manager.Dockerfile"
-      - "docker-compose.yml"
-      - ".github/workflows/build-manager.yml"
+      - ".dockerignore"
   workflow_dispatch:
 
 # Only keep the latest push build; cancel older in-progress runs on the same branch.
@@ -44,8 +43,6 @@ jobs:
           file: ./docker_files/manager.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          build-args: |
-            PHP_BASE_IMAGE=long301001/multi-php-docker:php-8.5
           tags: |
             long301001/multi-php-docker:manager
           cache-from: type=gha

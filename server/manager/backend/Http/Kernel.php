@@ -19,7 +19,11 @@ final class Kernel
         $path = $request->path();
         if (
             session_status() === PHP_SESSION_ACTIVE
-            && (str_starts_with($path, '/terminal/') || str_starts_with($path, '/status/'))
+            && (
+                str_starts_with($path, '/terminal/')
+                || str_starts_with($path, '/status/')
+                || str_ends_with($path, '/logs/stream')
+            )
         ) {
             session_write_close();
         }

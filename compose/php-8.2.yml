@@ -4,10 +4,7 @@ services:
     image: multi-php-local:php-8.2
     build:
       context: .
-      dockerfile: ./docker_files/php8.Dockerfile
-      platforms:
-        - "linux/amd64"
-        - "linux/arm64"
+      dockerfile: ./docker_files/php8.2.Dockerfile
     container_name: php8.2_container
     volumes:
       - ./server/source:/var/www/source

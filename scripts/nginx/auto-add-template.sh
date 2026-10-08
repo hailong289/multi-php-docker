@@ -15,7 +15,11 @@ fi
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "jq command not found. Cài đặt jq..."
-    apt-get update && apt-get install -y jq
+    if [ -f /etc/alpine-release ]; then
+        apk add --no-cache jq
+    else
+        apt-get update && apt-get install -y jq && rm -rf /var/lib/apt/lists/*
+    fi
     echo "jq đã được cài đặt thành công."
 else
     echo "jq đã được cài đặt."
@@ -66,9 +70,23 @@ current_root_from_template() {
     sed -n 's/^[[:space:]]*root[[:space:]]\{1,\}\([^;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
 }
 
-# "        fastcgi_pass php8.2_container:9000;" → php8.2_container
+# "        set $php_upstream php8.2_container:9000;" → php8.2_container
+# Older files used "fastcgi_pass php8.2_container:9000;".
 current_php_from_template() {
+    upstream=$(sed -n 's/^[[:space:]]*set[[:space:]]\{1,\}\$php_upstream[[:space:]]\{1,\}\([^:;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1)
+    if [ -n "$upstream" ]; then
+        printf '%s\n' "$upstream"
+        return
+    fi
     sed -n 's/^[[:space:]]*fastcgi_pass[[:space:]]\{1,\}\([^:;[:space:]]\{1,\}\).*/\1/p' "$1" | head -n 1
+}
+
+# Literal fastcgi_pass hostnames are resolved at startup and stop Nginx when
+# that PHP container does not exist yet.
+php_upstream_is_deferred() {
+    passes=$(grep -c 'fastcgi_pass' "$1" || true)
+    deferred=$(grep -c 'fastcgi_pass[[:space:]]\{1,\}\$php_upstream;' "$1" || true)
+    [ "$passes" -gt 0 ] && [ "$passes" = "$deferred" ]
 }
 
 is_ssl_enabled() {
@@ -141,13 +159,19 @@ for key in $keys; do
     DOCKER_SOURCE_PATH=$(jq -r --arg key "$key" '.[$key].SERVER_PATH' "$JSON_FILE")
     DOCKER_PHP_VERSION=$(jq -r --arg key "$key" '.[$key].CONTAINER_PHP_VERSION' "$JSON_FILE")
 
-    if [ -z "$DOCKER_APP_NAME" ] || [ -z "$DOCKER_HOSTNAME" ] || [ -z "$DOCKER_SOURCE_PATH" ]; then
+    if [ -z "$DOCKER_APP_NAME" ] || [ "$DOCKER_APP_NAME" = "null" ] || [ -z "$DOCKER_SOURCE_PATH" ] || [ "$DOCKER_SOURCE_PATH" = "null" ]; then
         echo "Biến môi trường bị thiếu: $key"
         continue
     fi
 
     printf '%s\n' "$DOCKER_APP_NAME" >> "$desired_list"
     OUTPUT_FILE="$OUTPUT_DIR/${DOCKER_APP_NAME}.template"
+
+    # Domain removed: keep the server and its existing nginx file.
+    if [ -z "$DOCKER_HOSTNAME" ] || [ "$DOCKER_HOSTNAME" = "null" ]; then
+        echo "Giữ máy chủ (không có domain): $OUTPUT_FILE"
+        continue
+    fi
     WANT_SSL=0
     if is_ssl_enabled "$key" && ssl_files_present "$DOCKER_APP_NAME"; then
         WANT_SSL=1
@@ -174,6 +198,9 @@ for key in $keys; do
         fi
         if [ "$CURRENT_PHP" != "$DOCKER_PHP_VERSION" ]; then
             REASONS="${REASONS} php($CURRENT_PHP→$DOCKER_PHP_VERSION)"
+        fi
+        if ! php_upstream_is_deferred "$OUTPUT_FILE"; then
+            REASONS="${REASONS} php_resolve"
         fi
         if [ "$CURRENT_SSL" != "$WANT_SSL" ]; then
             REASONS="${REASONS} ssl($CURRENT_SSL→$WANT_SSL)"
@@ -204,3 +231,22 @@ for existing in "$OUTPUT_DIR"/*.template; do
         rm -f "$existing"
     fi
 done
+
+# Không có máy chủ: một server mặc định phục vụ trang giới thiệu.
+WELCOME_ROOT="${NGINX_WELCOME_ROOT:-/usr/share/nginx/welcome}"
+WELCOME_TEMPLATE="$OUTPUT_DIR/_welcome.template"
+if [ ! -s "$desired_list" ]; then
+    cat > "$WELCOME_TEMPLATE" <<EOF
+server {
+    listen 80 default_server;
+    server_name _;
+    root ${WELCOME_ROOT};
+    index index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+}
+EOF
+    echo "Không có máy chủ; phục vụ trang giới thiệu: $WELCOME_TEMPLATE"
+fi

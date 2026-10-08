@@ -18,7 +18,9 @@ const { t, locale } = useI18n()
 const route = useRoute()
 const {
   fatalError,
-  loadBootstrap,
+  loadForRoute,
+  refreshForRoute,
+  screenScope,
   startStatusStreams,
   stopStatusStreams,
   bootstrapped,
@@ -130,7 +132,7 @@ function shouldStreamStatus() {
 }
 
 function syncStatusTransport() {
-  if (shouldStreamStatus()) startStatusStreams()
+  if (shouldStreamStatus()) startStatusStreams(screenScope(route.name))
   else stopStatusStreams()
 }
 
@@ -138,8 +140,8 @@ onMounted(async () => {
   applyThemeMode(readStoredThemeMode())
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onSystemThemeChange)
   updateTitle()
-  if (showChrome.value && !bootstrapped.value && route.meta?.manager) {
-    await loadBootstrap()
+  if (showChrome.value && route.meta?.manager) {
+    await loadForRoute(route.name)
   }
   document.addEventListener('visibilitychange', onVisibilityRefresh)
   syncStatusTransport()
@@ -153,8 +155,8 @@ onUnmounted(() => {
 
 function onVisibilityRefresh() {
   if (shouldStreamStatus()) {
-    loadBootstrap({ silent: true })
-    startStatusStreams()
+    refreshForRoute(route.name)
+    startStatusStreams(screenScope(route.name))
   } else {
     stopStatusStreams()
   }
@@ -170,10 +172,10 @@ watch(locale, () => {
 
 watch(
   () => [showChrome.value, route.name],
-  async ([chrome]) => {
-    if (chrome && !bootstrapped.value && route.meta?.manager) {
-      await loadBootstrap()
-    }
+  async ([chrome, name]) => {
+    if (!chrome || !route.meta?.manager) return
+    await loadForRoute(name)
+    syncStatusTransport()
   },
 )
 

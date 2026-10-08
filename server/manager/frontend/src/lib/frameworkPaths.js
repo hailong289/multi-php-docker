@@ -5,6 +5,20 @@ export const SOURCE_PREFIX = '/var/www/source'
 
 /** @typedef {{ id: string, suffix: string | null }} FrameworkPreset */
 
+/** Relative log path from the project directory. Empty means the user must set one. */
+export const LOG_PRESETS = {
+  laravel: 'storage/logs',
+  symfony: 'var/log',
+  codeigniter: 'writable/logs',
+  yii: 'runtime/logs',
+  cakephp: 'logs',
+  wordpress: 'wp-content/debug.log',
+  slim: '',
+  drupal: '',
+  plain: '',
+  custom: '',
+}
+
 /** @type {FrameworkPreset[]} */
 export const FRAMEWORK_PRESETS = [
   { id: 'laravel', suffix: '/public' },

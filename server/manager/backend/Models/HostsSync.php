@@ -233,6 +233,47 @@ final class HostsSync
         }
     }
 
+    /**
+     * Drop one hosts-only extra. No-op when it is not listed.
+     */
+    public function removeExtra(string $domain): void
+    {
+        $domain = $this->normalizeDomain($domain);
+        if ($domain === '') {
+            return;
+        }
+
+        $extras = $this->extras();
+        $next = array_values(array_filter(
+            $extras,
+            static fn (string $item): bool => $item !== $domain,
+        ));
+        if (count($next) === count($extras)) {
+            return;
+        }
+
+        $this->saveExtras($next);
+    }
+
+    /**
+     * Put a hosts-only name back. No hosts-file write.
+     */
+    public function ensureExtra(string $domain): void
+    {
+        $domain = $this->normalizeDomain($domain);
+        if ($domain === '') {
+            return;
+        }
+
+        $extras = $this->extras();
+        if (in_array($domain, $extras, true)) {
+            return;
+        }
+
+        $extras[] = $domain;
+        $this->saveExtras($extras);
+    }
+
     public function normalizeDomain(string $domain): string
     {
         return strtolower(trim($domain));

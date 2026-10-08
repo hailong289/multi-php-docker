@@ -122,7 +122,11 @@ APPLESCRIPT
       /usr/libexec/PlistBuddy -c "Add :$key $type $value" "$plist"
     fi
   }
-  plist_set CFBundleIdentifier string local.multi-php-docker-serve.hosts
+  # One id per checkout. Two copies sharing an id make Launch Services
+  # open the other repo's writer, which never sees this runtime/hosts.sync.
+  local bundle_id
+  bundle_id="local.multi-php-hosts.$(printf '%s' "$REPO_ROOT" | shasum -a 256 | awk '{print substr($1, 1, 12)}')"
+  plist_set CFBundleIdentifier string "$bundle_id"
   plist_set CFBundleName string MultiPhpHosts
   plist_set CFBundleDisplayName string MultiPhpHosts
   plist_set LSUIElement bool true

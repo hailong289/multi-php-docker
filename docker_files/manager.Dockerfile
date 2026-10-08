@@ -9,12 +9,12 @@ COPY server/manager/frontend/ ./
 # vite.config.js writes to ../public → /public
 RUN npm run build
 
-ARG PHP_BASE_IMAGE=multi-php-local:php-8.5
-FROM ${PHP_BASE_IMAGE}
+FROM php:8.5-cli-alpine
 
 WORKDIR /app
 COPY server/manager/backend ./backend
 COPY server/manager/router.php ./router.php
+COPY nginx/welcome/index.html ./welcome/index.html
 COPY --from=frontend /public ./public
 
 EXPOSE 8080

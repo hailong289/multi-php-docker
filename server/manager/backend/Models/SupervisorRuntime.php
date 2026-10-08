@@ -8,6 +8,7 @@ use Manager\Http\HttpException;
 use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
+use Manager\Support\ContainerControl;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 use Manager\Support\JsonFile;
@@ -109,6 +110,18 @@ final class SupervisorRuntime
         }
 
         $this->daemon()->assertRunning();
+
+        if (in_array($action, ['start', 'stop', 'restart'], true)) {
+            $state = ContainerControl::apply((string) $targets[$service]['container'], $action);
+            if ($state === null) {
+                throw new HttpException('supervisor.request_failed', 502);
+            }
+            if (!ContainerControl::writeStatus($this->basePath, $service, $state, 'php_controller.action_success')) {
+                throw new HttpException('supervisor.request_failed', 500);
+            }
+
+            return bin2hex(random_bytes(16));
+        }
 
         $requestDir = $this->basePath . '/requests';
         if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {
@@ -223,6 +236,32 @@ final class SupervisorRuntime
             'content' => $content,
             'updated_at' => date(DATE_ATOM, (int) filemtime($path)),
         ];
+    }
+
+    public function resolveLogPath(string $service, string $logFile): string
+    {
+        $targets = self::targets($this->projectPath);
+        if (!isset($targets[$service])) {
+            throw new HttpException('supervisor.invalid_service', 400);
+        }
+        $logFile = basename(str_replace('\\', '/', $logFile));
+        if ($logFile === '' || !str_ends_with(strtolower($logFile), '.log')) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+        $dir = $this->projectPath . '/' . $targets[$service]['log_dir'];
+        $realDir = realpath($dir);
+        if ($realDir === false || !is_dir($realDir)) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+        if (!in_array($logFile, $this->listLogFiles($targets[$service]['log_dir']), true)) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+        $real = realpath($realDir . DIRECTORY_SEPARATOR . $logFile);
+        if ($real === false || !is_file($real) || !str_starts_with($real, $realDir . DIRECTORY_SEPARATOR)) {
+            throw new HttpException('supervisor.invalid_log', 400);
+        }
+
+        return $real;
     }
 
     public function clearLog(string $service, string $logFile): void

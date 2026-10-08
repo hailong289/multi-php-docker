@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -19,7 +19,6 @@ const {
   stateLabel,
   phpServiceState,
   showCreateHint,
-  loadBootstrap,
   busy,
 } = mgr
 const { isPinned, togglePin } = usePinnedContainers()
@@ -49,10 +48,6 @@ const phpRows = computed(() =>
     target,
   })),
 )
-
-onMounted(() => {
-  loadBootstrap()
-})
 </script>
 
 <template>

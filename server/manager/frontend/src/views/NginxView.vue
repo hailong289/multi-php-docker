@@ -77,6 +77,7 @@ function stateSeverity(state) {
 function enabled(action) {
   if (data.php_controller_daemon?.state !== 'running') return false
   if (pending.value || nginx.value.state === 'busy') return false
+  if (action === 'create') return nginx.value.state === 'not_created' || nginx.value.state === 'error'
   if (action === 'start') return nginx.value.state === 'stopped'
   return nginx.value.state === 'running'
 }
@@ -340,9 +341,10 @@ async function run(action, path) {
       if (ok && action === 'reload') loadTemplates({ silent: true }).catch(() => {})
       return
     }
-    if (action === 'start' || action === 'stop' || action === 'restart') {
+    if (action === 'start' || action === 'stop' || action === 'restart' || action === 'create') {
       showToast('success', t('nginx.action_requested'))
       const minSettleAt = Date.now() + 900
+      const waitMs = action === 'create' ? 600000 : 45000
       const settled = await waitForManagement(() => {
         if (nginx.value.state === 'busy') return false
         if (Date.now() < minSettleAt) return false
@@ -350,13 +352,19 @@ async function run(action, path) {
         const logUpdated = !previousActionAt || actionAt !== previousActionAt
         // Prefer updated action log; otherwise accept settled non-busy after a short grace.
         return logUpdated || Date.now() - minSettleAt > 2000
-      }, 45000)
+      }, waitMs)
       if (!settled && nginx.value.state === 'busy') {
         showToast('failure', t('nginx.action_timeout'))
         return
       }
       const state = nginx.value.state
-      if (action === 'start' && state !== 'running') {
+      if (action === 'create' && state !== 'stopped' && state !== 'running') {
+        const excerpt = actionLogExcerpt.value
+        showToast(
+          'failure',
+          excerpt ? t('nginx.start_failed_detail', { detail: excerpt }) : t('nginx.create_failed'),
+        )
+      } else if (action === 'start' && state !== 'running') {
         const excerpt = actionLogExcerpt.value
         showToast(
           'failure',

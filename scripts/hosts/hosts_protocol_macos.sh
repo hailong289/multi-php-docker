@@ -68,14 +68,14 @@ wait_for_sync_token() {
     sleep 0.1
     i=$((i + 1))
   done
-  echo "Timed out waiting for hosts.sync request_id=$request_id" >&2
+  echo "Timed out waiting for hosts.sync request_id=$request_id at $SYNC_FILE" >&2
   return 1
 }
 
 # Protocol is launched on the user click, before Manager finishes writing hosts.sync.
 if [ -n "$token" ]; then
   if ! wait_for_sync_token "$token"; then
-    log "timeout waiting for request_id=$token"
+    log "timeout waiting for request_id=$token sync=$SYNC_FILE"
     exit 0
   fi
 fi
