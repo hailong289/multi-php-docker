@@ -8,6 +8,7 @@ use Manager\Http\HttpException;
 use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
+use Manager\Support\ContainerControl;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 use Manager\Support\JsonFile;
@@ -109,6 +110,18 @@ final class SupervisorRuntime
         }
 
         $this->daemon()->assertRunning();
+
+        if (in_array($action, ['start', 'stop', 'restart'], true)) {
+            $state = ContainerControl::apply((string) $targets[$service]['container'], $action);
+            if ($state === null) {
+                throw new HttpException('supervisor.request_failed', 502);
+            }
+            if (!ContainerControl::writeStatus($this->basePath, $service, $state, 'php_controller.action_success')) {
+                throw new HttpException('supervisor.request_failed', 500);
+            }
+
+            return bin2hex(random_bytes(16));
+        }
 
         $requestDir = $this->basePath . '/requests';
         if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {

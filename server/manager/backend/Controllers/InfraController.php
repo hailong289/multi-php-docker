@@ -177,6 +177,20 @@ final class InfraController extends Controller
             ]);
         }
 
+        if ($action === 'start') {
+            $runtime->startContainer($name);
+
+            return Response::json([
+                'message_key' => 'services.requested',
+                'message_parameters' => [
+                    'action' => 'services.start',
+                    'service' => $compose['name'],
+                ],
+                'compose' => $compose,
+                'infra_services' => $this->infraServicesPayload(new InfraRuntime()),
+            ]);
+        }
+
         if ($action === 'stop') {
             $runtime->stopContainer($name);
 

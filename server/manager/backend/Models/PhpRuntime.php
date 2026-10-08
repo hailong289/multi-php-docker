@@ -8,8 +8,10 @@ use Manager\Http\HttpException;
 use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
+use Manager\Support\ContainerControl;
 use Manager\Support\ControllerRequests;
 use Manager\Support\DockerExec;
+use Manager\Support\DockerImageIndex;
 use Manager\Support\DockerLiveState;
 use Manager\Support\JsonFile;
 
@@ -40,7 +42,7 @@ final class PhpRuntime
                 ? ('docker compose create ' . $service)
                 : ('docker compose --profile ' . $profile . ' create ' . $service);
             $image = self::imageFromCompose($projectPath, $service);
-            $imagePresent = $image !== null && DockerLiveState::available() && DockerExec::imageExists($image);
+            $imagePresent = $image !== null && DockerImageIndex::contains($image);
             $targets[$service] = [
                 'label' => $config['label'],
                 'container' => $config['container'],
@@ -78,7 +80,7 @@ final class PhpRuntime
         $allowedStates = ['running', 'stopped', 'not_created', 'busy', 'error'];
         $statuses = [];
 
-        foreach (self::targets() as $service => $target) {
+        foreach (PhpVersionCatalog::versions() as $service => $config) {
             $status = [
                 'service' => $service,
                 'state' => 'not_created',
@@ -101,7 +103,7 @@ final class PhpRuntime
             } else {
                 $status = DockerLiveState::apply(
                     $status,
-                    (string) ($target['container'] ?? ''),
+                    (string) ($config['container'] ?? ''),
                     'php_controller.status_refreshed'
                 );
             }
@@ -123,15 +125,15 @@ final class PhpRuntime
 
     public function request(string $service, string $action, ?string $extension = null): string
     {
-        $targets = self::targets();
-        if (!isset($targets[$service])) {
+        $versions = PhpVersionCatalog::versions();
+        if (!isset($versions[$service])) {
             throw new HttpException('php_controller.invalid_service', 400);
         }
         $allowed = ['start', 'stop', 'restart', 'create', 'recreate', 'install-version', 'modules', 'available-ext', 'install-ext', 'uninstall-ext'];
         if (!in_array($action, $allowed, true)) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
-        if (($action === 'create' || $action === 'recreate' || $action === 'install-version') && ($targets[$service]['profile'] ?? null) === null) {
+        if (($action === 'create' || $action === 'recreate' || $action === 'install-version') && ($versions[$service]['profile'] ?? null) === null) {
             throw new HttpException('php_controller.invalid_action', 400);
         }
         if ($action === 'install-ext' || $action === 'uninstall-ext') {
@@ -147,6 +149,16 @@ final class PhpRuntime
         }
 
         $this->daemon()->assertRunning();
+
+        if (in_array($action, ['start', 'stop', 'restart'], true)) {
+            $state = ContainerControl::apply((string) $versions[$service]['container'], $action);
+            if ($state === null) {
+                throw new HttpException('php_controller.action_failed', 502);
+            }
+            $this->persistStatus($service, $state, 'php_controller.action_success', '');
+
+            return bin2hex(random_bytes(16));
+        }
 
         $requestDir = $this->basePath . '/requests';
         if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {
