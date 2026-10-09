@@ -1,8 +1,10 @@
 <script setup>
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
+import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
@@ -35,6 +37,12 @@ const mutating = ref('')
 const sessions = ref([])
 const sessionId = ref('')
 const sessionName = ref('')
+const nameModalOpen = ref(false)
+const nameModalMode = ref('create')
+const nameDraft = ref('')
+const nameError = ref('')
+const nameTarget = ref(null)
+const nameInput = ref(null)
 const code = ref(DEFAULT_CODE)
 const result = ref(null)
 const updatedAt = ref('')
@@ -60,6 +68,7 @@ const exitClass = computed(() => {
   if ((result.value.exit_code ?? 0) !== 0) return 'is-error'
   return 'is-ok'
 })
+const nameModalBusy = computed(() => mutating.value === 'create' || mutating.value === 'rename')
 const savedLabel = computed(() => {
   if (saving.value) return t('php_controller.run_saving')
   if (!updatedAt.value) return dirty.value ? t('php_controller.run_unsaved') : ''
@@ -235,15 +244,52 @@ async function loadScratch() {
   }
 }
 
-async function createSession() {
+function focusNameInput() {
+  nextTick(() => {
+    const root = nameInput.value?.$el
+    const input = root?.tagName === 'INPUT' ? root : root?.querySelector?.('input')
+    input?.focus()
+    input?.select()
+  })
+}
+
+function openCreateModal() {
+  if (!service.value || mutating.value || loading.value) return
+  nameModalMode.value = 'create'
+  nameTarget.value = null
+  nameDraft.value = t('php_controller.session_default_name', { n: sessions.value.length + 1 })
+  nameError.value = ''
+  nameModalOpen.value = true
+  focusNameInput()
+}
+
+function openRenameModal(item) {
+  const current = item || { id: sessionId.value, name: sessionName.value }
+  if (!current.id || mutating.value) return
+  nameModalMode.value = 'rename'
+  nameTarget.value = current
+  nameDraft.value = current.name || ''
+  nameError.value = ''
+  nameModalOpen.value = true
+  focusNameInput()
+}
+
+function closeNameModal() {
+  if (nameModalBusy.value) return
+  nameModalOpen.value = false
+  nameError.value = ''
+  nameTarget.value = null
+}
+
+async function createSession(name) {
   if (!service.value || mutating.value) return
   await flushDraft()
   mutating.value = 'create'
   try {
-    const payload = await apiSend('POST', `/api/php-controllers/${service.value}/scratch`, {
-      name: t('php_controller.session_default_name', { n: sessions.value.length + 1 }),
-    })
+    const payload = await apiSend('POST', `/api/php-controllers/${service.value}/scratch`, { name })
     applyPad(payload.php_scratch)
+    nameModalOpen.value = false
+    nameError.value = ''
     showToast('success', t(payload.message_key || 'php_controller.session_created'))
   } catch (error) {
     showToast('failure', translateApiError(error))
@@ -270,13 +316,9 @@ async function selectSession(id) {
   }
 }
 
-async function renameSession(item) {
-  const current = item || { id: sessionId.value, name: sessionName.value }
-  if (!current.id) return
-  const next = window.prompt(t('php_controller.session_rename_prompt'), current.name)
-  if (next === null) return
-  const name = next.trim()
-  if (!name || name === current.name) return
+async function renameSession(item, name) {
+  const current = item || nameTarget.value
+  if (!current?.id || mutating.value) return
   mutating.value = 'rename'
   try {
     const payload = await apiSend(
@@ -285,12 +327,36 @@ async function renameSession(item) {
       { name },
     )
     applyPad(payload.php_scratch, sessionId.value)
+    nameModalOpen.value = false
+    nameError.value = ''
+    nameTarget.value = null
     showToast('success', t(payload.message_key || 'php_controller.session_renamed'))
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
     mutating.value = ''
   }
+}
+
+async function submitNameModal() {
+  const name = nameDraft.value.trim()
+  if (!name) {
+    nameError.value = t('php_controller.session_name_invalid')
+    focusNameInput()
+    return
+  }
+  nameError.value = ''
+  if (nameModalMode.value === 'rename') {
+    const current = nameTarget.value
+    if (!current?.id) return
+    if (name === current.name) {
+      closeNameModal()
+      return
+    }
+    await renameSession(current, name)
+    return
+  }
+  await createSession(name)
 }
 
 async function deleteSession(item) {
@@ -348,6 +414,7 @@ function goBack() {
 }
 
 function onKeydown(event) {
+  if (nameModalOpen.value) return
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
     event.preventDefault()
     runCode()
@@ -426,7 +493,7 @@ onUnmounted(() => {
             :label="mutating === 'create' ? t('action.working') : t('php_controller.session_add')"
             :loading="mutating === 'create'"
             :disabled="!!mutating || loading"
-            @click="createSession"
+            @click="openCreateModal"
           />
         </div>
       </div>
@@ -463,7 +530,7 @@ onUnmounted(() => {
                 :aria-label="t('php_controller.session_rename')"
                 :title="t('php_controller.session_rename')"
                 :disabled="!!mutating"
-                @click.stop="renameSession(item)"
+                @click.stop="openRenameModal(item)"
               />
               <Button
                 type="button"
@@ -511,7 +578,7 @@ onUnmounted(() => {
               icon="pi pi-pencil"
               :label="t('php_controller.session_rename')"
               :disabled="!!mutating || !sessionId"
-              @click="renameSession()"
+              @click="openRenameModal()"
             />
             <Button
               type="button"
@@ -568,5 +635,53 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <Dialog
+      :visible="nameModalOpen"
+      modal
+      :header="nameModalMode === 'create' ? t('php_controller.session_add') : t('php_controller.session_rename')"
+      :closable="!nameModalBusy"
+      :dismissable-mask="!nameModalBusy"
+      :style="{ width: 'min(640px, 100%)' }"
+      @update:visible="(open) => { if (!open) closeNameModal() }"
+      @show="focusNameInput"
+    >
+      <form class="home-modal-form" @submit.prevent="submitNameModal">
+        <fieldset :disabled="nameModalBusy" class="modal-fieldset">
+          <label for="php-run-session-name">{{ t('php_controller.session_rename_prompt') }}</label>
+          <InputText
+            id="php-run-session-name"
+            ref="nameInput"
+            v-model="nameDraft"
+            fluid
+            autocomplete="off"
+            @update:model-value="nameError = ''"
+          />
+          <small v-if="nameError" class="p-error">{{ nameError }}</small>
+        </fieldset>
+        <div class="form-actions">
+          <Button
+            type="submit"
+            :label="
+              nameModalBusy
+                ? t('action.working')
+                : nameModalMode === 'create'
+                  ? t('php_controller.session_add')
+                  : t('php_controller.session_rename')
+            "
+            :loading="nameModalBusy"
+            :disabled="nameModalBusy"
+          />
+          <Button
+            type="button"
+            severity="secondary"
+            outlined
+            :label="t('action.cancel')"
+            :disabled="nameModalBusy"
+            @click="closeNameModal"
+          />
+        </div>
+      </form>
+    </Dialog>
   </section>
 </template>
