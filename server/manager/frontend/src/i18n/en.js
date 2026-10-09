@@ -558,6 +558,8 @@ export const en = {
   'services.connection_title': '{service} connection',
   'services.connection_intro':
     'Use the Docker hostname from PHP/Supervisor containers. Use 127.0.0.1 / localhost from the host machine.',
+  'services.connection_docker_host_hint':
+    'Host (Docker network) is the container name (for example mysql_container). Use it when the app runs inside a PHP or Supervisor container on the same Docker network.',
   'services.connection_env': 'Example env',
   'services.connection_copy': 'Copy',
   'services.connection_copy_env': 'Copy env',
@@ -577,7 +579,7 @@ export const en = {
   'services.conn.broker_docker': 'Brokers (Docker)',
   'services.conn.broker_local': 'Brokers (local)',
   'services.conn.kafka_note':
-    'PHP containers should use kafka:29092. Clients on the host should use localhost:9092.',
+    'PHP containers should use kafka_container:29092. Clients on the host should use localhost:9092.',
   'services.conn.port_smtp': 'SMTP port',
   'services.conn.port_web': 'Web UI port',
   'services.conn.mailpit_note':
@@ -585,7 +587,7 @@ export const en = {
   'services.conn.port_api': 'API port',
   'services.conn.port_console': 'Console port',
   'services.conn.minio_note':
-    'S3-compatible API on port 9000. From PHP use http://minio:9000 with path-style endpoint. Create a bucket in the console before uploading.',
+    'S3-compatible API on port 9000. From PHP use http://minio_container:9000 with path-style endpoint. Create a bucket in the console before uploading.',
   'services.logs_page_title': 'Service logs',
   'services.logs_title': '{service} logs',
   'services.back_to_list': 'Back to services',

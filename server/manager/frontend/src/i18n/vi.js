@@ -558,6 +558,8 @@ export const vi = {
   'services.connection_title': 'Kết nối {service}',
   'services.connection_intro':
     'Dùng hostname Docker từ container PHP/Supervisor. Dùng 127.0.0.1 / localhost khi chạy trên máy host.',
+  'services.connection_docker_host_hint':
+    'Host (mạng Docker) là tên container (ví dụ mysql_container), dùng khi app chạy trong container PHP hoặc Supervisor trên cùng mạng Docker.',
   'services.connection_env': 'Ví dụ env',
   'services.connection_copy': 'Sao chép',
   'services.connection_copy_env': 'Sao chép env',
@@ -577,7 +579,7 @@ export const vi = {
   'services.conn.broker_docker': 'Brokers (Docker)',
   'services.conn.broker_local': 'Brokers (local)',
   'services.conn.kafka_note':
-    'Trong PHP container dùng kafka:29092. Trên host dùng localhost:9092.',
+    'Trong PHP container dùng kafka_container:29092. Trên host dùng localhost:9092.',
   'services.conn.port_smtp': 'Cổng SMTP',
   'services.conn.port_web': 'Cổng Web UI',
   'services.conn.mailpit_note':
@@ -585,7 +587,7 @@ export const vi = {
   'services.conn.port_api': 'Cổng API',
   'services.conn.port_console': 'Cổng Console',
   'services.conn.minio_note':
-    'API tương thích S3 cổng 9000. Trong PHP dùng http://minio:9000 với path-style endpoint. Tạo bucket trên console trước khi upload.',
+    'API tương thích S3 cổng 9000. Trong PHP dùng http://minio_container:9000 với path-style endpoint. Tạo bucket trên console trước khi upload.',
   'services.logs_page_title': 'Log dịch vụ',
   'services.logs_title': 'Log {service}',
   'services.back_to_list': 'Quay lại dịch vụ',

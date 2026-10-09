@@ -20,14 +20,14 @@ function webUrlFromFields(fields) {
 const DETAILS = {
   mysql: {
     fields: [
-      { labelKey: 'services.conn.host_docker', value: 'mysql' },
+      { labelKey: 'services.conn.host_docker', value: 'mysql_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
       { labelKey: 'services.conn.port', value: '3306' },
       { labelKey: 'services.conn.user', value: 'root' },
       { labelKey: 'services.conn.password', value: '1' },
     ],
     env: [
-      'DB_HOST=mysql',
+      'DB_HOST=mysql_container',
       'DB_PORT=3306',
       'DB_USERNAME=root',
       'DB_PASSWORD=1',
@@ -35,7 +35,7 @@ const DETAILS = {
   },
   postgres: {
     fields: [
-      { labelKey: 'services.conn.host_docker', value: 'postgres' },
+      { labelKey: 'services.conn.host_docker', value: 'postgres_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
       { labelKey: 'services.conn.port', value: '5432' },
       { labelKey: 'services.conn.database', value: 'postgres' },
@@ -44,7 +44,7 @@ const DETAILS = {
     ],
     env: [
       'DB_CONNECTION=pgsql',
-      'DB_HOST=postgres',
+      'DB_HOST=postgres_container',
       'DB_PORT=5432',
       'DB_DATABASE=postgres',
       'DB_USERNAME=postgres',
@@ -53,16 +53,16 @@ const DETAILS = {
   },
   redis: {
     fields: [
-      { labelKey: 'services.conn.host_docker', value: 'redis' },
+      { labelKey: 'services.conn.host_docker', value: 'redis_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
       { labelKey: 'services.conn.port', value: '6379' },
       { labelKey: 'services.conn.password', value: '(none)' },
     ],
-    env: ['REDIS_HOST=redis', 'REDIS_PORT=6379'].join('\n'),
+    env: ['REDIS_HOST=redis_container', 'REDIS_PORT=6379'].join('\n'),
   },
   rabbitmq: {
     fields: [
-      { labelKey: 'services.conn.host_docker', value: 'rabbitmq' },
+      { labelKey: 'services.conn.host_docker', value: 'rabbitmq_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
       { labelKey: 'services.conn.port_amqp', value: '5672' },
       { labelKey: 'services.conn.port_mgmt', value: '15672' },
@@ -75,7 +75,7 @@ const DETAILS = {
       },
     ],
     env: [
-      'RABBITMQ_HOST=rabbitmq',
+      'RABBITMQ_HOST=rabbitmq_container',
       'RABBITMQ_PORT=5672',
       'RABBITMQ_USER=admin',
       'RABBITMQ_PASSWORD=admin',
@@ -83,15 +83,15 @@ const DETAILS = {
   },
   kafka: {
     fields: [
-      { labelKey: 'services.conn.broker_docker', value: 'kafka:29092' },
+      { labelKey: 'services.conn.broker_docker', value: 'kafka_container:29092' },
       { labelKey: 'services.conn.broker_local', value: 'localhost:9092' },
     ],
-    env: ['KAFKA_BROKERS=kafka:29092'].join('\n'),
+    env: ['KAFKA_BROKERS=kafka_container:29092'].join('\n'),
     notes: ['services.conn.kafka_note'],
   },
   mailpit: {
     fields: [
-      { labelKey: 'services.conn.host_docker', value: 'mailpit' },
+      { labelKey: 'services.conn.host_docker', value: 'mailpit_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
       { labelKey: 'services.conn.port_smtp', value: '1025' },
       { labelKey: 'services.conn.port_web', value: '8025' },
@@ -103,7 +103,7 @@ const DETAILS = {
     ],
     env: [
       'MAIL_MAILER=smtp',
-      'MAIL_HOST=mailpit',
+      'MAIL_HOST=mailpit_container',
       'MAIL_PORT=1025',
       'MAIL_USERNAME=null',
       'MAIL_PASSWORD=null',
@@ -113,7 +113,7 @@ const DETAILS = {
   },
   minio: {
     fields: [
-      { labelKey: 'services.conn.host_docker', value: 'minio' },
+      { labelKey: 'services.conn.host_docker', value: 'minio_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
       { labelKey: 'services.conn.port_api', value: '9000' },
       { labelKey: 'services.conn.port_console', value: '9001' },
@@ -130,7 +130,7 @@ const DETAILS = {
       'AWS_SECRET_ACCESS_KEY=minioadmin',
       'AWS_DEFAULT_REGION=us-east-1',
       'AWS_BUCKET=local',
-      'AWS_ENDPOINT=http://minio:9000',
+      'AWS_ENDPOINT=http://minio_container:9000',
       'AWS_USE_PATH_STYLE_ENDPOINT=true',
     ].join('\n'),
     notes: ['services.conn.minio_note'],

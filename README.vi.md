@@ -27,9 +27,9 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | PostgreSQL | `postgres_container` | `5432` | User `postgres`, password `1`, database `postgres` |
 | Redis | `redis_container` | `6379` | Không có mật khẩu |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
-| Kafka | `kafka_container` | `9092` | KRaft 1 node; broker `kafka:29092` (Docker) / `localhost:9092` (host) |
-| Mailpit | `mailpit_container` | `1025`, `8025` | SMTP `mailpit:1025`; Web UI http://localhost:8025 |
-| MinIO | `minio_container` | `9000`, `9001` | S3 API `minio:9000`; Console http://localhost:9001 (`minioadmin`/`minioadmin`) |
+| Kafka | `kafka_container` | `9092` | KRaft 1 node; broker `kafka_container:29092` (Docker) / `localhost:9092` (host) |
+| Mailpit | `mailpit_container` | `1025`, `8025` | SMTP `mailpit_container:1025`; Web UI http://localhost:8025 |
+| MinIO | `minio_container` | `9000`, `9001` | S3 API `minio_container:9000`; Console http://localhost:9001 (`minioadmin`/`minioadmin`) |
 | Supervisor | `supervisor85_container` | Không public | Chạy background worker bằng PHP 8.5 (profile) |
 | Server Manager | `manager_container` | `127.0.0.1:8080` | Quản lý virtual server trong `env.json` |
 | PHP Controller | `php_controller_container` | Không public | Điều khiển allowlist PHP container qua Docker socket |
@@ -478,7 +478,7 @@ docker compose logs -f supervisor-8.5
 ls logs/supervisor-8.5
 ```
 
-Supervisor dùng hostname `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit` và `minio` để kết nối các dịch vụ trong `app-network`. `depends_on` với `required: false` chỉ sắp thứ tự khởi động khi các profile MySQL/PostgreSQL/Redis/RabbitMQ/Kafka/Mailpit/MinIO đang bật; không đảm bảo dịch vụ đã sẵn sàng nhận kết nối — worker nên có cơ chế retry.
+Supervisor dùng hostname `mysql_container`, `postgres_container`, `redis_container`, `rabbitmq_container`, `kafka_container`, `mailpit_container` và `minio_container` để kết nối các dịch vụ trong `app-network`. `depends_on` với `required: false` chỉ sắp thứ tự khởi động khi các profile MySQL/PostgreSQL/Redis/RabbitMQ/Kafka/Mailpit/MinIO đang bật; không đảm bảo dịch vụ đã sẵn sàng nhận kết nối — worker nên có cơ chế retry.
 
 ### Dùng Supervisor với phiên bản PHP khác
 
@@ -548,44 +548,44 @@ docker compose exec -e PGPASSWORD=1 postgres psql -U postgres
 
 ## Kết nối dịch vụ từ ứng dụng
 
-Ứng dụng chạy trong container phải dùng tên service Docker làm hostname, không dùng `localhost`:
+Ứng dụng chạy trong container phải dùng tên container Docker làm hostname, không dùng `localhost`:
 
 ```dotenv
-DB_HOST=mysql
+DB_HOST=mysql_container
 DB_PORT=3306
 DB_USERNAME=root
 DB_PASSWORD=1
 
 # PostgreSQL (dùng khối này thay MySQL khi app dùng Postgres)
 # DB_CONNECTION=pgsql
-# DB_HOST=postgres
+# DB_HOST=postgres_container
 # DB_PORT=5432
 # DB_DATABASE=postgres
 # DB_USERNAME=postgres
 # DB_PASSWORD=1
 
-REDIS_HOST=redis
+REDIS_HOST=redis_container
 REDIS_PORT=6379
 
-RABBITMQ_HOST=rabbitmq
+RABBITMQ_HOST=rabbitmq_container
 RABBITMQ_PORT=5672
 RABBITMQ_USER=admin
 RABBITMQ_PASSWORD=admin
 
-# Kafka (KRaft). Trong PHP container dùng kafka:29092; trên host dùng localhost:9092.
-KAFKA_BROKERS=kafka:29092
+# Kafka (KRaft). Trong PHP container dùng kafka_container:29092; trên host dùng localhost:9092.
+KAFKA_BROKERS=kafka_container:29092
 
-# Mailpit (SMTP). Trong PHP container dùng mailpit:1025; Web UI http://localhost:8025
+# Mailpit (SMTP). Trong PHP container dùng mailpit_container:1025; Web UI http://localhost:8025
 MAIL_MAILER=smtp
-MAIL_HOST=mailpit
+MAIL_HOST=mailpit_container
 MAIL_PORT=1025
 
-# MinIO (S3). Trong PHP container dùng http://minio:9000; Console http://localhost:9001
+# MinIO (S3). Trong PHP container dùng http://minio_container:9000; Console http://localhost:9001
 AWS_ACCESS_KEY_ID=minioadmin
 AWS_SECRET_ACCESS_KEY=minioadmin
 AWS_DEFAULT_REGION=us-east-1
 AWS_BUCKET=local
-AWS_ENDPOINT=http://minio:9000
+AWS_ENDPOINT=http://minio_container:9000
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
 
@@ -711,7 +711,7 @@ Tắt ứng dụng đang chiếm cổng hoặc đổi cổng host trong `compose
 
 ### Không kết nối được MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit hoặc MinIO từ PHP
 
-Trong container, dùng hostname `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, `minio`, không dùng `localhost`. Kiểm tra trạng thái bằng `docker compose ps`. Nếu container chưa chạy, bật profile rồi khởi động, ví dụ `docker compose --profile mysql up -d mysql`, `docker compose --profile postgres up -d postgres` hoặc `docker compose --profile kafka up -d kafka`. Với Kafka từ PHP dùng broker `kafka:29092`.
+Trong container, dùng hostname `mysql_container`, `postgres_container`, `redis_container`, `rabbitmq_container`, `kafka_container`, `mailpit_container`, `minio_container`, không dùng `localhost`. Kiểm tra trạng thái bằng `docker compose ps`. Nếu container chưa chạy, bật profile rồi khởi động, ví dụ `docker compose --profile mysql up -d mysql`, `docker compose --profile postgres up -d postgres` hoặc `docker compose --profile kafka up -d kafka`. Với Kafka từ PHP dùng broker `kafka_container:29092`.
 
 ### Build image thất bại
 

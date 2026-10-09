@@ -27,9 +27,9 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PostgreSQL | `postgres_container` | `5432` | User `postgres`, password `1`, database `postgres` |
 | Redis | `redis_container` | `6379` | No password |
 | RabbitMQ | `rabbitmq_container` | `5672`, `15672` | User/password: `admin` / `admin` |
-| Kafka | `kafka_container` | `9092` | KRaft single node; brokers `kafka:29092` (Docker) / `localhost:9092` (host) |
-| Mailpit | `mailpit_container` | `1025`, `8025` | SMTP `mailpit:1025` (Docker) / `127.0.0.1:1025` (host); Web UI [http://localhost:8025](http://localhost:8025) |
-| MinIO | `minio_container` | `9000`, `9001` | S3 API `minio:9000` (Docker) / `127.0.0.1:9000` (host); Console [http://localhost:9001](http://localhost:9001) (`minioadmin`/`minioadmin`) |
+| Kafka | `kafka_container` | `9092` | KRaft single node; brokers `kafka_container:29092` (Docker) / `localhost:9092` (host) |
+| Mailpit | `mailpit_container` | `1025`, `8025` | SMTP `mailpit_container:1025` (Docker) / `127.0.0.1:1025` (host); Web UI [http://localhost:8025](http://localhost:8025) |
+| MinIO | `minio_container` | `9000`, `9001` | S3 API `minio_container:9000` (Docker) / `127.0.0.1:9000` (host); Console [http://localhost:9001](http://localhost:9001) (`minioadmin`/`minioadmin`) |
 | Supervisor | `supervisor85_container` | Not published | Runs PHP 8.5 background workers (profile) |
 | Server Manager | `manager_container` | `127.0.0.1:8080` | Manages virtual servers in `env.json` |
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
@@ -478,7 +478,7 @@ docker compose logs -f supervisor-8.5
 ls logs/supervisor-8.5
 ```
 
-Supervisor uses `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, and `minio` as hostnames inside `app-network`. `depends_on` with `required: false` only orders startup when the MySQL/PostgreSQL/Redis/RabbitMQ/Kafka/Mailpit/MinIO profiles are enabled; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
+Supervisor uses `mysql_container`, `postgres_container`, `redis_container`, `rabbitmq_container`, `kafka_container`, `mailpit_container`, and `minio_container` as hostnames inside `app-network`. `depends_on` with `required: false` only orders startup when the MySQL/PostgreSQL/Redis/RabbitMQ/Kafka/Mailpit/MinIO profiles are enabled; it does not guarantee that a dependency is ready to accept connections, so workers should retry failed connections.
 
 ### Using Supervisor with other PHP versions
 
@@ -548,44 +548,44 @@ docker compose exec -e PGPASSWORD=1 postgres psql -U postgres
 
 ## Connecting applications to services
 
-Applications running inside a container must use Docker service names as hostnames instead of `localhost`:
+Applications running inside a container must use the Docker container name as the hostname instead of `localhost`:
 
 ```dotenv
-DB_HOST=mysql
+DB_HOST=mysql_container
 DB_PORT=3306
 DB_USERNAME=root
 DB_PASSWORD=1
 
 # PostgreSQL (use these instead of the MySQL block when the app uses Postgres)
 # DB_CONNECTION=pgsql
-# DB_HOST=postgres
+# DB_HOST=postgres_container
 # DB_PORT=5432
 # DB_DATABASE=postgres
 # DB_USERNAME=postgres
 # DB_PASSWORD=1
 
-REDIS_HOST=redis
+REDIS_HOST=redis_container
 REDIS_PORT=6379
 
-RABBITMQ_HOST=rabbitmq
+RABBITMQ_HOST=rabbitmq_container
 RABBITMQ_PORT=5672
 RABBITMQ_USER=admin
 RABBITMQ_PASSWORD=admin
 
-# Kafka (KRaft). From PHP containers use kafka:29092; from the host use localhost:9092.
-KAFKA_BROKERS=kafka:29092
+# Kafka (KRaft). From PHP containers use kafka_container:29092; from the host use localhost:9092.
+KAFKA_BROKERS=kafka_container:29092
 
-# Mailpit (SMTP). From PHP containers use mailpit:1025; Web UI on http://localhost:8025
+# Mailpit (SMTP). From PHP containers use mailpit_container:1025; Web UI on http://localhost:8025
 MAIL_MAILER=smtp
-MAIL_HOST=mailpit
+MAIL_HOST=mailpit_container
 MAIL_PORT=1025
 
-# MinIO (S3). From PHP containers use http://minio:9000; Console on http://localhost:9001
+# MinIO (S3). From PHP containers use http://minio_container:9000; Console on http://localhost:9001
 AWS_ACCESS_KEY_ID=minioadmin
 AWS_SECRET_ACCESS_KEY=minioadmin
 AWS_DEFAULT_REGION=us-east-1
 AWS_BUCKET=local
-AWS_ENDPOINT=http://minio:9000
+AWS_ENDPOINT=http://minio_container:9000
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
 
@@ -711,7 +711,7 @@ Stop the application using the port or change the host side of the mapping in `c
 
 ### PHP cannot connect to MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, or MinIO
 
-Inside a container, use `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, and `minio` as hostnames instead of `localhost`. Check container status with `docker compose ps`. If a container is not running, enable its profile and start it, for example `docker compose --profile mysql up -d mysql`, `docker compose --profile postgres up -d postgres`, or `docker compose --profile kafka up -d kafka`. For Kafka from PHP use broker `kafka:29092`.
+Inside a container, use `mysql_container`, `postgres_container`, `redis_container`, `rabbitmq_container`, `kafka_container`, `mailpit_container`, and `minio_container` as hostnames instead of `localhost`. Check container status with `docker compose ps`. If a container is not running, enable its profile and start it, for example `docker compose --profile mysql up -d mysql`, `docker compose --profile postgres up -d postgres`, or `docker compose --profile kafka up -d kafka`. For Kafka from PHP use broker `kafka_container:29092`.
 
 ### An image fails to build
 
