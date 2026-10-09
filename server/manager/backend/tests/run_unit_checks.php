@@ -16,6 +16,7 @@ spl_autoload_register(static function (string $class): void {
 
 use Manager\Http\HttpException;
 use Manager\Models\DockerConnection;
+use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
@@ -1280,6 +1281,22 @@ assert_true(str_contains($dcEnvBody, 'DOCKER_HOST=tcp://docker.example:2376'), '
 assert_true(str_contains($dcEnvBody, 'DOCKER_TLS_VERIFY=1'), 'docker.env TLS verify');
 assert_true(str_contains($dcEnvBody, 'DOCKER_CERT_PATH=' . $dcTlsDir), 'docker.env cert path');
 assert_true(str_contains($dcEnvBody, 'HOST_PROJECT_PATH=/opt/web'), 'docker.env remote project path');
+assert_true(
+    DockerExec::daemonBindPath('D:\\Project\\Docker\\multi-php-docker') === '/run/desktop/mnt/host/d/Project/Docker/multi-php-docker',
+    'windows backslash bind path'
+);
+assert_true(
+    DockerExec::daemonBindPath('D:/Project/Docker/multi-php-docker') === '/run/desktop/mnt/host/d/Project/Docker/multi-php-docker',
+    'windows slash bind path'
+);
+assert_true(
+    DockerExec::daemonBindPath('/Users/me/multi-php-docker') === '/Users/me/multi-php-docker',
+    'macos bind path unchanged'
+);
+assert_true(
+    DockerExec::daemonBindPath('/opt/web') === '/opt/web',
+    'linux bind path unchanged'
+);
 assert_true(!str_contains($dcEnvBody, 'DOCKER_TLS_VERIFY=0'), 'tls docker.env does not use verify=0');
 
 $dcSaveModel->save(['mode' => DockerConnection::MODE_LOCAL]);
