@@ -186,7 +186,7 @@ run_retrying_hub() {
 }
 
 prepare_compose_tmp() {
-    host_project="$1"
+    host_project=$(to_daemon_bind_path "$1")
     tmp_dir="$2"
     mkdir -p "$tmp_dir/compose"
     # Bind mounts must use host paths (daemon-side). Build context and
@@ -194,9 +194,11 @@ prepare_compose_tmp() {
     # because the Docker CLI reads them from this container — not from the
     # rewritten files under /tmp/compose-*.
     rewrite_compose_paths() {
+        # '|' is the sed delimiter; escape replacement metacharacters.
+        repl=$(printf '%s' "$host_project" | sed -e 's/[\\&|]/\\&/g')
         sed \
-            -e "s|- \\./|- ${host_project}/|g" \
-            -e "s|- \\.:|- ${host_project}:|g" \
+            -e "s|- \\./|${repl}/|g" \
+            -e "s|- \\.:|${repl}:|g" \
             -e 's|project_directory:[[:space:]]*\.[[:space:]]*$|project_directory: /project|' \
             -e 's|context:[[:space:]]*\.[[:space:]]*$|context: /project|' \
             -e 's|context:[[:space:]]*"\."[[:space:]]*$|context: /project|' \
@@ -232,16 +234,60 @@ run_compose_build_up() {
     "$@"
 }
 
-resolve_host_project() {
-    host_project="${HOST_PROJECT_PATH:-}"
-    if [ -n "$host_project" ] && [ "$host_project" != "/project" ]; then
-        printf '%s' "$host_project"
-        return 0
-    fi
+# Bind path accepted by the Linux engine behind docker.sock.
+# macOS and Linux paths already start with / and are returned unchanged.
+# A Windows D:\ or D:/ path is not absolute here: sed drops the backslashes,
+# Compose then prefixes the project dir, and the leftover colon becomes
+# "mount denied: too many colons". Docker Desktop exposes that drive at
+# /run/desktop/mnt/host/<drive>/...
+to_daemon_bind_path() {
+    raw=$(printf '%s' "$1" | tr '\\' '/')
+    case "$raw" in
+        [A-Za-z]:*)
+            drive=$(printf '%s' "$raw" | cut -c1 | tr '[:upper:]' '[:lower:]')
+            rest=$(printf '%s' "$raw" | sed 's|^[A-Za-z]:/*||')
+            printf '/run/desktop/mnt/host/%s/%s' "$drive" "$rest"
+            ;;
+        *)
+            printf '%s' "$raw"
+            ;;
+    esac
+}
 
+project_mount_source() {
     docker inspect php_controller_container \
         --format '{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' \
-        2>/dev/null
+        2>/dev/null || true
+}
+
+resolve_host_project() {
+    host_project="${HOST_PROJECT_PATH:-}"
+    if [ -z "$host_project" ] || [ "$host_project" = "/project" ]; then
+        host_project=$(project_mount_source)
+    fi
+
+    slashed=$(printf '%s' "$host_project" | tr '\\' '/')
+    case "$slashed" in
+        [A-Za-z]:*)
+            # Prefer the path the engine already used for /project when it is
+            # a Unix path. If inspect still has D:\..., keep the slashed form
+            # so backslashes are not lost before to_daemon_bind_path.
+            inspected=$(printf '%s' "$(project_mount_source)" | tr '\\' '/')
+            case "$inspected" in
+                /*)
+                    printf '%s' "$inspected"
+                    return 0
+                    ;;
+                [A-Za-z]:/*)
+                    host_project=$inspected
+                    ;;
+            esac
+            ;;
+    esac
+
+    if [ -n "$host_project" ]; then
+        to_daemon_bind_path "$host_project"
+    fi
 }
 
 run_compose_create() {
