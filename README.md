@@ -2,7 +2,7 @@
 
 # PHP Development Environment with Docker
 
-Local stack with Nginx, PHP 7.4 and 8.0–8.5, plus optional MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO. Ready-made images are on Docker Hub (`long301001/multi-php-docker`), including Server Manager. PHP 8.5 starts with the stack; every other PHP version and data service stays off until you enable its profile.
+Local stack with Nginx, PHP 7.4 and 8.0–8.5, plus optional MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO. Ready-made images are on Docker Hub (`long301001/multi-php-docker`), including Server Manager. Running `docker compose up -d` starts only Nginx, Server Manager, and PHP Controller. Every PHP version and data service stays off until you enable its profile or use the Manager UI.
 
 ## Demo videos
 
@@ -29,7 +29,9 @@ docker compose pull
 docker compose up -d
 ```
 
-This starts PHP 8.5, Nginx, Server Manager, and PHP Controller. No `.env` file is required. On the first run, a helper copies [`env.example.json`](env.example.json) to `env.json` when that file is missing, and never overwrites an existing one. `env.json` stays on your machine.
+This starts Nginx, Server Manager, and PHP Controller. No `.env` file is required. On the first run, a helper copies [`env.example.json`](env.example.json) to `env.json` when that file is missing, and never overwrites an existing one. `env.json` stays on your machine.
+
+PHP versions and data services are off by default. Start them from **PHP versions** → **Create** → **Start** in Manager, or with `docker compose --profile <name> up -d`.
 
 Later: `docker compose up -d`, then `docker compose ps`.
 
@@ -47,10 +49,10 @@ Picking another PHP version in Server Manager does not move the files. If an old
 
 The UI is already inside `long301001/multi-php-docker:manager`. Node.js is not required on the host.
 
-[http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
+Opening [http://127.0.0.1:8080/](http://127.0.0.1:8080/) shows an introduction page (VI/EN). Manager is at [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage). When `env.json` has no sites, Nginx on port 80 shows the same welcome page instead of a 404.
 
 1. **Add a server** — application name, domain (for example `my-php85-app.test`), PHP version, and document root. For Laravel or any app with a public directory, point the document root at `public`, `webroot`, or the folder that contains `index.php`. Manager writes `env.json`.
-2. **Start PHP if needed** — PHP 8.5 is already running. For another version, open **PHP versions** → **Create** → **Start**.
+2. **Start PHP** — open **PHP versions** → **Create** → **Start** for the version you need. All PHP versions including 8.5 must be started this way.
 3. **Write hosts** once per machine. This step needs `jq` and administrator rights; starting Docker does not. Then in Manager use **Add domain** / **Write hosts (Admin)**.
 
 Windows:
@@ -87,8 +89,7 @@ The same UI can open a shell in that site’s PHP container (the container must 
 | Service | Host ports | Defaults |
 | --- | --- | --- |
 | Nginx | `80`, `443` | Domains from `env.json` |
-| PHP 8.5 | Not published | Always started. PHP-FPM on port `9000` inside the Docker network |
-| PHP 7.4, 8.0–8.4 | Not published | Off until you start the matching profile |
+| PHP 7.4, 8.0–8.5 | Not published | Off until you start the matching profile. PHP-FPM on port `9000` inside the Docker network |
 | Server Manager | `127.0.0.1:8080` | [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage) |
 | MySQL | `3306` | User `root`, password `1` |
 | PostgreSQL | `5432` | User `postgres`, password `1`, database `postgres` |
@@ -109,7 +110,7 @@ Start a profile when a project needs it. Nginx can reach only a PHP container th
 docker compose --profile <name> up -d <name>
 ```
 
-Profile names: `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, `minio`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`.
+Profile names: `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, `minio`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`.
 
 Server Manager can Create, Start, Stop, and Restart these. **Add version** installs a Hub catalog tag (for example alpine) and builds a local image. On Windows, see [Troubleshooting](#windows-install--create-php-version-fails) if that build cannot reach Docker Hub.
 
@@ -118,6 +119,18 @@ docker compose stop php-8.3
 ```
 
 `php-controller` reads the repository path from the `/project` mount. A `HOST_PROJECT_PATH` value in `.env` still works as an override.
+
+### Pinned containers and sequential start/stop
+
+Pin any Nginx, PHP, or service to the home page using the **Pin** button in its detail view. The **Pinned** card appears on the home page and shows quick Start / Stop / Restart buttons.
+
+The card header has three buttons: **Settings**, **Start in order**, and **Stop in order**.
+
+- **Settings** opens a dialog with two independent lists: one for sequential startup, one for sequential shutdown. The **Available** column lists only pinned services. Add, remove, and reorder each list separately, then **Save**.
+- **Start in order** runs the startup list top to bottom, skipping services that are already running.
+- **Stop in order** runs the shutdown list top to bottom (its own order, independent of the startup list), skipping services that are already stopped.
+
+A failure halts the rest of the sequence.
 
 ### Connect from the application
 

@@ -2,7 +2,7 @@
 
 # Môi trường phát triển PHP với Docker
 
-Môi trường local gồm Nginx, PHP 7.4 và 8.0–8.5, cùng các dịch vụ tùy chọn MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit và MinIO. Image có sẵn trên Docker Hub (`long301001/multi-php-docker`), kể cả Server Manager. PHP 8.5 chạy cùng stack; mọi phiên bản PHP khác và dịch vụ dữ liệu chỉ chạy khi bạn bật profile tương ứng.
+Môi trường local gồm Nginx, PHP 7.4 và 8.0–8.5, cùng các dịch vụ tùy chọn MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit và MinIO. Image có sẵn trên Docker Hub (`long301001/multi-php-docker`), kể cả Server Manager. Chạy `docker compose up -d` chỉ khởi động Nginx, Server Manager và PHP Controller. Mọi phiên bản PHP và dịch vụ dữ liệu đều tắt cho đến khi bạn bật profile hoặc dùng giao diện Manager.
 
 ## Video hướng dẫn
 
@@ -29,7 +29,9 @@ docker compose pull
 docker compose up -d
 ```
 
-Lệnh này khởi động PHP 8.5, Nginx, Server Manager và PHP Controller. Không cần file `.env`. Lần chạy đầu, một helper copy [`env.example.json`](env.example.json) thành `env.json` nếu file đó chưa có, và không ghi đè file đã tồn tại. `env.json` nằm trên máy của bạn.
+Lệnh này khởi động Nginx, Server Manager và PHP Controller. Không cần file `.env`. Lần chạy đầu, một helper copy [`env.example.json`](env.example.json) thành `env.json` nếu file đó chưa có, và không ghi đè file đã tồn tại. `env.json` nằm trên máy của bạn.
+
+Phiên bản PHP và dịch vụ dữ liệu mặc định tắt. Khởi động từ **Các phiên bản PHP** → **Tạo** → **Khởi động** trong Manager, hoặc dùng `docker compose --profile <tên> up -d`.
 
 Các lần sau: `docker compose up -d`, rồi `docker compose ps`.
 
@@ -47,10 +49,10 @@ server/source/<tên-project>
 
 Giao diện đã nằm trong `long301001/multi-php-docker:manager`. Không cần cài Node.js trên máy.
 
-[http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage)
+Mở [http://127.0.0.1:8080/](http://127.0.0.1:8080/) để xem trang giới thiệu (VI/EN). Manager ở [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage). Khi `env.json` chưa có site, Nginx cổng 80 cũng hiển thị trang chào mừng thay vì trả về 404.
 
 1. **Thêm server** — tên ứng dụng, domain (ví dụ `my-php85-app.test`), phiên bản PHP và document root. Với Laravel hoặc app có thư mục public riêng, trỏ document root tới `public`, `webroot` hoặc thư mục chứa `index.php`. Manager ghi `env.json`.
-2. **Khởi động PHP nếu cần** — PHP 8.5 đã chạy. Với phiên bản khác, mở **Các phiên bản PHP** → **Tạo** → **Khởi động**.
+2. **Khởi động PHP** — mở **Các phiên bản PHP** → **Tạo** → **Khởi động** cho phiên bản cần dùng. Mọi phiên bản PHP kể cả 8.5 đều phải khởi động theo cách này.
 3. **Ghi hosts** một lần trên mỗi máy. Bước này cần `jq` và quyền quản trị; khởi động Docker thì không. Sau đó trong Manager dùng **Thêm domain** / **Ghi hosts (Admin)**.
 
 Windows:
@@ -87,8 +89,7 @@ Cùng giao diện này có thể mở shell trong container PHP của site (cont
 | Dịch vụ | Cổng host | Mặc định |
 | --- | --- | --- |
 | Nginx | `80`, `443` | Domain trong `env.json` |
-| PHP 8.5 | Không public | Luôn chạy. PHP-FPM cổng `9000` trong Docker network |
-| PHP 7.4, 8.0–8.4 | Không public | Tắt cho đến khi bạn bật profile tương ứng |
+| PHP 7.4, 8.0–8.5 | Không public | Tắt cho đến khi bạn bật profile tương ứng. PHP-FPM cổng `9000` trong Docker network |
 | Server Manager | `127.0.0.1:8080` | [http://127.0.0.1:8080/server-manage](http://127.0.0.1:8080/server-manage) |
 | MySQL | `3306` | User `root`, password `1` |
 | PostgreSQL | `5432` | User `postgres`, password `1`, database `postgres` |
@@ -109,7 +110,7 @@ Bật profile khi project cần. Nginx chỉ nối được container PHP đang 
 docker compose --profile <tên> up -d <tên>
 ```
 
-Tên profile: `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, `minio`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`.
+Tên profile: `php-8.5`, `php-8.4`, `php-8.3`, `php-8.2`, `php-8.1`, `php-8.0`, `php-7.4`, `mysql`, `postgres`, `redis`, `rabbitmq`, `kafka`, `mailpit`, `minio`, `supervisor-8.5`, `supervisor-8.4`, `supervisor-8.3`, `supervisor-8.2`, `supervisor-8.1`, `supervisor-8.0`, `supervisor-7.4`.
 
 Server Manager có thể Tạo, Khởi động, Dừng và Khởi động lại các dịch vụ này. **Thêm phiên bản** cài một tag từ catalog Hub (ví dụ alpine) và build image local. Trên Windows, xem [Xử lý lỗi](#windows-cài--tạo-phiên-bản-php-thất-bại) nếu build không tới được Docker Hub.
 
@@ -118,6 +119,18 @@ docker compose stop php-8.3
 ```
 
 `php-controller` lấy đường dẫn repository từ mount `/project`. Giá trị `HOST_PROJECT_PATH` trong `.env` vẫn dùng được như một override.
+
+### Container đã ghim và khởi động/tắt lần lượt
+
+Ghim bất kỳ Nginx, PHP hoặc dịch vụ nào lên trang chủ bằng nút **Ghim** trong màn hình chi tiết. Card **Đã ghim** xuất hiện trên trang chủ với nút Start / Stop / Restart nhanh.
+
+Header card có ba nút: **Cài đặt**, **Khởi động lần lượt** và **Tắt lần lượt**.
+
+- **Cài đặt** mở dialog với hai danh sách riêng: một cho thứ tự khởi động, một cho thứ tự tắt. Cột **Có thể thêm** chỉ liệt kê service đang ghim. Thêm, bỏ và sắp xếp từng danh sách độc lập, sau đó **Lưu**.
+- **Khởi động lần lượt** chạy danh sách khởi động từ trên xuống, bỏ qua service đã chạy.
+- **Tắt lần lượt** chạy danh sách tắt từ trên xuống (thứ tự riêng, không phụ thuộc danh sách khởi động), bỏ qua service đã tắt.
+
+Gặp lỗi thì dừng các mục còn lại trong chuỗi.
 
 ### Kết nối từ ứng dụng
 
