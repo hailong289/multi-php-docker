@@ -19,6 +19,13 @@ if [ -f "$BASE_DIR/docker.env" ]; then
     . "$BASE_DIR/docker.env"
     set +a
 fi
+# Docker CLI treats every non-empty DOCKER_TLS_VERIFY as "verify TLS", including
+# 0. Commands then look for $DOCKER_CONFIG/ca.pem and fail, so status refresh
+# never runs and the UI stays on Processing.
+if [ "${DOCKER_TLS_VERIFY:-}" != "1" ]; then
+    unset DOCKER_TLS_VERIFY
+    unset DOCKER_CERT_PATH
+fi
 
 # PID 1 is this shell loop. Without a TERM trap, docker stop waits the default
 # ~10s then SIGKILL (same class of bug as nginx wrapping sh without exec).
@@ -456,16 +463,18 @@ compose_file_safe_name() {
 }
 
 write_compose_file_status() {
-    queue_key="$1"
-    state="$2"
-    message_key="$3"
-    request_id="$4"
-    compose_file="$5"
-    updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-    temp_file="$STATUS_DIR/$queue_key.json.tmp"
+    # Do not assign state/request_id: this shell has no locals, and the caller
+    # uses those names for the in-flight request.
+    _cfs_queue_key="$1"
+    _cfs_state="$2"
+    _cfs_message_key="$3"
+    _cfs_request_id="$4"
+    _cfs_compose_file="$5"
+    _cfs_updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    _cfs_temp_file="$STATUS_DIR/$_cfs_queue_key.json.tmp"
     printf '{"compose_file":"%s","queue_key":"%s","state":"%s","message_key":"%s","request_id":"%s","updated_at":"%s"}\n' \
-        "$compose_file" "$queue_key" "$state" "$message_key" "$request_id" "$updated_at" > "$temp_file"
-    mv "$temp_file" "$STATUS_DIR/$queue_key.json"
+        "$_cfs_compose_file" "$_cfs_queue_key" "$_cfs_state" "$_cfs_message_key" "$_cfs_request_id" "$_cfs_updated_at" > "$_cfs_temp_file"
+    mv "$_cfs_temp_file" "$STATUS_DIR/$_cfs_queue_key.json"
 }
 
 parse_compose_file_request() {
@@ -666,15 +675,17 @@ container_running() {
 }
 
 write_status() {
-    service="$1"
-    state="$2"
-    message_key="$3"
-    request_id="$4"
-    updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-    temp_file="$STATUS_DIR/$service.json.tmp"
+    # Do not assign state=: the main loop uses an empty state as "not read yet".
+    # Overwriting it with "busy" made a failed create persist as Processing.
+    _ws_service="$1"
+    _ws_state="$2"
+    _ws_message_key="$3"
+    _ws_request_id="$4"
+    _ws_updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    _ws_temp_file="$STATUS_DIR/$_ws_service.json.tmp"
     printf '{"service":"%s","state":"%s","message_key":"%s","request_id":"%s","updated_at":"%s"}\n' \
-        "$service" "$state" "$message_key" "$request_id" "$updated_at" > "$temp_file"
-    mv "$temp_file" "$STATUS_DIR/$service.json"
+        "$_ws_service" "$_ws_state" "$_ws_message_key" "$_ws_request_id" "$_ws_updated_at" > "$_ws_temp_file"
+    mv "$_ws_temp_file" "$STATUS_DIR/$_ws_service.json"
 }
 
 # One `docker ps` for every managed service. Per-container inspect on each

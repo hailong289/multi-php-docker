@@ -235,10 +235,10 @@ final class DockerConnection
         ];
         if ($config['mode'] === self::MODE_LOCAL) {
             $lines[] = 'DOCKER_HOST=unix:///var/run/docker.sock';
-            $lines[] = 'DOCKER_TLS_VERIFY=0';
-            $lines[] = 'unset DOCKER_CERT_PATH 2>/dev/null || true';
+            $lines[] = 'unset DOCKER_TLS_VERIFY';
+            $lines[] = 'unset DOCKER_CERT_PATH';
         } elseif ($config['mode'] === self::MODE_TCP) {
-            $scheme = $config['tcp']['tls'] ? 'tcp' : 'tcp';
+            $scheme = 'tcp';
             $host = $config['tcp']['host'];
             $port = (string) $config['tcp']['port'];
             $lines[] = 'DOCKER_HOST=' . $scheme . '://' . $host . ':' . $port;
@@ -247,14 +247,17 @@ final class DockerConnection
                 $lines[] = 'DOCKER_TLS_VERIFY=1';
                 $lines[] = 'DOCKER_CERT_PATH=' . $certDir;
             } else {
-                $lines[] = 'DOCKER_TLS_VERIFY=0';
+                // Any non-empty DOCKER_TLS_VERIFY, including 0, makes the CLI require certs.
+                $lines[] = 'unset DOCKER_TLS_VERIFY';
+                $lines[] = 'unset DOCKER_CERT_PATH';
             }
         } else {
             $user = $config['ssh']['user'];
             $host = $config['ssh']['host'];
             $port = (string) $config['ssh']['port'];
             $lines[] = 'DOCKER_HOST=ssh://' . $user . '@' . $host . ':' . $port;
-            $lines[] = 'DOCKER_TLS_VERIFY=0';
+            $lines[] = 'unset DOCKER_TLS_VERIFY';
+            $lines[] = 'unset DOCKER_CERT_PATH';
             $lines[] = 'IDENTITY_FILE=' . $config['ssh']['identity_file'];
         }
 
@@ -264,11 +267,7 @@ final class DockerConnection
 
         $content = '';
         foreach ($lines as $line) {
-            // docker.env is sourced by sh; skip shell-unset pseudo-lines as comments.
-            if (str_starts_with($line, 'unset ')) {
-                $content .= '# ' . $line . "\n";
-                continue;
-            }
+            // docker.env is sourced by sh, so unset runs and clears TLS vars.
             $content .= $line . "\n";
         }
 

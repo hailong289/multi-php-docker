@@ -62,6 +62,7 @@ async function copyText(text, key) {
     <div v-if="details" class="service-conn" data-tour="service-connection-dialog">
       <p v-if="serviceDescription" class="service-conn-desc">{{ serviceDescription }}</p>
       <p class="service-conn-intro">{{ t('services.connection_intro') }}</p>
+      <p class="service-conn-intro">{{ t('services.connection_docker_host_hint') }}</p>
 
       <div class="service-conn-fields">
         <div
