@@ -546,6 +546,25 @@ final class DockerExec
         return null;
     }
 
+    /**
+     * Bind path the Linux engine accepts.
+     * macOS and Linux paths are unchanged. Docker Desktop on Windows shares
+     * the drive at /run/desktop/mnt/host/<drive>/...; a D:\ or D:/ short-form
+     * volume is rejected with "too many colons".
+     */
+    public static function daemonBindPath(string $path): string
+    {
+        $path = str_replace('\\', '/', $path);
+        if (preg_match('/^([A-Za-z]):\/(.*)$/', $path, $m) === 1) {
+            $drive = strtolower($m[1]);
+            $rest = ltrim($m[2], '/');
+
+            return '/run/desktop/mnt/host/' . $drive . '/' . $rest;
+        }
+
+        return $path;
+    }
+
     public static function resolveHostProjectPath(): ?string
     {
         $remote = DockerConnection::projectPathFor(DockerEndpoint::config());
@@ -614,10 +633,13 @@ final class DockerExec
         if ($hostProject === null) {
             return false;
         }
+        $hostProject = self::daemonBindPath($hostProject);
 
         // Local project bind for reading compose files inside the helper.
-        $localProject = self::mountSource('manager_container', '/var/host-project')
-            ?? Config::projectPath();
+        $localProject = self::daemonBindPath(
+            self::mountSource('manager_container', '/var/host-project')
+                ?? Config::projectPath()
+        );
 
         $project = self::composeProjectName();
         // Mirror scripts/php/php-controller.sh prepare_compose_tmp: bind sources must be
@@ -626,11 +648,21 @@ final class DockerExec
 set -eu
 mkdir -p "${DOCKER_CONFIG:-/tmp/docker-config}"
 host_project="${HOST_PROJECT_PATH:?}"
+# Same rule as php-controller.sh to_daemon_bind_path. Unix paths are unchanged.
+host_project=$(printf '%s' "$host_project" | tr '\\' '/')
+case "$host_project" in
+  [A-Za-z]:/*)
+    drive=$(printf '%s' "$host_project" | cut -c1 | tr '[:upper:]' '[:lower:]')
+    rest=$(printf '%s' "$host_project" | sed 's|^[A-Za-z]:/*||')
+    host_project="/run/desktop/mnt/host/${drive}/${rest}"
+    ;;
+esac
 tmp_dir="/tmp/compose-up.$$"
 mkdir -p "$tmp_dir/compose"
 rewrite_compose_paths() {
+  repl=$(printf '%s' "$host_project" | sed -e 's/[\\&|]/\\&/g')
   sed \
-    -e "s|- \\./|- ${host_project}/|g" \
+    -e "s|- \\./|${repl}/|g" \
     -e 's|project_directory:[[:space:]]*\.[[:space:]]*$|project_directory: /project|' \
     -e 's|context:[[:space:]]*\.[[:space:]]*$|context: /project|' \
     -e 's|context:[[:space:]]*"\."[[:space:]]*$|context: /project|' \
