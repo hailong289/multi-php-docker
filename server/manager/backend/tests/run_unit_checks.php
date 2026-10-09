@@ -16,6 +16,7 @@ spl_autoload_register(static function (string $class): void {
 
 use Manager\Http\HttpException;
 use Manager\Models\DockerConnection;
+use Manager\Support\DockerLiveState;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\ComposeFileParser;
@@ -1279,6 +1280,51 @@ assert_true(str_contains($dcEnvBody, 'DOCKER_HOST=tcp://docker.example:2376'), '
 assert_true(str_contains($dcEnvBody, 'DOCKER_TLS_VERIFY=1'), 'docker.env TLS verify');
 assert_true(str_contains($dcEnvBody, 'DOCKER_CERT_PATH=' . $dcTlsDir), 'docker.env cert path');
 assert_true(str_contains($dcEnvBody, 'HOST_PROJECT_PATH=/opt/web'), 'docker.env remote project path');
+assert_true(!str_contains($dcEnvBody, 'DOCKER_TLS_VERIFY=0'), 'tls docker.env does not use verify=0');
+
+$dcSaveModel->save(['mode' => DockerConnection::MODE_LOCAL]);
+$localEnv = (string) file_get_contents($dcEnvFile);
+assert_true(str_contains($localEnv, 'DOCKER_HOST=unix:///var/run/docker.sock'), 'local docker.env host');
+assert_true(!preg_match('/^DOCKER_TLS_VERIFY=/m', $localEnv), 'local docker.env does not set DOCKER_TLS_VERIFY');
+assert_true(str_contains($localEnv, 'unset DOCKER_TLS_VERIFY'), 'local docker.env unsets TLS verify');
+assert_true(str_contains($localEnv, 'unset DOCKER_CERT_PATH'), 'local docker.env unsets cert path');
+
+$dcSaveModel->save([
+    'mode' => DockerConnection::MODE_TCP,
+    'tcp' => ['host' => 'docker.example', 'port' => 2375, 'tls' => false],
+    'remote_project_path' => '/opt/web',
+]);
+$plainTcpEnv = (string) file_get_contents($dcEnvFile);
+assert_true(str_contains($plainTcpEnv, 'DOCKER_HOST=tcp://docker.example:2375'), 'plain tcp docker.env host');
+assert_true(!preg_match('/^DOCKER_TLS_VERIFY=/m', $plainTcpEnv), 'plain tcp does not set DOCKER_TLS_VERIFY');
+assert_true(str_contains($plainTcpEnv, 'unset DOCKER_TLS_VERIFY'), 'plain tcp unsets TLS verify');
+
+if (DockerLiveState::available()) {
+    DockerLiveState::resetCache();
+    $staleBusy = DockerLiveState::apply([
+        'state' => 'busy',
+        'message_key' => 'php_controller.action_failed',
+        'updated_at' => '2020-01-01T00:00:00Z',
+    ], 'mailpit_container_missing_for_test', 'php_controller.status_refreshed');
+    assert_true(($staleBusy['state'] ?? '') === 'not_created', 'stale busy follows live not_created');
+}
+
+$controllerScript = dirname(__DIR__, 4) . '/scripts/php/php-controller.sh';
+if (!is_file($controllerScript)) {
+    $controllerScript = '/var/host-project/scripts/php/php-controller.sh';
+}
+assert_true(is_file($controllerScript), 'php-controller script readable');
+$controllerBody = (string) file_get_contents($controllerScript);
+assert_true(preg_match('/\nwrite_status\(\) \{.*?\n\}/s', $controllerBody, $writeStatusMatch) === 1, 'write_status function found');
+$probeDir = sys_get_temp_dir() . '/write-status-probe-' . bin2hex(random_bytes(4));
+mkdir($probeDir, 0775, true);
+$probe = $probeDir . '/probe.sh';
+file_put_contents($probe, "#!/bin/sh\nset -u\nSTATUS_DIR=" . escapeshellarg($probeDir) . "\n" . $writeStatusMatch[0] . "\nstate=\"\"\nwrite_status mailpit busy php_controller.processing abcdef\n[ -z \"\$state\" ]\n");
+chmod($probe, 0755);
+exec($probe, $probeOut, $probeCode);
+assert_true($probeCode === 0, 'write_status does not clobber caller state');
+$probeStatus = json_decode((string) file_get_contents($probeDir . '/mailpit.json'), true);
+assert_true(is_array($probeStatus) && ($probeStatus['state'] ?? '') === 'busy', 'write_status still records busy');
 $dcStatus = $dcSaveModel->status(false);
 assert_true(($dcStatus['effective']['mode'] ?? '') === DockerConnection::MODE_TCP, 'status effective mode');
 assert_true(array_key_exists('reachable', $dcStatus) && $dcStatus['reachable'] === null, 'status without probe leaves reachable null');
