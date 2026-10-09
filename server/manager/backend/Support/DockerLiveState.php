@@ -63,17 +63,16 @@ final class DockerLiveState
     }
 
     /**
-     * Prefer live Docker state unless UI action shows busy.
+     * Prefer live Docker state. Callers overlay "busy" from the request queue
+     * while an action is in flight. A status file left at busy (failed action,
+     * or the controller died mid-request) must follow the container instead of
+     * pinning the UI on Processing.
      *
      * @param array<string, mixed> $status
      * @return array<string, mixed>
      */
     public static function apply(array $status, string $containerName, string $refreshedMessageKey): array
     {
-        if (($status['state'] ?? '') === 'busy') {
-            return $status;
-        }
-
         $live = self::stateFor($containerName);
         if ($live === null) {
             return $status;
