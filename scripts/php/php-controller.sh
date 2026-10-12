@@ -197,8 +197,8 @@ prepare_compose_tmp() {
         # '|' is the sed delimiter; escape replacement metacharacters.
         repl=$(printf '%s' "$host_project" | sed -e 's/[\\&|]/\\&/g')
         sed \
-            -e "s|- \\./|${repl}/|g" \
-            -e "s|- \\.:|${repl}:|g" \
+            -e "s|- \\./|- ${repl}/|g" \
+            -e "s|- \\.:|- ${repl}:|g" \
             -e 's|project_directory:[[:space:]]*\.[[:space:]]*$|project_directory: /project|' \
             -e 's|context:[[:space:]]*\.[[:space:]]*$|context: /project|' \
             -e 's|context:[[:space:]]*"\."[[:space:]]*$|context: /project|' \

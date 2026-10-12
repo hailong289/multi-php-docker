@@ -715,7 +715,6 @@ $sslC->deleteApp('ctrl-app');
 assert_true(!$sslC->filesPresent('ctrl-app'), 'deleteApp after destroy');
 
 use Manager\Models\PhpSnippetRunner;
-use Manager\Support\DockerExec;
 
 assert_true(
     PhpSnippetRunner::normalizeCode('echo 1;') === "<?php\necho 1;",
@@ -1568,5 +1567,43 @@ assert_true(($reset['event'] ?? '') === 'reset' && ($reset['content'] ?? '') ===
 unlink($followFile);
 $gone = $followLogs->readFollowChunk($followFile, 0, $followInode);
 assert_true(($gone['event'] ?? '') === 'gone', 'follow ends when file disappears');
+
+$rewriteDir = sys_get_temp_dir() . '/compose-rewrite-' . bin2hex(random_bytes(4));
+mkdir($rewriteDir, 0775, true);
+file_put_contents($rewriteDir . '/in.yml', <<<'YAML'
+services:
+  demo:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts:/scripts:ro
+      - .:/var/host-project
+YAML);
+$rewriteScript = <<<'SH'
+host_project="$1"
+in_file="$2"
+repl=$(printf '%s' "$host_project" | sed -e 's/[\\&|]/\\&/g')
+sed \
+  -e "s|- \\./|- ${repl}/|g" \
+  -e "s|- \\.:|- ${repl}:|g" \
+  "$in_file"
+SH;
+$rewriteOut = [];
+$rewriteCode = 0;
+exec('sh -c ' . escapeshellarg($rewriteScript) . ' sh ' . escapeshellarg('/opt/project') . ' ' . escapeshellarg($rewriteDir . '/in.yml'), $rewriteOut, $rewriteCode);
+$rewritten = implode("\n", $rewriteOut);
+assert_true($rewriteCode === 0, 'compose path rewrite runs');
+assert_true(str_contains($rewritten, '- /opt/project/scripts:/scripts:ro'), 'compose rewrite keeps list marker for ./');
+assert_true(str_contains($rewritten, '- /opt/project:/var/host-project'), 'compose rewrite keeps list marker for .:');
+assert_true(!preg_match('/^ {6}\//m', $rewritten), 'compose rewrite does not drop the dash');
+$rewriteSources = array_values(array_unique(array_filter([
+    dirname(__DIR__, 4) . '/scripts/php/php-controller.sh',
+    '/var/host-project/scripts/php/php-controller.sh',
+    dirname(__DIR__) . '/Support/DockerExec.php',
+], 'is_file')));
+foreach ($rewriteSources as $rewriteSource) {
+    $rewriteBody = (string) file_get_contents($rewriteSource);
+    assert_true(str_contains($rewriteBody, 's|- \\\\./|- ${repl}/|'), basename($rewriteSource) . ' rewrite keeps list marker');
+    assert_true(!str_contains($rewriteBody, 's|- \\\\./|${repl}/|'), basename($rewriteSource) . ' rewrite does not drop the dash');
+}
 
 echo "All checks passed\n";
