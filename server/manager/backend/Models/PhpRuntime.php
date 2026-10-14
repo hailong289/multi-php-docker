@@ -7,29 +7,35 @@ namespace Manager\Models;
 use Manager\Http\HttpException;
 use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
+use Manager\Support\ComposeJobs;
 use Manager\Support\Config;
 use Manager\Support\ContainerControl;
-use Manager\Support\ControllerRequests;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerImageIndex;
 use Manager\Support\DockerLiveState;
+use Manager\Support\ExtensionJobs;
 use Manager\Support\JsonFile;
 
 final class PhpRuntime
 {
     private readonly string $basePath;
 
-    private ?PhpControllerDaemon $daemon;
+    private readonly ?string $projectPath;
 
-    public function __construct(?string $basePath = null, ?PhpControllerDaemon $daemon = null)
-    {
+    private readonly ComposeJobs $jobs;
+
+    private readonly ExtensionJobs $extensions;
+
+    public function __construct(
+        ?string $basePath = null,
+        ?ComposeJobs $jobs = null,
+        ?ExtensionJobs $extensions = null,
+        ?string $projectPath = null,
+    ) {
         $this->basePath = rtrim($basePath ?? Config::phpControllerPath(), '/');
-        $this->daemon = $daemon;
-    }
-
-    private function daemon(): PhpControllerDaemon
-    {
-        return $this->daemon ??= new PhpControllerDaemon();
+        $this->projectPath = $projectPath;
+        $this->jobs = $jobs ?? new ComposeJobs();
+        $this->extensions = $extensions ?? new ExtensionJobs();
     }
 
     public static function targets(?string $projectPath = null): array
@@ -51,6 +57,7 @@ final class PhpRuntime
                 'supervisor_service' => PhpVersionId::supervisorService($service),
                 'image' => $image,
                 'image_present' => $imagePresent,
+                'removable' => PhpVersionInstaller::isRemovable($service, $projectPath),
             ];
         }
 
@@ -80,7 +87,7 @@ final class PhpRuntime
         $allowedStates = ['running', 'stopped', 'not_created', 'busy', 'error'];
         $statuses = [];
 
-        foreach (PhpVersionCatalog::versions() as $service => $config) {
+        foreach (PhpVersionCatalog::versions($this->projectPath) as $service => $config) {
             $status = [
                 'service' => $service,
                 'state' => 'not_created',
@@ -97,7 +104,7 @@ final class PhpRuntime
             ) {
                 $status = array_merge($status, array_intersect_key($decoded, $status));
             }
-            if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($service)) {
+            if ($this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
                 $status['message_key'] = 'php_controller.processing';
             } else {
@@ -113,19 +120,16 @@ final class PhpRuntime
         return $statuses;
     }
 
-    /** True when start/stop/restart/create/install-version/install-ext/uninstall-ext is queued — not modules probes. */
+    /** True while a compose helper or extension exec for this service is still running. */
     public function hasBlockingRequests(string $service): bool
     {
-        return ControllerRequests::hasBlocking(
-            $this->basePath . '/requests',
-            $service,
-            ['start', 'stop', 'restart', 'create', 'recreate', 'install-version', 'install-ext', 'uninstall-ext'],
-        );
+        return $this->jobs->blocks($this->basePath, $service)
+            || $this->extensions->blocks($this->basePath, $service);
     }
 
     public function request(string $service, string $action, ?string $extension = null): string
     {
-        $versions = PhpVersionCatalog::versions();
+        $versions = PhpVersionCatalog::versions($this->projectPath);
         if (!isset($versions[$service])) {
             throw new HttpException('php_controller.invalid_service', 400);
         }
@@ -148,8 +152,6 @@ final class PhpRuntime
             throw new HttpException('php_controller.invalid_action', 400);
         }
 
-        $this->daemon()->assertRunning();
-
         if (in_array($action, ['start', 'stop', 'restart'], true)) {
             $state = ContainerControl::apply((string) $versions[$service]['container'], $action);
             if ($state === null) {
@@ -160,31 +162,97 @@ final class PhpRuntime
             return bin2hex(random_bytes(16));
         }
 
-        $requestDir = $this->basePath . '/requests';
-        if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {
-            throw new HttpException('php_controller.request_failed', 500);
+        if ($action === 'modules' || $action === 'available-ext') {
+            $this->probe($service, (string) $versions[$service]['container'], $action);
+
+            return bin2hex(random_bytes(16));
         }
 
-        $requestId = bin2hex(random_bytes(16));
-        $payload = [
-            'request_id' => $requestId,
+        if ($action === 'install-ext' || $action === 'uninstall-ext') {
+            return $this->extensions->begin(
+                $this->basePath,
+                $service,
+                $action,
+                (string) $extension,
+                (string) $versions[$service]['container'],
+            );
+        }
+
+        return $this->jobs->begin($this->basePath, [
             'service' => $service,
             'action' => $action,
-            'requested_at' => date(DATE_ATOM),
-        ];
-        if ($action === 'install-ext' || $action === 'uninstall-ext') {
-            $payload['extension'] = $extension;
+        ]);
+    }
+
+    private function probe(string $service, string $container, string $action): void
+    {
+        $id = DockerExec::containerIdByName($container);
+        if ($id === null) {
+            throw new HttpException('php_controller.run_unavailable', 503);
         }
-        $request = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
-        $suffix = ($action === 'install-ext' || $action === 'uninstall-ext')
-            ? ($action . '-' . $extension)
-            : $action;
-        $finalPath = $requestDir . '/' . $requestId . '__' . $service . '__' . $suffix . '.json';
-        if (!AtomicFile::write($finalPath, $request)) {
-            throw new HttpException('php_controller.request_failed', 500);
+        if ($action === 'modules') {
+            $result = DockerExec::run($id, ['php', '-m'], '', 12);
+            $modules = [];
+            foreach (preg_split('/\r?\n/', $result['stdout']) ?: [] as $line) {
+                $line = trim($line);
+                if ($line === '' || str_starts_with($line, '[')) {
+                    continue;
+                }
+                $modules[] = $line;
+            }
+            $ok = $result['exit_code'] === 0 && $modules !== [];
+            $this->writeSidecar($service, 'modules.json', [
+                'service' => $service,
+                'modules' => $modules,
+                'updated_at' => gmdate('Y-m-d\TH:i:s\Z'),
+                'request_id' => '',
+                'ok' => $ok,
+            ]);
+
+            return;
         }
 
-        return $requestId;
+        $result = DockerExec::run($id, ['/bin/sh', '-c', 'docker-php-ext-install 2>&1'], '', 15);
+        $names = [];
+        $grab = false;
+        foreach (preg_split('/\r?\n/', $result['stdout'] . "\n" . $result['stderr']) ?: [] as $line) {
+            if (str_starts_with($line, 'Possible values for ext-name:')) {
+                $grab = true;
+                continue;
+            }
+            if (!$grab || trim($line) === '') {
+                continue;
+            }
+            foreach (preg_split('/\s+/', trim($line)) ?: [] as $name) {
+                $name = strtolower($name);
+                if (PhpExtensionCatalog::isValidName($name)) {
+                    $names[] = $name;
+                }
+            }
+            $grab = false;
+        }
+        $this->writeSidecar($service, 'available-ext.json', [
+            'service' => $service,
+            'extensions' => array_values(array_unique($names)),
+            'updated_at' => gmdate('Y-m-d\TH:i:s\Z'),
+            'request_id' => '',
+            'ok' => $names !== [],
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function writeSidecar(string $service, string $suffix, array $payload): void
+    {
+        $dir = $this->basePath . '/status';
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new HttpException('php_controller.request_failed', 500);
+        }
+        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+        if (!AtomicFile::write($dir . '/' . $service . '.' . $suffix, $json)) {
+            throw new HttpException('php_controller.request_failed', 500);
+        }
     }
 
     public function deleteContainer(string $service): void

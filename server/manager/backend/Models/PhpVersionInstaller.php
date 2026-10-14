@@ -7,13 +7,15 @@ namespace Manager\Models;
 use Manager\Http\HttpException;
 use Manager\Support\AtomicFile;
 use Manager\Support\Config;
+use Manager\Support\DockerExec;
+use Manager\Support\DockerLiveState;
 
 /** Writes compose/Dockerfile/ini/source assets for a new PHP version (+ alpine/trixie). */
 final class PhpVersionInstaller
 {
     public function __construct(
         private readonly string $projectPath = '',
-        private readonly ?PhpControllerDaemon $daemon = null,
+        private readonly ?PhpRuntime $runtime = null,
     ) {
     }
 
@@ -43,8 +45,6 @@ final class PhpVersionInstaller
             throw new HttpException('php_controller.version_already_installed', 409);
         }
 
-        ($this->daemon ?? new PhpControllerDaemon())->assertRunning();
-
         $root = $this->root();
         $this->writeDockerfile($version, $variant);
         $this->writeCompose($service, $version, $variant);
@@ -54,7 +54,7 @@ final class PhpVersionInstaller
         $this->ensureLogsDir($service);
         $this->ensureComposeInclude($service);
 
-        $runtime = new PhpRuntime();
+        $runtime = $this->runtime ?? new PhpRuntime(null, null, null, $this->root());
         $requestId = $runtime->request($service, 'install-version');
         $labelVersion = match ($variant) {
             'alpine' => $version . ' alpine',
@@ -302,6 +302,63 @@ YAML;
         );
     }
 
+    /** True when this service was added from the catalog (generated Dockerfile). */
+    public static function isRemovable(string $service, ?string $projectPath = null): bool
+    {
+        if (!PhpVersionId::isValidService($service)) {
+            return false;
+        }
+        $root = rtrim($projectPath ?? Config::projectPath(), '/');
+        $compose = $root . '/compose/' . $service . '.yml';
+        if (!is_file($compose) || !is_readable($compose)) {
+            return false;
+        }
+        $text = (string) file_get_contents($compose);
+
+        return (bool) preg_match('/dockerfile:\s*generated\//', $text);
+    }
+
+    /** Remove a catalog-added version: containers, image, compose include, and generated files. */
+    public function remove(string $service): void
+    {
+        if (!self::isRemovable($service, $this->root())) {
+            throw new HttpException('php_controller.version_not_removable', 400);
+        }
+        $runtime = $this->runtime ?? new PhpRuntime(null, null, null, $this->root());
+        if ($runtime->hasBlockingRequests($service)) {
+            throw new HttpException('php_controller.busy', 409);
+        }
+
+        if (DockerLiveState::available()) {
+            $phpContainer = PhpVersionId::container($service);
+            $supervisorContainer = PhpVersionId::supervisorContainer($service);
+            if (
+                !DockerExec::removeNamedContainer($phpContainer)
+                || !DockerExec::removeNamedContainer($supervisorContainer)
+            ) {
+                throw new HttpException('php_controller.version_remove_failed', 500);
+            }
+            DockerExec::removeImage('multi-php-local:' . $service);
+        }
+
+        $this->removeComposeInclude($service);
+        $compose = $this->root() . '/compose/' . $service . '.yml';
+        $text = is_file($compose) ? (string) file_get_contents($compose) : '';
+        if (preg_match('/dockerfile:\s*(generated\/[A-Za-z0-9._-]+)/', $text, $match) === 1) {
+            $dockerfile = $this->root() . '/docker_files/' . $match[1];
+            if (is_file($dockerfile)) {
+                unlink($dockerfile);
+            }
+        }
+        if (is_file($compose)) {
+            unlink($compose);
+        }
+        $this->removeTree($this->root() . '/' . PhpVersionId::iniDirRelative($service));
+        $this->removeTree($this->root() . '/' . PhpVersionId::supervisorConfDir($service));
+        $this->removeTree($this->root() . '/' . PhpVersionId::supervisorLogRelative($service));
+        $this->clearStatusFiles($service);
+    }
+
     /** Patch docker-compose.yml include when compose/{service}.yml already exists. */
     public function repairComposeInclude(string $service): void
     {
@@ -348,6 +405,72 @@ YAML;
             throw new HttpException('php_controller.compose_write_failed', 500);
         }
         $this->writeFile($path, $content);
+    }
+
+    private function removeComposeInclude(string $service): void
+    {
+        $path = $this->root() . '/docker-compose.yml';
+        if (!is_file($path) || !is_readable($path)) {
+            throw new HttpException('php_controller.compose_unreadable', 500);
+        }
+        $content = $this->normalizeNewlines((string) file_get_contents($path));
+        $pattern = '/^  - path: compose\/' . preg_quote($service, '/') . '\.yml\s*\n    project_directory: \.\s*\n/m';
+        $next = preg_replace($pattern, '', $content, 1);
+        if (!is_string($next) || $next === $content) {
+            throw new HttpException('php_controller.version_remove_failed', 500);
+        }
+        $this->writeFile($path, $next);
+    }
+
+    private function removeTree(string $path): void
+    {
+        if (!is_dir($path)) {
+            return;
+        }
+        $root = $this->root();
+        $realRoot = realpath($root);
+        $real = realpath($path);
+        if ($realRoot === false || $real === false || !str_starts_with($real, $realRoot . DIRECTORY_SEPARATOR)) {
+            return;
+        }
+        $items = scandir($real);
+        if ($items === false) {
+            return;
+        }
+        foreach ($items as $name) {
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $child = $real . DIRECTORY_SEPARATOR . $name;
+            if (is_dir($child)) {
+                $this->removeTree($child);
+            } else {
+                unlink($child);
+            }
+        }
+        rmdir($real);
+    }
+
+    private function clearStatusFiles(string $service): void
+    {
+        $dir = rtrim(Config::phpControllerPath(), '/') . '/status';
+        if (!is_dir($dir)) {
+            return;
+        }
+        $names = scandir($dir);
+        if ($names === false) {
+            return;
+        }
+        $prefix = $service . '.';
+        foreach ($names as $name) {
+            if ($name !== $service . '.json' && !str_starts_with($name, $prefix)) {
+                continue;
+            }
+            $path = $dir . '/' . $name;
+            if (is_file($path)) {
+                unlink($path);
+            }
+        }
     }
 
     private function mkdir(string $dir): void

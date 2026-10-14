@@ -54,11 +54,6 @@ const data = reactive({
   php_controllers: { targets: {}, statuses: {} },
   infra_services: { targets: {}, statuses: {}, compose_files: [] },
   supervisor_services: { targets: {}, statuses: {} },
-  php_controller_daemon: {
-    container: 'php_controller_container',
-    state: 'running',
-    start_available: false,
-  },
 })
 
 const form = reactive({
@@ -161,7 +156,7 @@ const hostsProgress = ref(null)
 const pullProgress = ref(null)
 let pullProgressTimer = null
 
-const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate', 'recreate'])
+const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate', 'recreate', 'install-version'])
 const PULL_PROGRESS_POLL_MS = 2000
 
 export function useManager() {
@@ -332,7 +327,6 @@ export function useManager() {
         break
       case 'php':
         if (payload.php_controllers) data.php_controllers = payload.php_controllers
-        if (payload.php_controller_daemon) data.php_controller_daemon = payload.php_controller_daemon
         break
       case 'infra':
         if (payload.infra_services) data.infra_services = payload.infra_services
@@ -523,7 +517,6 @@ export function useManager() {
     try {
       const payload = await apiGet('/api/infra-services')
       applySubsystem('infra', payload)
-      if (payload.php_controller_daemon) data.php_controller_daemon = payload.php_controller_daemon
       bootstrapped.value = true
       infraScreenLoaded.value = true
     } catch (error) {
@@ -865,19 +858,22 @@ export function useManager() {
     }
   }
 
-  async function startPhpControllerDaemon() {
-    return phpControllerDaemonAction('start')
-  }
-
-  async function phpControllerDaemonAction(action) {
-    pendingAction.value = { kind: 'php-daemon', action }
+  /** Remove a catalog-added PHP version (compose files, container, and image). */
+  async function removePhpVersion(service) {
+    const target = data.php_controllers?.targets?.[service]
+    if (!(await confirmDialog(t('php_controller.delete_version_confirm', {
+      version: target?.label || service,
+    }), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return false
+    pendingAction.value = { kind: 'php', service, action: 'delete-version' }
     try {
-      const result = await apiSend('POST', `/api/php-controller/${action}`, {})
+      const result = await apiSend('DELETE', `/api/php-controllers/${service}/version`, {})
       toastFromResult(result)
-      if (result.php_controller_daemon) data.php_controller_daemon = result.php_controller_daemon
+      if (result.php_controllers) data.php_controllers = result.php_controllers
+      await loadPhpScreen({ silent: true })
+      return true
     } catch (error) {
       showToast('failure', translateApiError(error))
-      return null
+      return false
     } finally {
       pendingAction.value = null
     }
@@ -1095,7 +1091,7 @@ export function useManager() {
 
     startPullProgress(job)
 
-    const deadline = Date.now() + 120_000
+    const deadline = Date.now() + 15 * 60_000
     while (Date.now() < deadline) {
       const current = pullProgress.value
       if (!current) break
@@ -1366,17 +1362,12 @@ export function useManager() {
     return false
   })
 
-  const phpControllerDaemonRunning = computed(
-    () => data.php_controller_daemon?.state === 'running',
-  )
-
   function phpServiceState(service) {
     return data.php_controllers.statuses[service]?.state || 'not_created'
   }
 
   function phpActionEnabled(service, action) {
     if (isPending('php', { service })) return false
-    if (!phpControllerDaemonRunning.value) return false
     const state = phpServiceState(service)
     const target = data.php_controllers.targets[service]
     if (action === 'create') {
@@ -1408,7 +1399,6 @@ export function useManager() {
 
   function infraActionEnabled(service, action) {
     if (isPending('infra', { service })) return false
-    if (!phpControllerDaemonRunning.value) return false
     const state = infraServiceState(service)
     const target = data.infra_services.targets[service]
     if (action === 'create') {
@@ -1440,7 +1430,6 @@ export function useManager() {
 
   function supervisorActionEnabled(service, action) {
     if (isPending('supervisor', { service })) return false
-    if (!phpControllerDaemonRunning.value) return false
     const state = supervisorServiceState(service)
     if (action === 'create') return state === 'not_created' || state === 'error'
     if (state === 'busy' || state === 'error' || state === 'not_created') return false
@@ -1452,7 +1441,6 @@ export function useManager() {
   function composeYamlActionEnabled(item, action) {
     if (item?.runtime !== 'compose') return false
     if (isPending('compose-file', { name: item.name, action })) return false
-    if (!phpControllerDaemonRunning.value) return false
     const state = item.state || 'not_created'
     if (action === 'create') return state === 'not_created' || state === 'error'
     if (action === 'recreate') return state === 'running' || state === 'stopped' || state === 'error'
@@ -1594,7 +1582,6 @@ export function useManager() {
     busy,
     pendingAction,
     dockerStatusBusy,
-    phpControllerDaemonRunning,
     modalOpen,
     bootstrapped,
     data,
@@ -1632,8 +1619,6 @@ export function useManager() {
     removeDomainEntry,
     reloadNginx,
     phpAction,
-    startPhpControllerDaemon,
-    phpControllerDaemonAction,
     infraAction,
     supervisorAction,
     openDomainEdit,
@@ -1651,6 +1636,8 @@ export function useManager() {
     stateLabel,
     phpServiceState,
     phpActionEnabled,
+    removePhpVersion,
+    waitForPullProgress,
     showCreateHint,
     infraServiceState,
     infraActionEnabled,

@@ -26,7 +26,9 @@ use Manager\Models\ComposeInclude;
 use Manager\Models\InfraCompose;
 use Manager\Models\InfraRuntime;
 use Manager\Models\NginxManagement;
-use Manager\Models\PhpControllerDaemon;
+use Manager\Support\ComposeJobs;
+use Manager\Support\ExtensionJobs;
+use Manager\Support\JobLock;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
 use Manager\Models\PhpRuntime;
@@ -171,15 +173,20 @@ assert_true($infraTargets['minio']['profile'] === 'minio', 'minio profile');
 assert_true($infraTargets['minio']['container'] === 'minio_container', 'minio container');
 assert_true($infraTargets['minio']['compose_file'] === 'compose/minio.yml', 'minio compose file');
 
-$runningDaemon = new PhpControllerDaemon(static fn (): string => 'running');
-$stoppedDaemon = new PhpControllerDaemon(static fn (): string => 'stopped');
-$missingDaemon = new PhpControllerDaemon(static fn (): string => 'not_created');
-$nullDaemon = new PhpControllerDaemon(static fn (): ?string => null);
+$jobs = new ComposeJobs(
+    static fn (): string => 'helper-test',
+    static fn (string $id): array => ['State' => ['Running' => true, 'Status' => 'running']],
+    static function (string $id): void {},
+);
+$extensions = new ExtensionJobs(
+    static fn (string $container, string $action, string $extension): string => 'exec-test',
+    static fn (string $id): array => ['Running' => true, 'ExitCode' => 0],
+);
 
 $infraTmp = sys_get_temp_dir() . '/infra-runtime-' . bin2hex(random_bytes(4));
 mkdir($infraTmp . '/requests', 0775, true);
 mkdir($infraTmp . '/status', 0775, true);
-$infra = new InfraRuntime($infraTmp, $runningDaemon);
+$infra = new InfraRuntime($infraTmp, $jobs);
 $statuses = $infra->statuses();
 $mysqlState = $statuses['mysql']['state'] ?? '';
 assert_true(
@@ -326,12 +333,14 @@ file_put_contents(
 $composeInclude = new ComposeInclude($composeProjDocker);
 $composeInclude->ensureIncluded('meilisearch.yml');
 assert_true($composeInclude->isIncluded('meilisearch.yml'), 'meilisearch included in docker-compose');
-$composeFileRuntime = new ComposeFileRuntime($infraTmp, $composeProj, $runningDaemon);
+$composeBase = sys_get_temp_dir() . '/compose-job-' . bin2hex(random_bytes(4));
+mkdir($composeBase . '/status', 0775, true);
+$composeFileRuntime = new ComposeFileRuntime($composeBase, $composeProj, $jobs);
 $composeReq = $composeFileRuntime->request('meilisearch.yml', 'create');
 assert_true(strlen($composeReq) === 32, 'compose file create request id');
 assert_true($composeFileRuntime->hasBlockingRequests('meilisearch.yml'), 'compose file blocking create');
 
-$logDir = $infraTmp . '/status';
+$logDir = $composeBase . '/status';
 file_put_contents($logDir . '/compose-file__meilisearch.yml.last-create.log', "create ok\n");
 file_put_contents(
     $logDir . '/compose-file__meilisearch.yml.json',
@@ -340,17 +349,25 @@ file_put_contents(
 $actionLogs = $composeFileRuntime->actionLogs('meilisearch.yml');
 assert_true(($actionLogs['state'] ?? '') === 'error', 'compose action logs state');
 assert_true(str_contains((string) ($actionLogs['content'] ?? ''), 'create ok'), 'compose action logs content');
-$pullId = (new InfraRuntime($infraTmp, $runningDaemon))->request('redis', 'pull-recreate');
+$pullBase = sys_get_temp_dir() . '/pull-job-' . bin2hex(random_bytes(4));
+mkdir($pullBase . '/status', 0775, true);
+$pullId = (new InfraRuntime($pullBase, $jobs))->request('redis', 'pull-recreate');
 assert_true(strlen($pullId) === 32, 'pull-recreate request id');
-assert_true((new InfraRuntime($infraTmp, $runningDaemon))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
+assert_true((new InfraRuntime($pullBase, $jobs))->hasBlockingRequests('redis'), 'redis blocking pull-recreate');
 try {
-    (new InfraRuntime($infraTmp, $runningDaemon))->request('rabbitmq', 'delete');
+    (new InfraRuntime($infraTmp, $jobs))->request('redis', 'pull-recreate');
+    assert_true(false, 'second compose must be busy');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.busy', 'compose lock is exclusive');
+}
+try {
+    (new InfraRuntime($infraTmp, $jobs))->request('rabbitmq', 'delete');
     assert_true(false, 'delete must use deleteContainer');
 } catch (\Manager\Http\HttpException $e) {
     assert_true($e->errorKey() === 'services.invalid_action', 'delete not queued');
 }
 try {
-    (new InfraRuntime($infraTmp, $runningDaemon))->request('rabbitmq', 'delete-image');
+    (new InfraRuntime($infraTmp, $jobs))->request('rabbitmq', 'delete-image');
     assert_true(false, 'delete-image must use deleteImage');
 } catch (\Manager\Http\HttpException $e) {
     assert_true($e->errorKey() === 'services.invalid_action', 'delete-image not queued');
@@ -487,17 +504,37 @@ file_put_contents(
     $installStoppedProj . '/docker-compose.yml',
     "include:\n  - path: compose/php-8.5.yml\n    project_directory: .\n\nservices: {}\n",
 );
-try {
-    (new PhpVersionInstaller($installStoppedProj, $stoppedDaemon))->install('8.6');
-    assert_true(false, 'PHP install must refuse when daemon stopped');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'PHP install refuse key');
-}
-assert_true(
-    !is_dir($installStoppedProj . '/docker_files/generated')
-        && !is_file($installStoppedProj . '/compose/php-8.6.yml'),
-    'PHP install wrote no files when daemon stopped',
+$installRuntime = new PhpRuntime($installStoppedProj, $jobs, $extensions, $installStoppedProj);
+$installed = (new PhpVersionInstaller($installStoppedProj, $installRuntime))->install('8.6');
+assert_true(strlen((string) ($installed['request_id'] ?? '')) === 32, 'PHP install starts compose helper');
+assert_true(is_file($installStoppedProj . '/compose/php-8.6.yml'), 'PHP install writes compose');
+assert_true((glob($installStoppedProj . '/requests/*.json') ?: []) === [], 'PHP install wrote no request files');
+assert_true(PhpVersionInstaller::isRemovable('php-8.6', $installStoppedProj), 'generated PHP version is removable');
+$shippedRoot = dirname(__DIR__, 4);
+assert_true(!PhpVersionInstaller::isRemovable('php-8.5', $shippedRoot), 'shipped PHP version is not removable');
+
+$removeProj = sys_get_temp_dir() . '/php-remove-' . bin2hex(random_bytes(4));
+mkdir($removeProj . '/compose', 0775, true);
+file_put_contents(
+    $removeProj . '/docker-compose.yml',
+    "include:\n  - path: compose/php-8.5.yml\n    project_directory: .\n\nservices: {}\n",
 );
+$removeJobs = new ComposeJobs(
+    static fn (): string => 'helper-test',
+    static fn (string $id): array => ['State' => ['Running' => false]],
+    static function (string $id): void {},
+);
+$removeRuntime = new PhpRuntime($removeProj, $removeJobs, $extensions, $removeProj);
+(new PhpVersionInstaller($removeProj, $removeRuntime))->install('8.6');
+(new PhpVersionInstaller($removeProj, $removeRuntime))->remove('php-8.6');
+assert_true(!is_file($removeProj . '/compose/php-8.6.yml'), 'remove deletes generated compose');
+assert_true(!str_contains((string) file_get_contents($removeProj . '/docker-compose.yml'), 'php-8.6.yml'), 'remove drops compose include');
+try {
+    (new PhpVersionInstaller($shippedRoot))->remove('php-8.5');
+    assert_true(false, 'shipped version remove must fail');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.version_not_removable', 'shipped version is not removable');
+}
 
 $envMissingDir = sys_get_temp_dir() . '/mgr-env-missing-' . bin2hex(random_bytes(4));
 mkdir($envMissingDir, 0775, true);
@@ -814,340 +851,77 @@ try {
     assert_true($e->errorKey() === 'php_controller.session_not_found', 'scratch rejects missing session');
 }
 
-$runningStatus = $runningDaemon->status();
-assert_true($runningStatus['container'] === 'php_controller_container', 'daemon container name');
-assert_true($runningStatus['state'] === 'running', 'daemon running state');
-assert_true($runningStatus['start_available'] === false, 'daemon running not startable');
-
-$stoppedStatus = $stoppedDaemon->status();
-assert_true($stoppedStatus['state'] === 'stopped', 'daemon stopped state');
-assert_true($stoppedStatus['start_available'] === true, 'daemon stopped is startable');
-
-$missingStatus = $missingDaemon->status();
-assert_true($missingStatus['state'] === 'not_created', 'daemon missing state');
-assert_true($missingStatus['start_available'] === false, 'daemon missing not startable');
-
-$nullStatus = $nullDaemon->status();
-assert_true($nullStatus['state'] === 'not_created', 'daemon probe-null aliases not_created');
-assert_true($nullStatus['start_available'] === false, 'daemon probe-null not startable');
-
-$runningDaemon->assertRunning();
-
-try {
-    $stoppedDaemon->assertRunning();
-    assert_true(false, 'stopped daemon must fail assertRunning');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'assertRunning key');
-    assert_true($e->status() === 409, 'assertRunning 409');
-}
-
-$already = $runningDaemon->start();
-assert_true($already['message_key'] === 'php_controller.daemon_already_running', 'start no-op when running');
-assert_true($already['php_controller_daemon']['state'] === 'running', 'start no-op status');
-
-try {
-    $missingDaemon->start();
-    assert_true(false, 'start missing must 409');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'start missing key');
-    assert_true($e->status() === 409, 'start missing 409');
-}
-
-$nullStart = new PhpControllerDaemon(static fn (): ?string => null);
-try {
-    $nullStart->start();
-    assert_true(false, 'start probe-null must 503');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_docker_unavailable', 'start probe-null key');
-    assert_true($e->status() === 503, 'start probe-null 503');
-}
-
-$started = new PhpControllerDaemon(
-    static fn (): string => 'stopped',
-    static fn (): int => 204,
-);
-$startOk = $started->start();
-assert_true($startOk['message_key'] === 'php_controller.daemon_started', 'start 204 key');
-assert_true($startOk['php_controller_daemon']['state'] === 'running', 'start 204 reports running');
-assert_true($startOk['php_controller_daemon']['start_available'] === false, 'start 204 not startable');
-assert_true($startOk['php_controller_daemon']['create_available'] === false, 'start 204 not creatable');
-assert_true($runningStatus['create_available'] === false, 'daemon running not creatable');
-assert_true($missingStatus['create_available'] === true, 'daemon missing is creatable');
-
-$createState = 'not_created';
-$createStateful = new PhpControllerDaemon(
-    static function () use (&$createState): string {
-        return $createState;
-    },
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    static function () use (&$createState): bool {
-        $createState = 'running';
-
-        return true;
-    },
-);
-$createOkResult = $createStateful->create();
-assert_true($createOkResult['message_key'] === 'php_controller.daemon_created', 'create ok key');
-assert_true($createOkResult['php_controller_daemon']['state'] === 'running', 'create ok state');
-assert_true($createOkResult['php_controller_daemon']['create_available'] === false, 'create ok not creatable');
-
-$createAlready = new PhpControllerDaemon(static fn (): string => 'stopped');
-$createAlreadyResult = $createAlready->create();
-assert_true($createAlreadyResult['message_key'] === 'php_controller.daemon_already_installed', 'create already key');
-
-$createFail = new PhpControllerDaemon(
-    static fn (): string => 'not_created',
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    static fn (): bool => false,
-);
-try {
-    $createFail->create();
-    assert_true(false, 'create fail must 502');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_create_failed', 'create fail key');
-    assert_true($e->status() === 502, 'create fail 502');
-}
-
-$started304 = new PhpControllerDaemon(
-    static fn (): string => 'stopped',
-    static fn (): int => 304,
-);
-assert_true($started304->start()['message_key'] === 'php_controller.daemon_started', 'start 304 key');
-
-$started404 = new PhpControllerDaemon(
-    static fn (): string => 'stopped',
-    static fn (): int => 404,
-);
-try {
-    $started404->start();
-    assert_true(false, 'start 404 must 409');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'start 404 key');
-    assert_true($e->status() === 409, 'start 404 409');
-}
-
-$startedFail = new PhpControllerDaemon(
-    static fn (): string => 'stopped',
-    static fn (): int => 500,
-);
-try {
-    $startedFail->start();
-    assert_true(false, 'start 500 must 502');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_start_failed', 'start 500 key');
-    assert_true($e->status() === 502, 'start 500 502');
-}
-
-$stopAlready = new PhpControllerDaemon(static fn (): string => 'stopped');
-$stopAlreadyResult = $stopAlready->stop();
-assert_true($stopAlreadyResult['message_key'] === 'php_controller.daemon_already_stopped', 'stop already key');
-assert_true($stopAlreadyResult['php_controller_daemon']['state'] === 'stopped', 'stop already state');
-
-$stopOk = new PhpControllerDaemon(
-    static fn (): string => 'running',
-    null,
-    static fn (): bool => true,
-);
-$stopOkResult = $stopOk->stop();
-assert_true($stopOkResult['message_key'] === 'php_controller.daemon_stopped', 'stop ok key');
-assert_true($stopOkResult['php_controller_daemon']['state'] === 'stopped', 'stop ok state');
-assert_true($stopOkResult['php_controller_daemon']['start_available'] === true, 'stop ok startable');
-
-$stopFail = new PhpControllerDaemon(
-    static fn (): string => 'running',
-    null,
-    static fn (): bool => false,
-);
-try {
-    $stopFail->stop();
-    assert_true(false, 'stop fail must 502');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_stop_failed', 'stop fail key');
-    assert_true($e->status() === 502, 'stop fail 502');
-}
-
-try {
-    $missingDaemon->stop();
-    assert_true(false, 'stop missing must 409');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'stop missing key');
-}
-
-$restartOk = new PhpControllerDaemon(
-    static fn (): string => 'running',
-    null,
-    null,
-    static fn (): bool => true,
-);
-$restartOkResult = $restartOk->restart();
-assert_true($restartOkResult['message_key'] === 'php_controller.daemon_restarted', 'restart ok key');
-assert_true($restartOkResult['php_controller_daemon']['state'] === 'running', 'restart ok state');
-
-$restartFail = new PhpControllerDaemon(
-    static fn (): string => 'stopped',
-    null,
-    null,
-    static fn (): bool => false,
-);
-try {
-    $restartFail->restart();
-    assert_true(false, 'restart fail must 502');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_restart_failed', 'restart fail key');
-}
-
-try {
-    $missingDaemon->restart();
-    assert_true(false, 'restart missing must 409');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'restart missing key');
-}
-
-$removeOk = new PhpControllerDaemon(
-    static fn (): string => 'stopped',
-    null,
-    null,
-    null,
-    static fn (): bool => true,
-);
-$removeOkResult = $removeOk->remove();
-assert_true($removeOkResult['message_key'] === 'php_controller.daemon_removed', 'remove ok key');
-assert_true($removeOkResult['php_controller_daemon']['state'] === 'not_created', 'remove ok state');
-
-$removeFail = new PhpControllerDaemon(
-    static fn (): string => 'running',
-    null,
-    null,
-    null,
-    static fn (): bool => false,
-);
-try {
-    $removeFail->remove();
-    assert_true(false, 'remove fail must 502');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_remove_failed', 'remove fail key');
-}
-
-try {
-    $missingDaemon->remove();
-    assert_true(false, 'remove missing must 409');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'remove missing key');
-}
-
-$nullLifecycle = new PhpControllerDaemon(static fn (): ?string => null);
-try {
-    $nullLifecycle->stop();
-    assert_true(false, 'stop probe-null must 503');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_docker_unavailable', 'stop probe-null key');
-    assert_true($e->status() === 503, 'stop probe-null 503');
-}
-
-$detailsDaemon = new PhpControllerDaemon(
-    static fn (): string => 'running',
-    null,
-    null,
-    null,
-    null,
-    static fn (): array => [
-        'Config' => ['Image' => 'docker:cli'],
-        'Created' => '2026-01-01T00:00:00Z',
-        'State' => ['StartedAt' => '2026-01-02T00:00:00Z'],
-    ],
-);
-$details = $detailsDaemon->details();
-assert_true($details['image'] === 'docker:cli', 'details image');
-assert_true($details['created'] === '2026-01-01T00:00:00Z', 'details created');
-assert_true($details['started_at'] === '2026-01-02T00:00:00Z', 'details started_at');
-
-$logsDaemon = new PhpControllerDaemon(
-    static fn (): string => 'running',
-    null,
-    null,
-    null,
-    null,
-    null,
-    static fn (int $tail): string => "line\n",
-);
-$logs = $logsDaemon->logs(50);
-assert_true($logs['container'] === 'php_controller_container', 'logs container');
-assert_true($logs['content'] === "line\n", 'logs content');
-
-try {
-    $missingDaemon->logs();
-    assert_true(false, 'logs missing must 409');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_created', 'logs missing key');
-}
-
 $phpTmp = sys_get_temp_dir() . '/php-runtime-' . bin2hex(random_bytes(4));
 mkdir($phpTmp . '/requests', 0775, true);
 mkdir($phpTmp . '/status', 0775, true);
 
-$phpStopped = new PhpRuntime($phpTmp, $stoppedDaemon);
-try {
-    $phpStopped->request('php-8.5', 'start');
-    assert_true(false, 'php request must refuse when daemon stopped');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'php request refuse key');
+$repoRoot = dirname(__DIR__, 4);
+if (!is_dir($repoRoot . '/compose')) {
+    $repoRoot = '/var/host-project';
 }
-$phpReqFiles = glob($phpTmp . '/requests/*.json') ?: [];
-assert_true($phpReqFiles === [], 'php request wrote no files');
+$phpRuntime = new PhpRuntime($phpTmp, $jobs, $extensions, $repoRoot);
+$phpCreate = $phpRuntime->request('php-8.5', 'create');
+assert_true(strlen($phpCreate) === 32, 'php create request id');
+assert_true($phpRuntime->hasBlockingRequests('php-8.5'), 'php create blocks');
+assert_true((glob($phpTmp . '/requests/*.json') ?: []) === [], 'php request wrote no files');
+try {
+    $phpRuntime->request('php-8.4', 'create');
+    assert_true(false, 'second compose must be busy');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.busy', 'php compose lock is exclusive');
+}
+$extId = $phpRuntime->request('php-8.4', 'install-ext', 'redis');
+assert_true(strlen($extId) === 32, 'extension on another service is allowed');
+try {
+    $phpRuntime->request('php-8.5', 'install-ext', 'redis');
+    assert_true(false, 'extension on compose target must be busy');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.busy', 'extension blocked by compose on same service');
+}
+$staleBase = sys_get_temp_dir() . '/stale-lock-' . bin2hex(random_bytes(4));
+mkdir($staleBase . '/status', 0775, true);
+$stalePath = JobLock::path($staleBase, JobLock::COMPOSE);
+file_put_contents($stalePath, json_encode([
+    'service' => 'mysql',
+    'action' => 'create',
+    'request_id' => str_repeat('a', 32),
+    'container_id' => '',
+    'started_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 30),
+]) . "\n");
+$staleJobs = new ComposeJobs(static fn (): string => 'helper-test');
+$staleJobs->reconcile($staleBase);
+assert_true(!is_file($stalePath), 'lock without container id older than 15s is removed');
 
 $supervisorTmp = sys_get_temp_dir() . '/supervisor-runtime-' . bin2hex(random_bytes(4));
-mkdir($supervisorTmp . '/requests', 0775, true);
-$supervisorStopped = new SupervisorRuntime($supervisorTmp, Config::projectPath(), $stoppedDaemon);
-try {
-    $supervisorStopped->request('supervisor-8.5', 'restart');
-    assert_true(false, 'supervisor request must refuse when daemon stopped');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'supervisor request refuse key');
-}
+mkdir($supervisorTmp . '/status', 0775, true);
+$supervisorRuntime = new SupervisorRuntime($supervisorTmp, $repoRoot, $jobs);
+$supervisorCreate = $supervisorRuntime->request('supervisor-8.5', 'create');
+assert_true(strlen($supervisorCreate) === 32, 'supervisor create request id');
 assert_true((glob($supervisorTmp . '/requests/*.json') ?: []) === [], 'supervisor request wrote no files');
-
-$infraStopped = new InfraRuntime($infraTmp, $stoppedDaemon);
-try {
-    $infraStopped->request('mysql', 'start');
-    assert_true(false, 'infra request must refuse when daemon stopped');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'infra request refuse key');
-}
 
 $nginxTmp = sys_get_temp_dir() . '/nginx-mgmt-' . bin2hex(random_bytes(4));
 mkdir($nginxTmp . '/requests', 0775, true);
 mkdir($nginxTmp . '/status', 0775, true);
 file_put_contents($nginxTmp . '/requests/aaa__nginx__start.json', "{}\n");
-$nginxBusyDown = new NginxManagement($nginxTmp, '', '', $stoppedDaemon);
+$nginxBusyDown = new NginxManagement($nginxTmp, '', '', $jobs);
 $nginxStatusDown = $nginxBusyDown->status();
-assert_true(($nginxStatusDown['state'] ?? '') !== 'busy', 'nginx not busy overlay when daemon down');
+assert_true(($nginxStatusDown['state'] ?? '') !== 'busy', 'nginx not busy from a leftover request file');
 @unlink($nginxTmp . '/requests/aaa__nginx__start.json');
-try {
-    $nginxBusyDown->requestAction('start');
-    assert_true(false, 'nginx request must refuse when daemon stopped');
-} catch (HttpException $e) {
-    assert_true($e->errorKey() === 'php_controller.daemon_not_running', 'nginx request refuse key');
-}
 assert_true((glob($nginxTmp . '/requests/*.json') ?: []) === [], 'nginx request wrote no files');
 
 file_put_contents($infraTmp . '/requests/ccc__mysql__start.json', "{}\n");
-$infraBusyDown = new InfraRuntime($infraTmp, $stoppedDaemon);
+$infraBusyDown = new InfraRuntime($infraTmp, $jobs);
 $downStatuses = $infraBusyDown->statuses();
 assert_true(($downStatuses['mysql']['state'] ?? '') !== 'busy', 'mysql not busy overlay when daemon down');
 
 file_put_contents($phpTmp . '/requests/ddd__php-8.5__start.json', "{}\n");
-$phpStatusesDown = $phpStopped->statuses();
-assert_true(($phpStatusesDown['php-8.5']['state'] ?? '') !== 'busy', 'PHP not busy overlay when daemon down');
+$cleanPhp = sys_get_temp_dir() . '/php-clean-' . bin2hex(random_bytes(4));
+mkdir($cleanPhp . '/requests', 0775, true);
+mkdir($cleanPhp . '/status', 0775, true);
+file_put_contents($cleanPhp . '/requests/ddd__php-8.5__start.json', "{}\n");
+$cleanRuntime = new PhpRuntime($cleanPhp, $jobs, $extensions, $repoRoot);
+$phpStatusesDown = $cleanRuntime->statuses();
+assert_true(($phpStatusesDown['php-8.5']['state'] ?? '') !== 'busy', 'leftover request file does not mark PHP busy');
 
 $dcDefaults = DockerConnection::defaults();
 assert_true($dcDefaults['mode'] === DockerConnection::MODE_LOCAL, 'docker connection default mode local');
@@ -1368,13 +1142,7 @@ foreach ($routes as $route) {
         $dockerConnectionRouteKeys[] = ($route[0] ?? '') . ' ' . ($route[1] ?? '');
     }
 }
-assert_true(in_array('GET /php-controller', $phpControllerRouteKeys, true), 'GET /php-controller route registered');
-assert_true(in_array('POST /php-controller/create', $phpControllerRouteKeys, true), 'POST /php-controller/create route registered');
-assert_true(in_array('POST /php-controller/start', $phpControllerRouteKeys, true), 'POST /php-controller/start route registered');
-assert_true(in_array('POST /php-controller/stop', $phpControllerRouteKeys, true), 'POST /php-controller/stop route registered');
-assert_true(in_array('POST /php-controller/restart', $phpControllerRouteKeys, true), 'POST /php-controller/restart route registered');
-assert_true(in_array('POST /php-controller/remove', $phpControllerRouteKeys, true), 'POST /php-controller/remove route registered');
-assert_true(in_array('GET /php-controller/logs', $phpControllerRouteKeys, true), 'GET /php-controller/logs route registered');
+assert_true($phpControllerRouteKeys === [], 'daemon php-controller routes removed');
 assert_true(in_array('GET /docker-connection', $dockerConnectionRouteKeys, true), 'GET /docker-connection route registered');
 assert_true(in_array('PUT /docker-connection', $dockerConnectionRouteKeys, true), 'PUT /docker-connection route registered');
 assert_true(in_array('POST /docker-connection/test', $dockerConnectionRouteKeys, true), 'POST /docker-connection/test route registered');
@@ -1386,10 +1154,7 @@ $bootCtrl = new class extends \Manager\Controllers\Controller {
     }
 };
 $boot = $bootCtrl->payload();
-assert_true(isset($boot['php_controller_daemon']['container']), 'bootstrap daemon key');
-assert_true($boot['php_controller_daemon']['container'] === 'php_controller_container', 'bootstrap daemon container');
-assert_true(in_array($boot['php_controller_daemon']['state'], ['running', 'stopped', 'not_created'], true), 'bootstrap daemon state');
-assert_true(array_key_exists('start_available', $boot['php_controller_daemon']), 'bootstrap start_available');
+assert_true(!isset($boot['php_controller_daemon']), 'bootstrap has no php-controller daemon');
 
 use Manager\Models\SourceLogs;
 

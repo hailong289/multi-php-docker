@@ -11,8 +11,8 @@ mkdir -p "$REQUEST_DIR" "$STATUS_DIR"
 # php-controller runs with a read-only rootfs; point Docker CLI config at tmpfs.
 mkdir -p "${DOCKER_CONFIG:-/tmp/docker-config}"
 
-# Optional remote Docker endpoint written by Server Manager (Quản lý Docker CLI).
-if [ -f "$BASE_DIR/docker.env" ]; then
+# Optional remote Docker endpoint. Explicit DOCKER_HOST from the helper wins.
+if [ -z "${DOCKER_HOST:-}" ] && [ -f "$BASE_DIR/docker.env" ]; then
     # shellcheck disable=SC1090
     set -a
     # shellcheck disable=SC1091
@@ -161,12 +161,16 @@ run_retrying_hub() {
     max=4
     while :; do
         log=$(mktemp /tmp/hub-retry.XXXXXX) || return 1
-        if "$@" >"$log" 2>&1; then
-            cat "$log"
+        # tee so the caller redirect (status/*.last-*.log) grows while compose
+        # runs. The progress panel polls that file; buffering until exit left it empty.
+        set -o pipefail
+        "$@" 2>&1 | tee "$log"
+        status=$?
+        set +o pipefail
+        if [ "$status" -eq 0 ]; then
             rm -f "$log"
             return 0
         fi
-        cat "$log"
         if [ "$attempt" -ge "$max" ] || ! hub_dns_failure "$log"; then
             rm -f "$log"
             return 1
@@ -698,7 +702,7 @@ EOF2
     else
         write_compose_file_status "$queue_key" "error" "php_controller.action_failed" "$request_id" "$target_compose_file"
     fi
-    rm -f "$request_file"
+    drop_request_file "$request_file"
 }
 
 container_state() {
@@ -750,6 +754,12 @@ refresh_managed_services() {
     done
 }
 
+drop_request_file() {
+    if [ -n "${1:-}" ]; then
+        rm -f "$1"
+    fi
+}
+
 reject_request() {
     request_file="$1"
     updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -757,7 +767,7 @@ reject_request() {
     printf '{"state":"error","message_key":"php_controller.invalid_request","updated_at":"%s"}\n' \
         "$updated_at" > "$temp_file"
     mv "$temp_file" "$STATUS_DIR/last-error.json"
-    rm -f "$request_file"
+    drop_request_file "$request_file"
 }
 
 write_modules_sidecar() {
@@ -882,274 +892,133 @@ parse_request_fields() {
     return 0
 }
 
-refresh_managed_services
 
-last_refresh=0
-while true; do
-    handled=0
-    for request_file in "$REQUEST_DIR"/*.json; do
-        [ -e "$request_file" ] || break
-        handled=1
-        state=""
-        request=$(tr -d '\r\n' < "$request_file")
+if [ "${1:-}" = "once" ]; then
+    # The script is bind-mounted without +x (and the mount may be noexec).
+    # timeout must invoke it through sh, same as the container command.
+    exec timeout 600 /bin/sh "$0" once-run
+fi
+if [ "${1:-}" != "once-run" ]; then
+    printf '%s\n' "usage: php-controller.sh once" >&2
+    exit 1
+fi
 
-        if printf '%s' "$request" | grep -q '"compose_file"'; then
-            if parse_compose_file_request "$request"; then
-                handle_compose_file_request "$request" "$request_file"
-            else
-                reject_request "$request_file"
-            fi
-            continue
-        fi
-
-        if ! parse_request_fields "$request"; then
-            reject_request "$request_file"
-            continue
-        fi
-
-        request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
-        service=$(printf '%s' "$request" | sed -n 's/^.*"service":"\([^"]*\)".*$/\1/p')
-        action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
-        extension=$(printf '%s' "$request" | sed -n 's/^.*"extension":"\([a-z0-9_]*\)".*$/\1/p')
-        if [ "$service" = "nginx" ] && [ "$action" = "install-version" ]; then
-            reject_request "$request_file"
-            continue
-        fi
-        if is_infra_service "$service" && [ "$action" = "install-version" ]; then
-            reject_request "$request_file"
-            continue
-        fi
-        if is_supervisor_service "$service" && [ "$action" = "install-version" ]; then
-            reject_request "$request_file"
-            continue
-        fi
-        container=$(container_for_service "$service") || {
-            reject_request "$request_file"
-            continue
-        }
-
-        if [ "$action" = "modules" ]; then
-            # Do not flip lifecycle status to busy — probes must not block install/enable UI.
-            if [ "$(container_state "$container")" = "running" ] && write_modules_sidecar "$service" "$container" "$request_id"; then
-                write_status "$service" "running" "php_controller.action_success" "$request_id"
-            else
-                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
-            fi
-            rm -f "$request_file"
-            continue
-        fi
-
-        if [ "$action" = "available-ext" ]; then
-            if [ "$(container_state "$container")" = "running" ] && write_available_sidecar "$service" "$container" "$request_id"; then
-                write_status "$service" "running" "php_controller.action_success" "$request_id"
-            else
-                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
-            fi
-            rm -f "$request_file"
-            continue
-        fi
-
-        if [ "$action" = "install-ext" ]; then
-            write_status "$service" "busy" "php_controller.processing" "$request_id"
-            ok=0
-            if [ "$(container_state "$container")" = "running" ]; then
-                if "$SCRIPT_DIR/php-ext-install.sh" "$container" "$extension" \
-                    >"$STATUS_DIR/$service.last-install.log" 2>&1; then
-                    ok=1
-                    write_modules_sidecar "$service" "$container" "$request_id" || true
-                fi
-            fi
-            state=$(container_state "$container")
-            if [ "$ok" -eq 1 ]; then
-                write_status "$service" "$state" "php_controller.action_success" "$request_id"
-            else
-                write_status "$service" "$state" "php_controller.action_failed" "$request_id"
-            fi
-            rm -f "$request_file"
-            continue
-        fi
-
-        if [ "$action" = "uninstall-ext" ]; then
-            write_status "$service" "busy" "php_controller.processing" "$request_id"
-            ok=0
-            if [ "$(container_state "$container")" = "running" ]; then
-                if "$SCRIPT_DIR/php-ext-uninstall.sh" "$container" "$extension" \
-                    >"$STATUS_DIR/$service.last-uninstall.log" 2>&1; then
-                    ok=1
-                    write_modules_sidecar "$service" "$container" "$request_id" || true
-                fi
-            fi
-            state=$(container_state "$container")
-            if [ "$ok" -eq 1 ]; then
-                write_status "$service" "$state" "php_controller.action_success" "$request_id"
-            else
-                write_status "$service" "$state" "php_controller.action_failed" "$request_id"
-            fi
-            rm -f "$request_file"
-            continue
-        fi
-
-        write_status "$service" "busy" "php_controller.processing" "$request_id"
-        ok=0
-        if [ "$action" = "install-version" ] || [ "$action" = "create" ] || [ "$action" = "pull-recreate" ] || [ "$action" = "recreate" ]; then
-            profile=$(profile_for_service "$service") || {
-                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
-                rm -f "$request_file"
-                continue
-            }
-            host_project=$(resolve_host_project) || true
-            if [ -z "$host_project" ]; then
-                write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
-                rm -f "$request_file"
-                continue
-            fi
-            project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
-            if [ -z "$project_name" ]; then
-                project_name=$(basename "$host_project")
-            fi
-            tmp_dir="/tmp/compose-create.$$"
-            prepare_compose_tmp "$host_project" "$tmp_dir"
-            if [ "$action" = "pull-recreate" ]; then
-                if is_infra_service "$service" && run_compose_pull_recreate "$project_name" "$tmp_dir/docker-compose.yml" \
-                    "$profile" "$service" >"$STATUS_DIR/$service.last-pull-recreate.log" 2>&1; then
-                    ok=1
-                else
-                    cp "$STATUS_DIR/$service.last-pull-recreate.log" "$STATUS_DIR/last-pull-recreate-error.log" 2>/dev/null || true
-                fi
-            elif [ "$action" = "recreate" ]; then
-                log_file="$STATUS_DIR/$service.last-recreate.log"
-                : >"$log_file"
-                if run_compose_file_build "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 \
-                    && run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
-                    ok=1
-                else
-                    cp "$log_file" "$STATUS_DIR/last-recreate-error.log" 2>/dev/null || true
-                fi
-            elif [ "$action" = "install-version" ]; then
-                if run_compose_build_up "$project_name" "$tmp_dir/docker-compose.yml" \
-                    "$profile" "$service" >"$STATUS_DIR/$service.last-install-version.log" 2>&1; then
-                    ok=1
-                fi
-            elif is_infra_service "$service"; then
-                log_file="$STATUS_DIR/$service.last-create.log"
-                : >"$log_file"
-                if run_compose_pull_create "$project_name" "$tmp_dir/docker-compose.yml" \
-                    "$profile" "$service" >>"$log_file" 2>&1; then
-                    ok=1
-                else
-                    cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
-                fi
-            elif is_supervisor_service "$service"; then
-                log_file="$STATUS_DIR/$service.last-create.log"
-                : >"$log_file"
-                if run_compose_create_or_pull "$project_name" "$tmp_dir/docker-compose.yml" \
-                    "$profile" "$service" >>"$log_file" 2>&1; then
-                    ok=1
-                else
-                    cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
-                fi
-            else
-                log_file="$STATUS_DIR/$service.last-create.log"
-                : >"$log_file"
-                if run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
-                    "$profile" "$service" >>"$log_file" 2>&1; then
-                    ok=1
-                else
-                    cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
-                fi
-            fi
-            rm -rf "$tmp_dir"
-        elif [ "$action" = "delete" ]; then
-            delete_log_file="$STATUS_DIR/$service.last-delete.log"
-            : >"$delete_log_file"
-            if is_infra_service "$service"; then
-                profile=$(profile_for_service "$service") || true
-                host_project=$(resolve_host_project) || true
-                if [ -n "$profile" ] && [ -n "$host_project" ]; then
-                    project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
-                    if [ -z "$project_name" ]; then
-                        project_name=$(basename "$host_project")
-                    fi
-                    tmp_dir="/tmp/compose-delete.$$"
-                    prepare_compose_tmp "$host_project" "$tmp_dir"
-                    run_compose_rm "$project_name" "$tmp_dir/docker-compose.yml" \
-                        "$profile" "$service" >>"$delete_log_file" 2>&1 || true
-                    rm -rf "$tmp_dir"
-                fi
-                if docker inspect "$container" >/dev/null 2>&1; then
-                    if docker rm -f "$container" >>"$delete_log_file" 2>&1; then
-                        ok=1
-                    fi
-                else
-                    ok=1
-                fi
-            fi
-        elif [ "$action" = "start" ]; then
-            start_log_file="$STATUS_DIR/$service.last-start.log"
-            : >"$start_log_file"
-            if docker start "$container" >>"$start_log_file" 2>&1; then
-                state=$(container_state "$container")
-                if [ "$state" = "running" ]; then
-                    ok=1
-                else
-                    docker logs --tail 40 "$container" >>"$start_log_file" 2>&1 || true
-                fi
-            else
-                profile=$(profile_for_service "$service") || true
-                host_project=$(resolve_host_project) || true
-                if { [ "$service" = "nginx" ] || [ -n "$profile" ]; } && [ -n "$host_project" ]; then
-                    project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
-                    if [ -z "$project_name" ]; then
-                        project_name=$(basename "$host_project")
-                    fi
-                    tmp_dir="/tmp/compose-start.$$"
-                    prepare_compose_tmp "$host_project" "$tmp_dir"
-                    if run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" \
-                        "$profile" "$service" >>"$start_log_file" 2>&1; then
-                        ok=1
-                    else
-                        cp "$start_log_file" "$STATUS_DIR/last-start-error.log" 2>/dev/null || true
-                    fi
-                    rm -rf "$tmp_dir"
-                fi
-            fi
-        elif docker "$action" "$container" >/dev/null 2>&1; then
-            ok=1
-        fi
-
-        if [ -z "$state" ]; then
-            state=$(container_state "$container")
-        fi
-        if [ "$action" = "delete" ] && [ "$ok" -eq 1 ]; then
-            state="not_created"
-        fi
-        if [ "$ok" -eq 1 ]; then
-            write_status "$service" "$state" "php_controller.action_success" "$request_id"
-        else
-            # Failed create/install with no container → error so UI can retry Create.
-            if [ "$state" = "not_created" ] && {
-                [ "$action" = "create" ] || [ "$action" = "install-version" ] || [ "$action" = "pull-recreate" ] || [ "$action" = "recreate" ]
-            }; then
-                state="error"
-            fi
-            write_status "$service" "$state" "php_controller.action_failed" "$request_id"
-        fi
-        rm -f "$request_file"
-    done
-    # A start file that arrived during this pass must be handled before the
-    # status refresh. docker ps plus rewriting every service was sitting on
-    # the next Khởi động.
-    set -- "$REQUEST_DIR"/*.json
-    if [ -e "$1" ]; then
-        continue
+on_term() {
+    trap - TERM INT
+    if [ -n "${queue_key:-}" ]; then
+        write_compose_file_status "$queue_key" "error" "php_controller.action_failed" "${request_id:-}" "${target_compose_file:-}"
+    elif [ -n "${service:-}" ]; then
+        write_status "$service" "error" "php_controller.action_failed" "${request_id:-}"
     fi
-    now=$(date +%s)
-    if [ $((now - last_refresh)) -ge 2 ]; then
-        refresh_managed_services
-        last_refresh=$now
+    exit 143
+}
+trap on_term TERM INT
+
+request=$(tr -d '\r\n' < "$STATUS_DIR/exec.json") || exit 1
+request_file=""
+state=""
+
+if printf '%s' "$request" | grep -q '"compose_file"'; then
+    if parse_compose_file_request "$request"; then
+        handle_compose_file_request "$request" "$request_file"
+        exit 0
     fi
-    # Short sleep so a new start file is picked up quickly. Background sleep
-    # keeps SIGTERM delivered to this shell (wait is interruptible).
-    sleep 0.1 &
-    wait $! || true
-done
+    exit 1
+fi
+
+if ! parse_request_fields "$request"; then
+    exit 1
+fi
+
+request_id=$(printf '%s' "$request" | sed -n 's/^.*"request_id":"\([0-9a-f]*\)".*$/\1/p')
+service=$(printf '%s' "$request" | sed -n 's/^.*"service":"\([^"]*\)".*$/\1/p')
+action=$(printf '%s' "$request" | sed -n 's/^.*"action":"\([^"]*\)".*$/\1/p')
+extension=$(printf '%s' "$request" | sed -n 's/^.*"extension":"\([a-z0-9_]*\)".*$/\1/p')
+
+case "$action" in
+    create|recreate|install-version|pull-recreate) ;;
+    *) exit 1 ;;
+esac
+
+container=$(container_for_service "$service") || exit 1
+write_status "$service" "busy" "php_controller.processing" "$request_id"
+ok=0
+profile=$(profile_for_service "$service") || {
+    write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
+    exit 1
+}
+host_project=$(resolve_host_project) || true
+if [ -z "$host_project" ]; then
+    write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
+    exit 1
+fi
+project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
+if [ -z "$project_name" ]; then
+    project_name=$(basename "$host_project")
+fi
+tmp_dir="/tmp/compose-create.$$"
+prepare_compose_tmp "$host_project" "$tmp_dir"
+if [ "$action" = "pull-recreate" ]; then
+    log_file="$STATUS_DIR/$service.last-pull-recreate.log"
+    : >"$log_file"
+    if is_infra_service "$service" && run_compose_pull_recreate "$project_name" "$tmp_dir/docker-compose.yml" \
+        "$profile" "$service" >>"$log_file" 2>&1; then
+        ok=1
+    else
+        cp "$log_file" "$STATUS_DIR/last-pull-recreate-error.log" 2>/dev/null || true
+    fi
+elif [ "$action" = "recreate" ]; then
+    log_file="$STATUS_DIR/$service.last-recreate.log"
+    : >"$log_file"
+    if run_compose_file_build "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1 \
+        && run_compose_recreate_start "$project_name" "$tmp_dir/docker-compose.yml" "$profile" "$service" >>"$log_file" 2>&1; then
+        ok=1
+    else
+        cp "$log_file" "$STATUS_DIR/last-recreate-error.log" 2>/dev/null || true
+    fi
+elif [ "$action" = "install-version" ]; then
+    log_file="$STATUS_DIR/$service.last-install-version.log"
+    : >"$log_file"
+    if run_compose_build_up "$project_name" "$tmp_dir/docker-compose.yml" \
+        "$profile" "$service" >"$log_file" 2>&1; then
+        ok=1
+    fi
+elif is_infra_service "$service"; then
+    log_file="$STATUS_DIR/$service.last-create.log"
+    : >"$log_file"
+    if run_compose_pull_create "$project_name" "$tmp_dir/docker-compose.yml" \
+        "$profile" "$service" >>"$log_file" 2>&1; then
+        ok=1
+    else
+        cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+    fi
+elif is_supervisor_service "$service"; then
+    log_file="$STATUS_DIR/$service.last-create.log"
+    : >"$log_file"
+    if run_compose_create_or_pull "$project_name" "$tmp_dir/docker-compose.yml" \
+        "$profile" "$service" >>"$log_file" 2>&1; then
+        ok=1
+    else
+        cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+    fi
+else
+    log_file="$STATUS_DIR/$service.last-create.log"
+    : >"$log_file"
+    if run_compose_create "$project_name" "$tmp_dir/docker-compose.yml" \
+        "$profile" "$service" >>"$log_file" 2>&1; then
+        ok=1
+    else
+        cp "$log_file" "$STATUS_DIR/last-create-error.log" 2>/dev/null || true
+    fi
+fi
+rm -rf "$tmp_dir"
+state=$(container_state "$container")
+if [ "$ok" -eq 1 ]; then
+    write_status "$service" "$state" "php_controller.action_success" "$request_id"
+    exit 0
+fi
+if [ "$state" = "not_created" ]; then
+    state="error"
+fi
+write_status "$service" "$state" "php_controller.action_failed" "$request_id"
+exit 1

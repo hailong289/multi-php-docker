@@ -760,6 +760,12 @@ button.action-menu-item.is-accent:focus-visible:not(:disabled),
   pointer-events: none;
 }
 
+.php-catalog-installed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .php-catalog-filters {
   display: flex;
   flex-wrap: wrap;

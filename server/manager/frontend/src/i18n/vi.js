@@ -685,6 +685,12 @@ export const vi = {
   'php_controller.page_meta': 'Trang {page}/{total_pages} · {total} tag',
   'php_controller.install_version': 'Cài đặt',
   'php_controller.already_installed': 'Đã cài',
+  'php_controller.delete_version': 'Xóa phiên bản',
+  'php_controller.delete_version_confirm':
+    'Xóa phiên bản {version}? Container, image và file compose của phiên bản này sẽ bị gỡ.',
+  'php_controller.version_removed': 'Đã xóa phiên bản {version}.',
+  'php_controller.version_not_removable': 'Phiên bản PHP có sẵn không xóa được.',
+  'php_controller.version_remove_failed': 'Không xóa được phiên bản PHP.',
   'php_controller.tag_not_installable': 'Alias / pre-release — không cài được',
   'php_controller.no_versions_available': 'Hiện không có phiên bản PHP nào để cài.',
   'php_controller.hub_tag': 'Image tag',

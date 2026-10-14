@@ -7,9 +7,9 @@ namespace Manager\Models;
 use Manager\Http\HttpException;
 use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
+use Manager\Support\ComposeJobs;
 use Manager\Support\Config;
 use Manager\Support\ContainerControl;
-use Manager\Support\ControllerRequests;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerImageIndex;
 use Manager\Support\DockerLiveState;
@@ -64,17 +64,12 @@ final class InfraRuntime
 
     private readonly string $basePath;
 
-    private ?PhpControllerDaemon $daemon;
+    private readonly ComposeJobs $jobs;
 
-    public function __construct(?string $basePath = null, ?PhpControllerDaemon $daemon = null)
+    public function __construct(?string $basePath = null, ?ComposeJobs $jobs = null)
     {
         $this->basePath = rtrim($basePath ?? Config::phpControllerPath(), '/');
-        $this->daemon = $daemon;
-    }
-
-    private function daemon(): PhpControllerDaemon
-    {
-        return $this->daemon ??= new PhpControllerDaemon();
+        $this->jobs = $jobs ?? new ComposeJobs();
     }
 
     public static function targets(): array
@@ -139,7 +134,7 @@ final class InfraRuntime
             ) {
                 $status = array_merge($status, array_intersect_key($decoded, $status));
             }
-            if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($service)) {
+            if ($this->hasBlockingRequests($service)) {
                 $status['state'] = 'busy';
                 $status['message_key'] = 'services.processing';
             } else {
@@ -157,11 +152,7 @@ final class InfraRuntime
 
     public function hasBlockingRequests(string $service): bool
     {
-        return ControllerRequests::hasBlocking(
-            $this->basePath . '/requests',
-            $service,
-            ['start', 'stop', 'restart', 'create', 'pull-recreate', 'delete'],
-        );
+        return $this->jobs->blocks($this->basePath, $service);
     }
 
     public function request(string $service, string $action): string
@@ -172,8 +163,6 @@ final class InfraRuntime
         if (!in_array($action, ['start', 'stop', 'restart', 'create', 'pull-recreate'], true)) {
             throw new HttpException('services.invalid_action', 400);
         }
-
-        $this->daemon()->assertRunning();
 
         if (in_array($action, ['start', 'stop', 'restart'], true)) {
             $state = ContainerControl::apply((string) self::SERVICES[$service]['container'], $action);
@@ -191,24 +180,10 @@ final class InfraRuntime
             return bin2hex(random_bytes(16));
         }
 
-        $requestDir = $this->basePath . '/requests';
-        if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {
-            throw new HttpException('services.request_failed', 500);
-        }
-
-        $requestId = bin2hex(random_bytes(16));
-        $payload = json_encode([
-            'request_id' => $requestId,
+        return $this->jobs->begin($this->basePath, [
             'service' => $service,
             'action' => $action,
-            'requested_at' => date(DATE_ATOM),
-        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
-        $finalPath = $requestDir . '/' . $requestId . '__' . $service . '__' . $action . '.json';
-        if (!AtomicFile::write($finalPath, $payload)) {
-            throw new HttpException('services.request_failed', 500);
-        }
-
-        return $requestId;
+        ]);
     }
 
     public function deleteContainer(string $service): void

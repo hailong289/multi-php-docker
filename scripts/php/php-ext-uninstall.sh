@@ -1,13 +1,22 @@
 #!/bin/sh
 # Usage: php-ext-uninstall.sh <container> <extension>
-# Removes enable-ini snippets and compiled .so when possible; pecl uninstall for PECL packages.
+#        php-ext-uninstall.sh --local <extension>
 set -eu
-container="$1"
-ext="$2"
 
-run() {
-    docker exec "$container" sh -c "$1"
-}
+if [ "${1:-}" = "--local" ]; then
+    ext="$2"
+    run() { sh -c "$1"; }
+    still_loaded() {
+        php -r "exit((extension_loaded('$ext') || ('$ext' === 'opcache' && extension_loaded('Zend OPcache'))) ? 0 : 1);" >/dev/null 2>&1
+    }
+else
+    container="$1"
+    ext="$2"
+    run() { docker exec "$container" sh -c "$1"; }
+    still_loaded() {
+        docker exec "$container" php -r "exit((extension_loaded('$ext') || ('$ext' === 'opcache' && extension_loaded('Zend OPcache'))) ? 0 : 1);" >/dev/null 2>&1
+    }
+fi
 
 # Always try to disable conf.d snippets and delete the .so from the active extension_dir.
 disable_and_unlink() {
@@ -31,7 +40,7 @@ case "$ext" in
 esac
 
 # Fail if still loaded after cleanup (baked into binary / still enabled).
-if docker exec "$container" php -r "exit((extension_loaded('$ext') || ('$ext' === 'opcache' && extension_loaded('Zend OPcache'))) ? 0 : 1);" >/dev/null 2>&1; then
+if still_loaded; then
     echo "extension still loaded after uninstall: $ext" >&2
     exit 1
 fi

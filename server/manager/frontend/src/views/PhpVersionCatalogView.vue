@@ -15,11 +15,12 @@ import { useManager } from '../composables/useManager'
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { showToast, translateApiError, loadBootstrap, data } = useManager()
+const { showToast, translateApiError, loadBootstrap, data, waitForPullProgress, removePhpVersion } = useManager()
 
 const loading = ref(true)
 const refreshing = ref(false)
 const installing = ref('')
+const removing = ref('')
 const versions = ref([])
 const pagination = ref({ page: 1, per_page: 20, total: 0, total_pages: 1 })
 const q = ref(String(route.query.q || ''))
@@ -77,7 +78,6 @@ async function loadCatalog({ forceRefresh = false, keepRows = false } = {}) {
 }
 
 async function installVersion(row) {
-  if (data.php_controller_daemon?.state !== 'running') return
   if (row.installed || !row.installable || installing.value) return
   installing.value = row.tag
   try {
@@ -91,11 +91,33 @@ async function installVersion(row) {
     )
     if (result.php_controllers) data.php_controllers = result.php_controllers
     row.installed = true
+    row.removable = true
+    await waitForPullProgress({
+      runtime: 'php',
+      service: result.service,
+      action: 'install-version',
+      label: row.label || result.service,
+    })
     await loadBootstrap()
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
     installing.value = ''
+  }
+}
+
+async function removeVersion(row) {
+  if (!row.removable || !row.service || removing.value) return
+  removing.value = row.tag
+  try {
+    const removed = await removePhpVersion(row.service)
+    if (removed) {
+      row.installed = false
+      row.removable = false
+      await loadCatalog({ keepRows: true })
+    }
+  } finally {
+    removing.value = ''
   }
 }
 
@@ -227,15 +249,31 @@ onMounted(async () => {
                   : t('php_controller.install_version')
               "
               :loading="installing === row.tag"
-              :disabled="!!installing || refreshing || data.php_controller_daemon?.state !== 'running'"
+              :disabled="!!installing || refreshing"
               @click="installVersion(row)"
             />
-            <Tag
-              v-else-if="row.installed"
-              :value="t('php_controller.already_installed')"
-              severity="success"
-              rounded
-            />
+            <span v-else-if="row.installed" class="php-catalog-installed">
+              <Tag
+                :value="t('php_controller.already_installed')"
+                severity="success"
+                rounded
+              />
+              <Button
+                v-if="row.removable"
+                type="button"
+                size="small"
+                severity="danger"
+                outlined
+                :label="
+                  removing === row.tag
+                    ? t('action.working')
+                    : t('php_controller.delete_version')
+                "
+                :loading="removing === row.tag"
+                :disabled="!!installing || !!removing || refreshing"
+                @click="removeVersion(row)"
+              />
+            </span>
             <Tag
               v-else
               :value="t('php_controller.tag_not_installable')"

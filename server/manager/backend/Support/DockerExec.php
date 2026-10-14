@@ -128,6 +128,55 @@ final class DockerExec
         return $id;
     }
 
+    /**
+     * Start an exec and return immediately. Empty string when the engine refuses.
+     *
+     * @param list<string> $cmd
+     */
+    public static function startDetachedExec(string $containerId, array $cmd): string
+    {
+        try {
+            $execId = self::createExec($containerId, $cmd, 80, 24, '', false, false);
+        } catch (\Throwable) {
+            return '';
+        }
+        $body = json_encode(['Detach' => true, 'Tty' => false], JSON_THROW_ON_ERROR);
+        $raw = self::httpRequest(
+            'POST',
+            '/exec/' . rawurlencode($execId) . '/start',
+            $body,
+            'application/json',
+            [200, 201, 204],
+        );
+
+        return $raw !== null ? $execId : '';
+    }
+
+    public static function startExtensionExec(string $container, string $action, string $extension): string
+    {
+        $container = ltrim($container, '/');
+        $extension = strtolower($extension);
+        if ($container === '' || preg_match('/^[a-z][a-z0-9_]*$/', $extension) !== 1 || !in_array($action, ['install-ext', 'uninstall-ext'], true)) {
+            return '';
+        }
+        $id = self::containerIdByName($container);
+        if ($id === null) {
+            return '';
+        }
+        $scriptName = $action === 'uninstall-ext' ? 'php-ext-uninstall.sh' : 'php-ext-install.sh';
+        $scriptPath = Config::projectPath() . '/scripts/php/' . $scriptName;
+        if (!is_file($scriptPath)) {
+            return '';
+        }
+        $encoded = base64_encode((string) file_get_contents($scriptPath));
+        $cmd = 'printf %s ' . escapeshellarg($encoded)
+            . ' | base64 -d > /tmp/m-ext.sh && sh /tmp/m-ext.sh --local '
+            . escapeshellarg($extension)
+            . ' > /tmp/m-ext.log 2>&1';
+
+        return self::startDetachedExec($id, ['/bin/sh', '-c', $cmd]);
+    }
+
     public static function resizeExec(string $execId, int $cols, int $rows): void
     {
         $cols = max(40, min(300, $cols));
@@ -802,6 +851,146 @@ SH;
         DockerEndpoint::request('DELETE', '/containers/' . rawurlencode($id) . '?force=1', null, null, [204, 404], $local);
 
         return $exit;
+    }
+
+    /**
+     * Create and start a docker:cli helper on the local engine. Returns '' on failure.
+     * The helper's command reads /runtime/status/exec.json and exits when compose finishes.
+     */
+    public static function startComposeHelper(): string
+    {
+        if (!file_exists(DockerEndpoint::localSocketPath())) {
+            return '';
+        }
+        $mountedProject = self::mountSource('manager_container', '/var/host-project');
+        $localProject = self::daemonBindPath($mountedProject ?? Config::projectPath());
+        $hostProject = self::resolveHostProjectPath() ?? ($mountedProject ?? Config::projectPath());
+        $hostProject = self::daemonBindPath($hostProject);
+        $runtimeMount = self::mountSource('manager_container', '/runtime/php-controller');
+        $runtime = self::daemonBindPath($runtimeMount ?? Config::phpControllerPath());
+        $env = array_merge(
+            DockerEndpoint::dockerCliEnv(),
+            [
+                'HOST_PROJECT_PATH=' . $hostProject,
+                'DOCKER_CONFIG=/tmp/docker-config',
+            ],
+        );
+        $binds = array_values(array_unique(array_merge(
+            DockerEndpoint::dockerCliBinds(),
+            [
+                $localProject . ':/project:ro',
+                $localProject . '/scripts:/scripts:ro',
+                $runtime . ':/runtime',
+            ],
+        )));
+        $hostConfig = [
+            'Binds' => $binds,
+            'AutoRemove' => false,
+            'ReadonlyRootfs' => true,
+            'Tmpfs' => ['/tmp' => ''],
+        ];
+        // BuildKit in docker:cli resolves registry tokens from this container.
+        // NetworkMode none makes that lookup fail (network unreachable) and
+        // install exits before compose can pull or build.
+
+        return self::startDetachedLocal([
+            'Image' => 'docker:cli',
+            'Cmd' => ['/bin/sh', '/scripts/php/php-controller.sh', 'once'],
+            'Env' => $env,
+            'WorkingDir' => '/project',
+            'Labels' => ['web.helper' => 'compose'],
+            'HostConfig' => $hostConfig,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    public static function startDetachedLocal(array $config): string
+    {
+        $local = \Manager\Models\DockerConnection::defaults();
+        try {
+            $body = json_encode($config, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return '';
+        }
+        $created = DockerEndpoint::request(
+            'POST',
+            '/containers/create',
+            $body,
+            'application/json',
+            [201],
+            $local,
+        );
+        if ($created === null) {
+            return '';
+        }
+        try {
+            $decoded = json_decode($created, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return '';
+        }
+        $id = is_array($decoded) ? (string) ($decoded['Id'] ?? '') : '';
+        if ($id === '') {
+            return '';
+        }
+        $startCode = DockerEndpoint::requestStatus(
+            'POST',
+            '/containers/' . rawurlencode($id) . '/start',
+            $local,
+        );
+        if ($startCode !== 204 && $startCode !== 304) {
+            self::removeLocalContainer($id);
+
+            return '';
+        }
+
+        return $id;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public static function inspectLocalContainer(string $id): ?array
+    {
+        if ($id === '') {
+            return null;
+        }
+        $local = \Manager\Models\DockerConnection::defaults();
+        $raw = DockerEndpoint::request(
+            'GET',
+            '/containers/' . rawurlencode($id) . '/json',
+            null,
+            null,
+            [200],
+            $local,
+        );
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        try {
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    public static function removeLocalContainer(string $id): void
+    {
+        if ($id === '') {
+            return;
+        }
+        $local = \Manager\Models\DockerConnection::defaults();
+        DockerEndpoint::request(
+            'DELETE',
+            '/containers/' . rawurlencode($id) . '?force=1',
+            null,
+            null,
+            [200, 204, 404],
+            $local,
+        );
     }
 
     public static function imageExists(string $ref): bool

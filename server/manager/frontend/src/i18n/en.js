@@ -685,6 +685,12 @@ export const en = {
   'php_controller.page_meta': 'Page {page}/{total_pages} · {total} tags',
   'php_controller.install_version': 'Install',
   'php_controller.already_installed': 'Installed',
+  'php_controller.delete_version': 'Remove version',
+  'php_controller.delete_version_confirm':
+    'Remove {version}? Its container, image, and generated compose files will be deleted.',
+  'php_controller.version_removed': 'Removed {version}.',
+  'php_controller.version_not_removable': 'Built-in PHP versions cannot be removed.',
+  'php_controller.version_remove_failed': 'Could not remove that PHP version.',
   'php_controller.tag_not_installable': 'Alias / pre-release — not installable',
   'php_controller.no_versions_available': 'No PHP versions available to install right now.',
   'php_controller.hub_tag': 'Image tag',
