@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Support;
 
 use Manager\Http\HttpException;
+use Manager\Models\PhpVersionId;
 
 /**
  * One detached docker:cli helper for compose actions. The helper reads status/exec.json.
@@ -121,8 +122,26 @@ final class ComposeJobs
             return;
         }
 
+        $service = is_string($lock['service'] ?? null) ? $lock['service'] : '';
+        $action = is_string($lock['action'] ?? null) ? $lock['action'] : '';
         $this->removeContainer($containerId);
         JobLock::release($path);
+        $this->replayExtensions($basePath, $service, $action);
+    }
+
+    private function replayExtensions(string $basePath, string $service, string $action): void
+    {
+        if ($this->starter !== null || !in_array($action, ['recreate', 'install-version'], true)) {
+            return;
+        }
+        if (!PhpVersionId::isValidService($service)) {
+            return;
+        }
+        $container = PhpVersionId::container($service);
+        if (DockerLiveState::stateFor($container) !== 'running') {
+            return;
+        }
+        (new ExtensionReplay(new ExtensionJobs()))->kick($basePath, $service, $container);
     }
 
     /**

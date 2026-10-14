@@ -169,12 +169,88 @@ final class DockerExec
             return '';
         }
         $encoded = base64_encode((string) file_get_contents($scriptPath));
+        $logger = base64_encode(self::extensionLogRunner());
+        $extArg = escapeshellarg($extension);
         $cmd = 'printf %s ' . escapeshellarg($encoded)
-            . ' | base64 -d > /tmp/m-ext.sh && sh /tmp/m-ext.sh --local '
-            . escapeshellarg($extension)
-            . ' > /tmp/m-ext.log 2>&1';
+            . ' | base64 -d > /tmp/m-ext.sh && printf %s ' . escapeshellarg($logger)
+            . ' | base64 -d > /tmp/m-ext-log.php && php /tmp/m-ext-log.php ' . $extArg;
 
         return self::startDetachedExec($id, ['/bin/sh', '-c', $cmd]);
+    }
+
+    /** Graceful reload of the php-fpm master (PID 1 in the official image). */
+    public static function reloadPhpFpm(string $container): bool
+    {
+        $container = ltrim($container, '/');
+        if ($container === '') {
+            return false;
+        }
+        $id = self::containerIdByName($container);
+        if ($id === null) {
+            return false;
+        }
+        try {
+            $result = self::run($id, ['kill', '-USR2', '1'], '', 5);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return ($result['exit_code'] ?? 1) === 0;
+    }
+
+    /** Runs the extension script on a pty so install output reaches the log while it is still running. */
+    private static function extensionLogRunner(): string
+    {
+        return <<<'PHP'
+<?php
+$ext = $argv[1] ?? '';
+$log = fopen('/tmp/m-ext.log', 'wb');
+if ($log === false) {
+    fwrite(STDERR, "cannot write /tmp/m-ext.log\n");
+    exit(1);
+}
+$cmd = 'sh /tmp/m-ext.sh --local ' . escapeshellarg($ext);
+$proc = @proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pty'], 2 => ['pty']], $pipes);
+if (!is_resource($proc)) {
+    passthru($cmd . ' > /tmp/m-ext.log 2>&1', $code);
+    exit((int) $code);
+}
+fclose($pipes[0]);
+stream_set_blocking($pipes[1], false);
+if (isset($pipes[2]) && is_resource($pipes[2])) {
+    stream_set_blocking($pipes[2], false);
+}
+while (true) {
+    foreach ([1, 2] as $index) {
+        if (!isset($pipes[$index]) || !is_resource($pipes[$index])) {
+            continue;
+        }
+        $chunk = fread($pipes[$index], 8192);
+        if (!is_string($chunk) || $chunk === '') {
+            continue;
+        }
+        fwrite($log, str_replace("\r\n", "\n", str_replace("\r", "\n", $chunk)));
+        fflush($log);
+    }
+    $status = proc_get_status($proc);
+    if (!$status['running']) {
+        foreach ([1, 2] as $index) {
+            if (!isset($pipes[$index]) || !is_resource($pipes[$index])) {
+                continue;
+            }
+            $rest = stream_get_contents($pipes[$index]);
+            if (is_string($rest) && $rest !== '') {
+                fwrite($log, str_replace("\r\n", "\n", str_replace("\r", "\n", $rest)));
+                fflush($log);
+            }
+        }
+        $code = (int) $status['exitcode'];
+        proc_close($proc);
+        exit($code >= 0 ? $code : 1);
+    }
+    usleep(100000);
+}
+PHP;
     }
 
     public static function resizeExec(string $execId, int $cols, int $rows): void

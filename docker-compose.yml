@@ -117,6 +117,7 @@ services:
       # php -S is otherwise single-threaded; terminal + status SSE + actions must overlap.
       PHP_CLI_SERVER_WORKERS: "12"
     command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
+    restart: unless-stopped
     depends_on:
       env-init:
         condition: service_completed_successfully

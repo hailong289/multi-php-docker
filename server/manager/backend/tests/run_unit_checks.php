@@ -28,6 +28,8 @@ use Manager\Models\InfraRuntime;
 use Manager\Models\NginxManagement;
 use Manager\Support\ComposeJobs;
 use Manager\Support\ExtensionJobs;
+use Manager\Support\ExtensionManifest;
+use Manager\Support\ExtensionReplay;
 use Manager\Support\JobLock;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
@@ -850,6 +852,153 @@ try {
 } catch (\Manager\Http\HttpException $e) {
     assert_true($e->errorKey() === 'php_controller.session_not_found', 'scratch rejects missing session');
 }
+
+$manifestBase = sys_get_temp_dir() . '/ext-manifest-' . bin2hex(random_bytes(4));
+mkdir($manifestBase, 0775, true);
+ExtensionManifest::add($manifestBase, 'php-8.5', 'redis');
+ExtensionManifest::add($manifestBase, 'php-8.5', 'imagick');
+ExtensionManifest::add($manifestBase, 'php-8.5', 'Redis');
+assert_true(ExtensionManifest::extensions($manifestBase, 'php-8.5') === ['redis', 'imagick'], 'manifest keeps install order once');
+ExtensionManifest::remove($manifestBase, 'php-8.5', 'redis');
+assert_true(ExtensionManifest::extensions($manifestBase, 'php-8.5') === ['imagick'], 'manifest removes uninstalled extension');
+ExtensionManifest::add($manifestBase, 'php-8.5', 'mongodb');
+ExtensionManifest::fail($manifestBase, 'php-8.5', 'mongodb');
+assert_true(ExtensionManifest::firstMissing($manifestBase, 'php-8.5', ['imagick']) === null, 'manifest skips loaded and failed extensions');
+ExtensionManifest::forgetFailure($manifestBase, 'php-8.5', 'mongodb');
+assert_true(ExtensionManifest::firstMissing($manifestBase, 'php-8.5', ['imagick']) === 'mongodb', 'explicit retry clears a failed extension');
+
+$seedBase = sys_get_temp_dir() . '/ext-seed-' . bin2hex(random_bytes(4));
+mkdir($seedBase, 0775, true);
+$shippedBaseline = PhpExtensionCatalog::imageBaseline('php-8.5');
+assert_true(in_array('redis', $shippedBaseline, true), 'php 8 image baseline includes redis');
+assert_true(!in_array('pdo_pgsql', $shippedBaseline, true), 'shipped php 8 baseline omits pdo_pgsql');
+assert_true(!in_array('redis', PhpExtensionCatalog::imageBaseline('php-7.4'), true), 'php 7.4 image baseline omits redis');
+ExtensionManifest::seedFromModules($seedBase, 'php-8.5', ['core', 'json', 'redis', 'imagick'], $shippedBaseline);
+assert_true(ExtensionManifest::extensions($seedBase, 'php-8.5') === ['imagick'], 'seed keeps imagick and skips redis');
+ExtensionManifest::add($seedBase, 'php-8.5', 'redis');
+ExtensionManifest::add($seedBase, 'php-8.5', 'opcache');
+ExtensionManifest::seedFromModules($seedBase, 'php-8.5', ['imagick'], $shippedBaseline);
+assert_true(ExtensionManifest::extensions($seedBase, 'php-8.5') === ['imagick'], 'seed drops image extensions already in the manifest');
+$generatedRoot = sys_get_temp_dir() . '/ext-generated-' . bin2hex(random_bytes(4));
+mkdir($generatedRoot . '/compose', 0775, true);
+file_put_contents($generatedRoot . '/compose/php-8.6.yml', "services:\n  php-8.6:\n    build:\n      dockerfile: generated/php-8.6.Dockerfile\n");
+$generatedBaseline = PhpExtensionCatalog::imageBaseline('php-8.6', $generatedRoot);
+assert_true(in_array('pdo_pgsql', $generatedBaseline, true) && in_array('pgsql', $generatedBaseline, true), 'generated image baseline includes pgsql');
+ExtensionManifest::seedFromModules($seedBase, 'php-8.6', ['pdo_pgsql', 'imagick'], $generatedBaseline);
+assert_true(ExtensionManifest::extensions($seedBase, 'php-8.6') === ['imagick'], 'seed skips pdo_pgsql baked into a generated image');
+ExtensionManifest::add($seedBase, 'php-8.5', 'mongodb');
+ExtensionManifest::fail($seedBase, 'php-8.5', 'mongodb');
+$failedRows = ExtensionManifest::savedRows($seedBase, 'php-8.5', ['imagick'], true);
+$failedByName = [];
+foreach ($failedRows as $row) {
+    $failedByName[$row['name']] = $row['state'];
+}
+assert_true(($failedByName['mongodb'] ?? '') === 'failed', 'saved list keeps a failed extension that is not loaded');
+assert_true(($failedByName['imagick'] ?? '') === 'loaded', 'saved list marks a loaded extension');
+ExtensionManifest::ensure($seedBase, 'php-8.5', 'swoole');
+$pendingRows = ExtensionManifest::savedRows($seedBase, 'php-8.5', ['imagick'], true);
+$pendingByName = [];
+foreach ($pendingRows as $row) {
+    $pendingByName[$row['name']] = $row['state'];
+}
+assert_true(($pendingByName['swoole'] ?? '') === 'pending', 'saved list marks an extension that still needs install');
+$stoppedRows = ExtensionManifest::savedRows($seedBase, 'php-8.6', ['imagick'], false);
+assert_true($stoppedRows[0]['state'] === 'saved', 'stopped container shows a saved extension');
+$catalog = PhpExtensionCatalog::entries('php-8.5', [], '', ['swoole']);
+$catalogNames = array_column($catalog, 'name');
+assert_true(in_array('swoole', $catalogNames, true), 'manifest names stay in the extension table before they load');
+
+$replayBase = sys_get_temp_dir() . '/ext-replay-' . bin2hex(random_bytes(4));
+mkdir($replayBase, 0775, true);
+ExtensionManifest::add($replayBase, 'php-8.5', 'redis');
+ExtensionManifest::add($replayBase, 'php-8.5', 'imagick');
+ExtensionManifest::add($replayBase, 'php-8.5', 'mongodb');
+ExtensionManifest::fail($replayBase, 'php-8.5', 'mongodb');
+$replayStarted = [];
+$replayJobs = new ExtensionJobs(
+    static function (string $container, string $action, string $extension) use (&$replayStarted): string {
+        $replayStarted[] = $extension;
+
+        return 'exec-' . $extension;
+    },
+    static fn (string $id): array => ['Running' => true, 'ExitCode' => 0],
+);
+$replay = new ExtensionReplay($replayJobs, static fn (string $container): array => ['redis']);
+$replay->kick($replayBase, 'php-8.5', 'php85_container');
+$replay->kick($replayBase, 'php-8.5', 'php85_container');
+assert_true($replayStarted === ['imagick'], 'replay queues one missing extension and skips a busy service');
+
+$chainBase = sys_get_temp_dir() . '/ext-chain-' . bin2hex(random_bytes(4));
+mkdir($chainBase, 0775, true);
+ExtensionManifest::add($chainBase, 'php-8.5', 'redis');
+ExtensionManifest::add($chainBase, 'php-8.5', 'imagick');
+ExtensionManifest::add($chainBase, 'php-8.5', 'mongodb');
+$chainStarted = [];
+$chainJobs = new ExtensionJobs(
+    static function (string $container, string $action, string $extension) use (&$chainStarted): string {
+        $chainStarted[] = $extension;
+
+        return 'exec-' . $extension;
+    },
+    static fn (string $id): array => ['Running' => false, 'ExitCode' => 0],
+);
+$chain = new ExtensionReplay($chainJobs, static function (string $container) use (&$chainStarted): array {
+    return array_merge(['redis'], $chainStarted);
+});
+$chainJobs->setReplay($chain);
+$chain->kick($chainBase, 'php-8.5', 'php85_container');
+$chainJobs->reconcileService($chainBase, 'php-8.5');
+assert_true($chainStarted === ['imagick', 'mongodb'], 'finished replay install queues the next extension');
+
+$reloadBase = sys_get_temp_dir() . '/ext-reload-' . bin2hex(random_bytes(4));
+mkdir($reloadBase . '/status', 0775, true);
+$reloadCalls = [];
+$reloadJobs = new ExtensionJobs(
+    static fn (string $container, string $action, string $extension): string => 'exec-reload',
+    static fn (string $id): array => ['Running' => false, 'ExitCode' => 0],
+    static function (string $container) use (&$reloadCalls): bool {
+        $reloadCalls[] = $container;
+
+        return true;
+    },
+);
+$reloadJobs->begin($reloadBase, 'php-8.5', 'install-ext', 'imagick', 'php85_container');
+$reloadJobs->reconcileService($reloadBase, 'php-8.5');
+assert_true($reloadCalls === ['php85_container'], 'successful extension install reloads php-fpm once');
+$reloadFailCalls = [];
+$reloadFailBase = sys_get_temp_dir() . '/ext-reload-fail-' . bin2hex(random_bytes(4));
+mkdir($reloadFailBase . '/status', 0775, true);
+$reloadFailJobs = new ExtensionJobs(
+    static fn (string $container, string $action, string $extension): string => 'exec-reload-fail',
+    static fn (string $id): array => ['Running' => false, 'ExitCode' => 1],
+    static function (string $container) use (&$reloadFailCalls): bool {
+        $reloadFailCalls[] = $container;
+
+        return false;
+    },
+);
+$reloadFailJobs->begin($reloadFailBase, 'php-8.5', 'uninstall-ext', 'imagick', 'php85_container');
+$reloadFailJobs->reconcileService($reloadFailBase, 'php-8.5');
+assert_true($reloadFailCalls === [], 'failed extension command does not reload php-fpm');
+$reloadLogCalls = [];
+$reloadLogBase = sys_get_temp_dir() . '/ext-reload-log-' . bin2hex(random_bytes(4));
+mkdir($reloadLogBase . '/status', 0775, true);
+$reloadLogJobs = new ExtensionJobs(
+    static fn (string $container, string $action, string $extension): string => 'exec-reload-log',
+    static fn (string $id): array => ['Running' => false, 'ExitCode' => 0],
+    static function (string $container) use (&$reloadLogCalls): bool {
+        $reloadLogCalls[] = $container;
+
+        return false;
+    },
+);
+$reloadLogJobs->begin($reloadLogBase, 'php-8.5', 'install-ext', 'imagick', 'php85_container');
+$reloadLogJobs->reconcileService($reloadLogBase, 'php-8.5');
+assert_true($reloadLogCalls === ['php85_container'], 'reload is still attempted when the signal fails');
+assert_true(
+    str_contains((string) file_get_contents($reloadLogBase . '/status/php-8.5.last-install.log'), 'php-fpm reload failed'),
+    'a failed php-fpm reload is written to the extension log',
+);
 
 $phpTmp = sys_get_temp_dir() . '/php-runtime-' . bin2hex(random_bytes(4));
 mkdir($phpTmp . '/requests', 0775, true);

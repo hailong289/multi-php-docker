@@ -156,7 +156,7 @@ const hostsProgress = ref(null)
 const pullProgress = ref(null)
 let pullProgressTimer = null
 
-const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate', 'recreate', 'install-version'])
+const PULL_TRACKED_ACTIONS = new Set(['create', 'pull-recreate', 'recreate', 'install-version', 'install-ext', 'uninstall-ext'])
 const PULL_PROGRESS_POLL_MS = 2000
 
 export function useManager() {
@@ -1053,7 +1053,14 @@ export function useManager() {
       try {
         const result = await apiGet(url)
         const logs = result.logs || {}
-        job.content = logs.content || logs.recreate_log || logs.create_log || ''
+        if (job.action === 'install-ext') {
+          job.content = logs.extension_install_log || ''
+        } else if (job.action === 'uninstall-ext') {
+          job.content = logs.extension_uninstall_log || ''
+        } else {
+          job.content = logs.content || logs.recreate_log || logs.create_log || ''
+        }
+        if (logs.message_key === 'php_controller.action_failed') job.failed = true
         logState = logs.state || ''
       } catch (_) {
         // keep previous output
@@ -1064,13 +1071,14 @@ export function useManager() {
     job.loading = false
   }
 
-  function startPullProgress({ runtime, service = '', action, label, composeFile = '' }) {
+  function startPullProgress({ runtime, service = '', action, label, composeFile = '', extension = '' }) {
     stopPullProgressTimer()
     pullProgress.value = {
       runtime,
       service,
       composeFile,
       action,
+      extension,
       label: label || pullProgressLabel(runtime, service, composeFile),
       dismissed: false,
       state: 'busy',

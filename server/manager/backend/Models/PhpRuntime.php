@@ -14,6 +14,7 @@ use Manager\Support\DockerExec;
 use Manager\Support\DockerImageIndex;
 use Manager\Support\DockerLiveState;
 use Manager\Support\ExtensionJobs;
+use Manager\Support\ExtensionReplay;
 use Manager\Support\JsonFile;
 
 final class PhpRuntime
@@ -36,6 +37,16 @@ final class PhpRuntime
         $this->projectPath = $projectPath;
         $this->jobs = $jobs ?? new ComposeJobs();
         $this->extensions = $extensions ?? new ExtensionJobs();
+    }
+
+    public function controllerBase(): string
+    {
+        return $this->basePath;
+    }
+
+    public function projectRoot(): string
+    {
+        return rtrim($this->projectPath ?? Config::projectPath(), '/');
     }
 
     public static function targets(?string $projectPath = null): array
@@ -158,6 +169,13 @@ final class PhpRuntime
                 throw new HttpException('php_controller.action_failed', 502);
             }
             $this->persistStatus($service, $state, 'php_controller.action_success', '');
+            if ($action === 'start' && $state === 'running') {
+                (new ExtensionReplay($this->extensions))->kick(
+                    $this->basePath,
+                    $service,
+                    (string) $versions[$service]['container'],
+                );
+            }
 
             return bin2hex(random_bytes(16));
         }

@@ -39,8 +39,12 @@ case "$ext" in
         ;;
 esac
 
+echo "uninstalled files for $ext"
+
 # Fail if still loaded after cleanup (baked into binary / still enabled).
 if still_loaded; then
     echo "extension still loaded after uninstall: $ext" >&2
     exit 1
 fi
+
+echo "uninstalled $ext"

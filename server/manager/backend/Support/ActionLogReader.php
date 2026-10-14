@@ -41,10 +41,12 @@ final class ActionLogReader
         $recreateLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-recreate.log');
         $pullLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-pull-recreate.log');
         $installLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-install-version.log');
+        $extensionInstallLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-install.log');
+        $extensionUninstallLog = self::readTail(rtrim($statusDir, '/') . '/' . $key . '.last-uninstall.log');
         $content = self::formatSections($createLog, $startLog, $pullLog, $recreateLog, $installLog);
 
         $updatedAt = (string) ($status['updated_at'] ?? '');
-        foreach (['.last-create.log', '.last-start.log', '.last-recreate.log', '.last-pull-recreate.log', '.last-install-version.log'] as $suffix) {
+        foreach (['.last-create.log', '.last-start.log', '.last-recreate.log', '.last-pull-recreate.log', '.last-install-version.log', '.last-install.log', '.last-uninstall.log'] as $suffix) {
             $path = rtrim($statusDir, '/') . '/' . $key . $suffix;
             if (!is_file($path)) {
                 continue;
@@ -64,6 +66,8 @@ final class ActionLogReader
             'create_log' => $createLog,
             'start_log' => $startLog,
             'recreate_log' => $recreateLog,
+            'extension_install_log' => $extensionInstallLog,
+            'extension_uninstall_log' => $extensionUninstallLog,
             'updated_at' => $updatedAt,
         ];
     }

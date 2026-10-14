@@ -33,6 +33,8 @@ const {
   loadBootstrap,
   data,
   dockerStatusBusy,
+  waitForPullProgress,
+  pullProgress,
 } = useManager()
 
 const service = computed(() => String(route.params.service || ''))
@@ -50,6 +52,7 @@ const target = computed(() => details.value?.target || data.php_controllers?.tar
 const availableExtensions = computed(() => details.value?.available?.extensions || [])
 const datalistId = computed(() => `ext-suggestions-${service.value}`)
 const loadedCount = computed(() => (details.value?.modules?.modules || []).length)
+const savedExtensions = computed(() => details.value?.saved_extensions || [])
 const loadedModulePreview = computed(() => {
   const mods = details.value?.modules?.modules || []
   if (mods.length <= 8) return mods.join(', ')
@@ -72,6 +75,13 @@ function extSeverity(status) {
   if (status === 'loaded' || status === 'enabled_in_ini') return 'success'
   if (status === 'available_to_install') return 'info'
   if (status === 'disabled_in_ini') return 'warn'
+  return 'secondary'
+}
+
+function savedSeverity(value) {
+  if (value === 'loaded') return 'success'
+  if (value === 'pending') return 'warn'
+  if (value === 'failed') return 'danger'
   return 'secondary'
 }
 
@@ -138,15 +148,35 @@ async function extAction(name, action) {
     }
   }
   pending.value = `${action}:${name}`
+  const progressAction = action === 'uninstall' ? 'uninstall-ext' : 'install-ext'
   try {
     const path = `/api/php-controllers/${service.value}/extensions/${name}/${action}`
     const result = await apiSend('POST', path, {})
-    showToast(
-      'success',
-      t(result.message_key || 'php_controller.action_success', result.message_parameters || {}),
-    )
-    if (result.php_details) details.value = result.php_details
-    else if (result.php_controllers) data.php_controllers = result.php_controllers
+    if (result.php_controllers) data.php_controllers = result.php_controllers
+    const versionLabel = data.php_controllers?.targets?.[service.value]?.label || service.value
+    await waitForPullProgress({
+      runtime: 'php',
+      service: service.value,
+      action: progressAction,
+      label: versionLabel,
+      extension: name,
+    })
+    await load({ silent: true })
+    const finished = pullProgress.value
+    if (!finished || finished.state === 'busy') return
+    const stillInstalled =
+      action === 'uninstall' &&
+      ((details.value?.extensions || []).some(
+        (ext) =>
+          ext.name === name &&
+          ['loaded', 'enabled_in_ini', 'disabled_in_ini'].includes(ext.status),
+      ) ||
+        (details.value?.saved_extensions || []).some((ext) => ext.name === name))
+    const failed = finished.state === 'error' || finished.failed || stillInstalled
+    const key = failed
+      ? (action === 'uninstall' ? 'php_controller.extension_uninstall_failed' : 'php_controller.extension_install_failed')
+      : (action === 'uninstall' ? 'php_controller.extension_uninstalled' : 'php_controller.extension_installed')
+    showToast(failed ? 'failure' : 'success', t(key, { extension: name }))
   } catch (error) {
     showToast('failure', translateApiError(error))
   } finally {
@@ -383,6 +413,69 @@ onUnmounted(() => {
                       :disabled="state !== 'running' || !!pending || !normalizeExtName(customExt)"
                     />
                   </form>
+                </div>
+
+                <div class="php-ext-saved">
+                  <div class="php-ext-add-copy">
+                    <h3>{{ t('php_controller.saved_extensions_title') }}</h3>
+                    <p v-if="!savedExtensions.length">{{ t('php_controller.saved_extensions_empty') }}</p>
+                  </div>
+                  <DataTable
+                    v-if="savedExtensions.length"
+                    :value="savedExtensions"
+                    data-key="name"
+                    striped-rows
+                    :row-class="(ext) => (rowPending(ext.name) ? 'is-pending' : '')"
+                  >
+                    <Column :header="t('php_controller.extension')">
+                      <template #body="{ data: ext }">
+                        <code class="php-ext-name">{{ ext.name }}</code>
+                      </template>
+                    </Column>
+                    <Column :header="t('php_controller.state')">
+                      <template #body="{ data: ext }">
+                        <Tag
+                          :value="t(`php_controller.saved_ext_${ext.state}`)"
+                          :severity="savedSeverity(ext.state)"
+                          rounded
+                        />
+                      </template>
+                    </Column>
+                    <Column :header="t('php_controller.actions')">
+                      <template #body="{ data: ext }">
+                        <div class="php-ext-row-actions">
+                          <Button
+                            v-if="state === 'running' && (ext.state === 'failed' || ext.state === 'pending')"
+                            type="button"
+                            size="small"
+                            :label="
+                              pending === `install:${ext.name}`
+                                ? t('action.working')
+                                : t('php_controller.saved_ext_retry')
+                            "
+                            :loading="pending === `install:${ext.name}`"
+                            :disabled="!!pending"
+                            @click="extAction(ext.name, 'install')"
+                          />
+                          <Button
+                            v-if="state === 'running'"
+                            type="button"
+                            size="small"
+                            severity="danger"
+                            outlined
+                            :label="
+                              pending === `uninstall:${ext.name}`
+                                ? t('action.working')
+                                : t('php_controller.ext_uninstall')
+                            "
+                            :loading="pending === `uninstall:${ext.name}`"
+                            :disabled="!!pending"
+                            @click="extAction(ext.name, 'uninstall')"
+                          />
+                        </div>
+                      </template>
+                    </Column>
+                  </DataTable>
                 </div>
 
                 <div v-if="loadedCount" class="php-ext-loaded">

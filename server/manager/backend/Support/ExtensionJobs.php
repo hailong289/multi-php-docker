@@ -17,14 +17,26 @@ final class ExtensionJobs
     /** @var (callable(string): ?array)|null */
     private mixed $inspector;
 
+    /** @var (callable(string): bool)|null */
+    private mixed $reloader;
+
+    private ?ExtensionReplay $replay = null;
+
     /**
      * @param (callable(string, string, string): string)|null $starter (container, action, extension) => exec id
      * @param (callable(string): ?array)|null $inspector exec inspect, null when missing
+     * @param (callable(string): bool)|null $reloader container name => graceful reload succeeded
      */
-    public function __construct(?callable $starter = null, ?callable $inspector = null)
+    public function __construct(?callable $starter = null, ?callable $inspector = null, ?callable $reloader = null)
     {
         $this->starter = $starter;
         $this->inspector = $inspector;
+        $this->reloader = $reloader;
+    }
+
+    public function setReplay(ExtensionReplay $replay): void
+    {
+        $this->replay = $replay;
     }
 
     public function begin(string $basePath, string $service, string $action, string $extension, string $container): string
@@ -43,6 +55,9 @@ final class ExtensionJobs
         if (JobLock::read($path) !== null) {
             throw new HttpException('php_controller.busy', 409);
         }
+        if ($action === 'install-ext') {
+            ExtensionManifest::forgetFailure($basePath, $service, $extension);
+        }
 
         $requestId = bin2hex(random_bytes(16));
         $record = [
@@ -59,6 +74,7 @@ final class ExtensionJobs
         }
 
         $this->writeStatus($basePath, $service, 'busy', 'php_controller.processing', $requestId);
+        $this->writeLog($basePath, $service, $action, '');
         try {
             $starter = $this->starter ?? static fn (string $c, string $a, string $e): string => DockerExec::startExtensionExec($c, $a, $e);
             $execId = $starter($container, $action, $extension);
@@ -120,6 +136,10 @@ final class ExtensionJobs
             return;
         }
         if ($running) {
+            $container = is_string($lock['container'] ?? null) ? $lock['container'] : '';
+            $action = is_string($lock['action'] ?? null) ? $lock['action'] : 'install-ext';
+            $this->captureLog($basePath, $service, $container, $action);
+
             return;
         }
 
@@ -134,8 +154,61 @@ final class ExtensionJobs
             $state = $live ?? 'error';
         }
         $requestId = is_string($lock['request_id'] ?? null) ? $lock['request_id'] : '';
+        $extension = is_string($lock['extension'] ?? null) ? $lock['extension'] : '';
         $this->writeStatus($basePath, $service, $state, $key, $requestId);
+        @unlink(rtrim($basePath, '/') . '/status/' . $service . '.modules.json');
         JobLock::release($path);
+        if ($exit === 0) {
+            $this->reloadFpm($basePath, $service, $container, $action);
+        }
+        if ($exit === 0 && $action === 'install-ext') {
+            ExtensionManifest::add($basePath, $service, $extension);
+            $this->continueReplay($basePath, $service, $container);
+        } elseif ($exit === 0 && $action === 'uninstall-ext') {
+            ExtensionManifest::remove($basePath, $service, $extension);
+        } elseif ($action === 'install-ext') {
+            ExtensionManifest::fail($basePath, $service, $extension);
+        }
+    }
+
+    private function reloadFpm(string $basePath, string $service, string $container, string $action): void
+    {
+        if ($container === '') {
+            return;
+        }
+        if ($this->reloader === null && $this->starter !== null) {
+            return;
+        }
+        $reloader = $this->reloader ?? static fn (string $name): bool => DockerExec::reloadPhpFpm($name);
+        $ok = false;
+        try {
+            $ok = $reloader($container);
+        } catch (\Throwable) {
+            $ok = false;
+        }
+        if ($ok) {
+            return;
+        }
+        $logName = $action === 'uninstall-ext' ? '.last-uninstall.log' : '.last-install.log';
+        $path = rtrim($basePath, '/') . '/status/' . $service . $logName;
+        $existing = is_file($path) ? (string) file_get_contents($path) : '';
+        $line = "php-fpm reload failed\n";
+        if (!str_ends_with($existing, $line)) {
+            AtomicFile::write($path, $existing . $line);
+        }
+    }
+
+    private function continueReplay(string $basePath, string $service, string $container): void
+    {
+        if ($this->replay !== null) {
+            $this->replay->kick($basePath, $service, $container);
+
+            return;
+        }
+        if ($this->starter !== null) {
+            return;
+        }
+        (new ExtensionReplay($this))->kick($basePath, $service, $container);
     }
 
     /**
@@ -162,11 +235,16 @@ final class ExtensionJobs
         } catch (\Throwable) {
             return;
         }
-        $logName = $action === 'uninstall-ext' ? '.last-uninstall.log' : '.last-install.log';
         $text = $result['stdout'] . $result['stderr'];
         if ($text === '') {
             return;
         }
+        $this->writeLog($basePath, $service, $action, $text);
+    }
+
+    private function writeLog(string $basePath, string $service, string $action, string $text): void
+    {
+        $logName = $action === 'uninstall-ext' ? '.last-uninstall.log' : '.last-install.log';
         AtomicFile::write(rtrim($basePath, '/') . '/status/' . $service . $logName, $text);
     }
 

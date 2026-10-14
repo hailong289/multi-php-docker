@@ -912,6 +912,12 @@ button.action-menu-item.is-accent:focus-visible:not(:disabled),
   gap: 16px;
 }
 
+.php-ext-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .php-ext-banner,
 .php-ext-warn {
   margin: 0;

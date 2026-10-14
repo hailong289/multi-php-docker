@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ExtensionManifest;
 
 final class PhpDetails
 {
@@ -32,14 +33,15 @@ final class PhpDetails
         } catch (HttpException) {
             $iniReadable = false;
         }
-        $modulesInfo = $this->runtime->readModules($service);
-        if (($status['state'] ?? '') === 'running' && $this->runtime->modulesStale($service)) {
+        $running = ($status['state'] ?? '') === 'running';
+        if ($running && $this->runtime->modulesStale($service)) {
             try {
                 $this->runtime->request($service, 'modules');
             } catch (HttpException) {
                 // ignore queue races; UI can refresh
             }
         }
+        $modulesInfo = $this->runtime->readModules($service);
         $availableInfo = $this->runtime->readAvailable($service);
         if (($status['state'] ?? '') === 'running' && $this->runtime->availableStale($service)) {
             try {
@@ -48,10 +50,21 @@ final class PhpDetails
                 // ignore queue races; UI can refresh
             }
         }
+        $base = $this->runtime->controllerBase();
+        if ($running && $modulesInfo['ok'] && $modulesInfo['updated_at'] !== '') {
+            ExtensionManifest::seedFromModules(
+                $base,
+                $service,
+                $modulesInfo['modules'],
+                PhpExtensionCatalog::imageBaseline($service, $this->runtime->projectRoot()),
+            );
+        }
+        $savedNames = ExtensionManifest::extensions($base, $service);
         $extensions = PhpExtensionCatalog::entries(
             $service,
             $modulesInfo['modules'],
             $iniContent,
+            $savedNames,
         );
 
         return [
@@ -66,6 +79,12 @@ final class PhpDetails
             'modules' => $modulesInfo,
             'available' => $availableInfo,
             'extensions' => $extensions,
+            'saved_extensions' => ExtensionManifest::savedRows(
+                $base,
+                $service,
+                $modulesInfo['modules'],
+                $running,
+            ),
         ];
     }
 }
