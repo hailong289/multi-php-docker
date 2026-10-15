@@ -21,6 +21,13 @@ use Manager\Support\DockerLiveState;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\ComposeFileParser;
+use Manager\Models\DatabaseDump;
+use Manager\Models\DatabaseDumpIndex;
+use Manager\Models\PhpXdebug;
+use Manager\Models\SiteCron;
+use Manager\Models\SiteHealth;
+use Manager\Models\SslTrust;
+use Manager\Models\StackPreset;
 use Manager\Models\ComposeFileRuntime;
 use Manager\Models\ComposeInclude;
 use Manager\Models\InfraCompose;
@@ -1519,5 +1526,114 @@ foreach ($rewriteSources as $rewriteSource) {
     assert_true(str_contains($rewriteBody, 's|- \\\\./|- ${repl}/|'), basename($rewriteSource) . ' rewrite keeps list marker');
     assert_true(!str_contains($rewriteBody, 's|- \\\\./|${repl}/|'), basename($rewriteSource) . ' rewrite does not drop the dash');
 }
+
+$dumpRoot = sys_get_temp_dir() . '/mgr-dumps-' . bin2hex(random_bytes(4));
+mkdir($dumpRoot, 0775, true);
+$index = new DatabaseDumpIndex($dumpRoot);
+$thrown = false;
+try {
+    $index->assertDatabaseName('bad name');
+} catch (HttpException $e) {
+    $thrown = $e->errorKey() === 'database.invalid_name';
+}
+assert_true($thrown, 'reject database name with a space');
+$row = $index->add('mysql', 'app', 'SERVER_NAME1', 'mysql/app-1.sql');
+assert_true($row['status'] === 'pending', 'new dump is pending');
+$index->mark($row['id'], 'ready');
+$listed = $index->list();
+assert_true(count($listed) === 1 && $listed[0]['status'] === 'ready', 'list shows ready dump');
+assert_true($index->find($row['id'])['database'] === 'app', 'find by id');
+
+$project = sys_get_temp_dir() . '/mgr-dump-cmd-' . bin2hex(random_bytes(4));
+mkdir($project . '/server/backups', 0775, true);
+$dump = new DatabaseDump($project);
+$argv = $dump->command('mysql', 'shop', 'mysql/shop-1.sql');
+assert_true($argv[0] === 'sh' && $argv[1] === '-c', 'dump runs through sh');
+assert_true(str_contains($argv[2], 'mysqldump'), 'mysql uses mysqldump');
+assert_true(str_contains($argv[2], '/backups/mysql/shop-1.sql'), 'writes inside the mount');
+assert_true(!str_contains($argv[2], 'shop;'), 'name is not concatenated raw');
+$pg = $dump->command('postgres', 'shop', 'postgres/shop-1.sql');
+assert_true(str_contains($pg[2], 'pg_dump'), 'postgres uses pg_dump');
+mkdir($project . '/server/backups/mysql', 0775, true);
+$pending = (new DatabaseDumpIndex($project . '/server/backups'))->add('mysql', 'shop', null, 'mysql/shop-1.sql');
+file_put_contents($project . '/server/backups/mysql/shop-1.sql.exit', "0\n");
+$synced = $dump->syncStatus($pending);
+assert_true($synced['status'] === 'ready', 'exit 0 marks the dump ready');
+
+$ini = "memory_limit = 256M\n";
+$xdebug = new PhpXdebug();
+$on = $xdebug->render($ini, true, 9003);
+assert_true(str_starts_with($on, "memory_limit = 256M\n"), 'keeps existing ini');
+assert_true(str_contains($on, 'zend_extension=xdebug'), 'enables the zend extension');
+assert_true(str_contains($on, 'xdebug.client_port=9003'), 'writes the client port');
+assert_true(str_contains($on, 'xdebug.client_host=host.docker.internal'), 'IDE on the host');
+assert_true(str_contains($on, 'xdebug.mode=debug'), 'debug mode');
+$off = $xdebug->render($on, false, 9003);
+assert_true(!str_contains($off, 'zend_extension=xdebug'), 'disable removes the block');
+assert_true(str_starts_with($off, "memory_limit = 256M\n"), 'disable keeps the rest');
+$again = $xdebug->render($on, true, 9004);
+assert_true(substr_count($again, 'manager-xdebug-begin') === 1, 'one block only');
+assert_true($xdebug->parse($again)['client_port'] === 9004, 'parse reads the port');
+$badPort = false;
+try {
+    $xdebug->render($ini, true, 9000);
+} catch (HttpException $e) {
+    $badPort = $e->errorKey() === 'xdebug.invalid_port';
+}
+assert_true($badPort, 'reject FPM port 9000');
+
+$trustRoot = sys_get_temp_dir() . '/mgr-ssl-trust-' . bin2hex(random_bytes(4));
+mkdir($trustRoot . '/runtime', 0775, true);
+$trustOut = (new SslTrust())->request($trustRoot, 'my-app', 'my-app.test');
+assert_true(str_starts_with($trustOut['url'], 'multi-php-ssl://issue?'), 'protocol url');
+assert_true(is_file($trustRoot . '/runtime/ssl.trust'), 'request file written');
+$trustRaw = json_decode((string) file_get_contents($trustRoot . '/runtime/ssl.trust'), true);
+assert_true($trustRaw['app_name'] === 'my-app' && $trustRaw['domain_name'] === 'my-app.test', 'payload');
+assert_true(hash_equals($trustRaw['token'], $trustOut['token']), 'token matches url');
+
+$stack = new StackPreset();
+$laravel = $stack->program('laravel', '/var/www/source/shop');
+assert_true(str_contains($laravel, 'directory=/var/www/source/shop'), 'laravel directory');
+assert_true(str_contains($laravel, 'php artisan queue:work'), 'laravel queue');
+assert_true(str_contains($laravel, '[program:shop_worker]'), 'program name from folder');
+$symfony = $stack->program('symfony', '/var/www/source/shop');
+assert_true(str_contains($symfony, 'messenger:consume async'), 'symfony messenger');
+assert_true($stack->program('wordpress', '/var/www/source/shop') === '', 'wordpress has no worker');
+$badPreset = false;
+try {
+    $stack->program('drupal', '/var/www/source/shop');
+} catch (HttpException $e) {
+    $badPreset = $e->errorKey() === 'preset.unknown';
+}
+assert_true($badPreset, 'only three presets');
+
+$siteCron = new SiteCron();
+$cronBody = $siteCron->render('abc123abc123', '/var/www/source/shop', 'php artisan schedule:run', 1);
+assert_true(str_contains($cronBody, '[program:cron_abc123abc123]'), 'program name');
+assert_true(str_contains($cronBody, 'directory=/var/www/source/shop'), 'directory');
+assert_true(str_contains($cronBody, 'php artisan schedule:run'), 'command');
+assert_true(str_contains($cronBody, 'sleep 60'), 'one minute is 60 seconds');
+assert_true(str_contains($cronBody, '; manager-cron minutes=1'), 'marker keeps the interval');
+$cronParsed = $siteCron->parse($cronBody);
+assert_true($cronParsed['minutes'] === 1 && $cronParsed['command'] === 'php artisan schedule:run', 'parse round trip');
+$badCron = false;
+try {
+    $siteCron->assertCommand('php artisan schedule:run; rm -rf /');
+} catch (HttpException $e) {
+    $badCron = $e->errorKey() === 'cron.invalid_command';
+}
+assert_true($badCron, 'reject shell separators');
+
+$health = new SiteHealth();
+assert_true($health->classifyHttp(200, 12, null)['state'] === 'up', '200 is up');
+assert_true($health->classifyHttp(500, 4, null)['state'] === 'down', '500 is down');
+assert_true($health->classifyHttp(0, 0, 'timeout')['state'] === 'error', 'transport error');
+$containers = [
+    ['name' => 'mysql_container', 'state' => 'running', 'ports' => [3306]],
+    ['name' => 'other', 'state' => 'exited', 'ports' => [5432]],
+];
+assert_true($health->conflicts($containers, 'mysql_container', [3306]) === [], 'own running container is not a conflict');
+$blocked = $health->conflicts($containers, 'postgres_container', [3306, 5432]);
+assert_true(count($blocked) === 1 && $blocked[0]['port'] === 3306 && $blocked[0]['holder'] === 'mysql_container', 'other running publisher conflicts');
 
 echo "All checks passed\n";

@@ -14,6 +14,7 @@ import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
+import { confirmPublishedPorts } from '../lib/healthPorts'
 import PinButton from '../components/PinButton.vue'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
@@ -309,6 +310,9 @@ async function saveTemplate() {
 }
 
 async function run(action, path) {
+  if ((action === 'start' || action === 'create') && !(await confirmPublishedPorts('nginx', t))) {
+    return
+  }
   pending.value = action
   const previousReloadAt = nginx.value.reload_status?.updated_at || ''
   const previousTestAt = nginx.value.test_status?.updated_at || ''

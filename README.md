@@ -166,6 +166,17 @@ chmod +x scripts/hosts/add_hostname.sh
 
 The browser opens `multi-php-hosts:write` and writes hosts (UAC on Windows / admin prompt on macOS). Allow the app if the browser asks.
 
+### Trust local HTTPS
+
+Install [mkcert](https://github.com/FiloSottile/mkcert) on the host. macOS, once:
+
+```bash
+chmod +x scripts/ssl/ensure_ssl_protocol_macos.sh scripts/ssl/trust_local_ca.sh scripts/ssl/ssl_protocol_macos.sh
+./scripts/ssl/ensure_ssl_protocol_macos.sh
+```
+
+Then in Server Manager use **Trust HTTPS** on a site that uses a generated certificate. Windows: after `choco install mkcert`, run `bash scripts/ssl/trust_local_ca.sh APP DOMAIN` from an elevated shell.
+
 4. Click **Apply & Reload Nginx**.
 5. Open the domain, for example `http://my-php85-app.test`.
 

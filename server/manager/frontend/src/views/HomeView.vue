@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -14,6 +14,7 @@ import Tag from 'primevue/tag'
 import { useManager } from '../composables/useManager'
 import HomePinnedSection from '../components/HomePinnedSection.vue'
 import DomainNameCombobox from '../components/DomainNameCombobox.vue'
+import { apiGet, apiSend } from '../api'
 import {
   FRAMEWORK_PRESETS,
   SOURCE_PREFIX,
@@ -41,6 +42,8 @@ const {
   closeModal,
   startEdit,
   saveServer,
+  savePreset,
+  showToast,
   deleteServer,
   regenerateSsl,
   toggleServerEnabled,
@@ -54,6 +57,10 @@ const {
 } = useManager()
 
 const frameworkId = ref('laravel')
+const presetOn = ref(false)
+const siteHealth = ref({})
+let healthTimer = 0
+const presetFrameworks = ['laravel', 'symfony', 'wordpress']
 const pathTouched = ref(false)
 const projectDir = ref('')
 const docRoot = ref('public')
@@ -200,8 +207,55 @@ async function onSslFile(kind, event) {
 function onSubmit() {
   form.domain_name = String(form.domain_name || '').trim().toLowerCase()
   syncServerPathFromParts()
+  if (!editingKey.value && presetOn.value && presetFrameworks.includes(frameworkId.value)) {
+    savePreset(frameworkId.value)
+    return
+  }
   saveServer(editingKey.value ? {} : { framework: frameworkId.value })
 }
+
+async function loadHealth() {
+  try {
+    const payload = await apiGet('/api/health/sites')
+    const next = {}
+    for (const row of payload.sites || []) next[row.key] = row
+    siteHealth.value = next
+  } catch {
+    siteHealth.value = {}
+  }
+}
+
+async function trustSsl(key) {
+  try {
+    const result = await apiSend('POST', '/api/ssl/trust', { server_key: key })
+    window.location.href = result.url
+  } catch (error) {
+    const keyName = error?.payload?.error?.key
+    if (keyName === 'ssl.trust_requires_generated') {
+      showToast('failure', t('ssl.trust_requires_generated'))
+      return
+    }
+    showToast('failure', t('ssl.mkcert_missing'))
+  }
+}
+
+function openHttps(domain) {
+  window.open('https://' + domain)
+}
+
+function healthText(key) {
+  const row = siteHealth.value[key]
+  if (!row) return ''
+  if (row.state === 'up') return `${row.status} · ${row.ms} ms`
+  if (row.state === 'down') return String(row.status ?? '')
+  return t('health.unreachable')
+}
+
+onMounted(() => {
+  loadHealth()
+  healthTimer = window.setInterval(loadHealth, 15000)
+})
+onUnmounted(() => window.clearInterval(healthTimer))
 </script>
 
 <template>
@@ -288,6 +342,22 @@ function onSubmit() {
               <a :href="'https://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
                 https://{{ item.server.DOMAIN_NAME }}
               </a>
+              <Button
+                type="button"
+                link
+                size="small"
+                :label="t('ssl.open')"
+                @click="openHttps(item.server.DOMAIN_NAME)"
+              />
+              <Button
+                v-if="item.server.ssl_mode !== 'uploaded'"
+                type="button"
+                link
+                size="small"
+                :label="t('ssl.trust')"
+                :disabled="busy"
+                @click="trustSsl(item.key)"
+              />
               <Tag
                 class="home-inline-tag"
                 :value="
@@ -315,6 +385,11 @@ function onSubmit() {
                 {{ t('ssl.names_mismatch') }}
               </p>
             </template>
+          </template>
+        </Column>
+        <Column :header="t('health.column')">
+          <template #body="{ data: item }">
+            {{ healthText(item.key) }}
           </template>
         </Column>
         <Column :header="t('table.php')">
@@ -445,6 +520,10 @@ function onSubmit() {
           @update:model-value="onFrameworkChange"
         />
         <p class="form-path-hint">{{ frameworkHint }}</p>
+        <label v-if="!editingKey && presetFrameworks.includes(frameworkId)" class="form-path-hint">
+          <Checkbox v-model="presetOn" binary />
+          {{ frameworkId === 'wordpress' ? t('preset.wordpress') : t('preset.enable') }}
+        </label>
 
         <label for="mgr-project-dir">{{ t('form.project_dir') }}</label>
         <InputText

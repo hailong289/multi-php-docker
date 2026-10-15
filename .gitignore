@@ -27,6 +27,8 @@
 # Bỏ qua source project local, giữ cấu trúc thư mục source chung
 /server/source/*/
 !/server/source/.gitkeep
+/server/backups/*
+!/server/backups/.gitkeep
 
 # Manager frontend (Vite)
 /server/manager/frontend/node_modules/

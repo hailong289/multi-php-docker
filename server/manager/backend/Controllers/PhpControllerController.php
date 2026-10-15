@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Manager\Controllers;
 
 use Manager\Http\HttpException;
+use Manager\Support\DockerExec;
 use Manager\Http\Request;
 use Manager\Http\Response;
 use Manager\Models\PhpDetails;
@@ -16,6 +17,7 @@ use Manager\Models\PhpSnippetRunner;
 use Manager\Models\DockerHubPhpTags;
 use Manager\Models\PhpVersionId;
 use Manager\Models\PhpVersionInstaller;
+use Manager\Models\PhpXdebug;
 
 final class PhpControllerController extends Controller
 {
@@ -358,5 +360,53 @@ final class PhpControllerController extends Controller
             'message_key' => 'php_controller.extension_uninstall_requested',
             'message_parameters' => ['extension' => $name],
         ]);
+    }
+
+    public function xdebugShow(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+
+        return Response::json($this->xdebugPayload($service));
+    }
+
+    public function xdebugSave(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $body = $request->json();
+        if (!is_bool($body['enabled'] ?? null)) {
+            throw new HttpException('xdebug.invalid_port', 400);
+        }
+        $enabled = $body['enabled'];
+        $port = (int) ($body['client_port'] ?? 9003);
+        $current = $this->xdebugPayload($service);
+        if ($enabled && $current['extension_installed'] !== true) {
+            throw new HttpException('xdebug.not_installed', 409);
+        }
+        $parsed = (new PhpXdebug())->apply($service, $enabled, $port);
+        $reloaded = DockerExec::reloadPhpFpm(PhpVersionId::container($service));
+
+        return Response::json($parsed + [
+            'extension_installed' => $current['extension_installed'],
+            'reload' => $reloaded ? 'ok' : 'failed',
+        ]);
+    }
+
+    /** @return array{enabled: bool, client_port: int, extension_installed: bool} */
+    private function xdebugPayload(string $service): array
+    {
+        $details = (new PhpDetails())->forService($service);
+        $ini = (string) ($details['ini']['content'] ?? '');
+        $parsed = (new PhpXdebug())->parse($ini);
+        $installed = false;
+        foreach ($details['modules']['modules'] ?? [] as $name) {
+            if (!is_string($name)) {
+                continue;
+            }
+            if (PhpExtensionCatalog::normalizeModuleName($name) === 'xdebug') {
+                $installed = true;
+            }
+        }
+
+        return $parsed + ['extension_installed' => $installed];
     }
 }

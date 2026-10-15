@@ -3,8 +3,12 @@
 declare(strict_types=1);
 
 use Manager\Controllers\BootstrapController;
+use Manager\Controllers\DatabaseController;
 use Manager\Controllers\DockerConnectionController;
+use Manager\Controllers\CronController;
 use Manager\Controllers\DomainController;
+use Manager\Controllers\HealthController;
+use Manager\Controllers\SslTrustController;
 use Manager\Controllers\HostsController;
 use Manager\Controllers\InfraController;
 use Manager\Controllers\NginxController;
@@ -48,6 +52,10 @@ return [
     ['DELETE', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'destroyExtra']],
     ['PUT', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'update']],
     ['DELETE', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'destroy']],
+    ['GET', '/databases/dumps', [DatabaseController::class, 'index']],
+    ['POST', '/databases/dumps', [DatabaseController::class, 'store']],
+    ['POST', '/databases/dumps/(?P<id>[a-f0-9]{16})/restore', [DatabaseController::class, 'restore']],
+    ['GET', '/databases/(?P<engine>mysql|postgres)/names', [DatabaseController::class, 'names']],
     ['GET', '/infra-services', [InfraController::class, 'index']],
     ['GET', '/infra-services/compose-files', [InfraController::class, 'composeFiles']],
     ['POST', '/infra-services/compose-files', [InfraController::class, 'composeFileCreate']],
@@ -85,6 +93,8 @@ return [
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/action-logs', [PhpControllerController::class, 'actionLogs']],
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/logs', [PhpControllerController::class, 'logs']],
     ['PUT', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/ini', [PhpControllerController::class, 'saveIni']],
+    ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/xdebug', [PhpControllerController::class, 'xdebugShow']],
+    ['PUT', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/xdebug', [PhpControllerController::class, 'xdebugSave']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/run', [PhpControllerController::class, 'runSnippet']],
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch', [PhpControllerController::class, 'showScratch']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch', [PhpControllerController::class, 'createScratch']],
@@ -102,6 +112,14 @@ return [
     ['DELETE', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'destroy']],
     ['GET', '/sources/(?P<key>SERVER_NAME\d+)/logs/stream', [SourceLogController::class, 'stream']],
     ['GET', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'show']],
+    ['GET', '/health/sites', [HealthController::class, 'sites']],
+    ['GET', '/health/ports', [HealthController::class, 'ports']],
+    ['POST', '/ssl/trust', [SslTrustController::class, 'store']],
+    ['GET', '/ssl/trust', [SslTrustController::class, 'show']],
+    ['GET', '/crons/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?))', [CronController::class, 'index']],
+    ['POST', '/crons/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?))', [CronController::class, 'store']],
+    ['DELETE', '/crons/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?))/(?P<name>cron-[a-f0-9]{12}\\.conf)', [CronController::class, 'destroy']],
+    ['POST', '/servers/preset', [ServerController::class, 'storePreset']],
     ['POST', '/servers', [ServerController::class, 'store']],
     ['PUT', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'update']],
     ['DELETE', '/servers/(?P<key>SERVER_NAME\d+)', [ServerController::class, 'destroy']],

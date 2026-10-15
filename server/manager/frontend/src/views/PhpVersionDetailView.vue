@@ -5,6 +5,8 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
+import Checkbox from 'primevue/checkbox'
+import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Tab from 'primevue/tab'
@@ -43,6 +45,7 @@ const pending = ref('')
 const tab = ref('extensions')
 const details = ref(null)
 const iniDraft = ref('')
+const xdebug = ref({ enabled: false, client_port: 9003, extension_installed: false })
 const customExt = ref('')
 let statusPollTimer = null
 
@@ -116,10 +119,37 @@ async function load({ silent = false } = {}) {
     if (!silent || iniDraft.value === previousIni) {
       iniDraft.value = next?.ini?.content || ''
     }
+    const xdebugResult = await apiGet(`/api/php-controllers/${service.value}/xdebug`)
+    xdebug.value = {
+      enabled: !!xdebugResult.enabled,
+      client_port: Number(xdebugResult.client_port) || 9003,
+      extension_installed: !!xdebugResult.extension_installed,
+    }
   } catch (error) {
     if (!silent) showToast('failure', translateApiError(error))
   } finally {
     if (!silent) loading.value = false
+  }
+}
+
+async function saveXdebug() {
+  pending.value = 'xdebug'
+  try {
+    const result = await apiSend('PUT', `/api/php-controllers/${service.value}/xdebug`, {
+      enabled: xdebug.value.enabled,
+      client_port: Number(xdebug.value.client_port) || 9003,
+    })
+    xdebug.value = {
+      enabled: !!result.enabled,
+      client_port: Number(result.client_port) || 9003,
+      extension_installed: !!result.extension_installed,
+    }
+    if (result.reload === 'failed') showToast('failure', t('xdebug.reload_failed'))
+    else showToast('success', t('xdebug.title'))
+  } catch (error) {
+    showToast('failure', translateApiError(error))
+  } finally {
+    pending.value = ''
   }
 }
 
@@ -264,6 +294,20 @@ onUnmounted(() => {
         :disabled="loading || !!pending"
         @click="load"
       />
+    </div>
+
+    <div v-if="details" class="panel-body xdebug-card">
+      <h3>{{ t('xdebug.title') }}</h3>
+      <p v-if="!xdebug.extension_installed">{{ t('xdebug.not_installed') }}</p>
+      <label class="xdebug-row">
+        <Checkbox v-model="xdebug.enabled" binary :disabled="!xdebug.extension_installed || !!pending" />
+        {{ t('xdebug.enable') }}
+      </label>
+      <label class="xdebug-row">
+        {{ t('xdebug.port') }}
+        <InputNumber v-model="xdebug.client_port" :min="1" :max="65535" :disabled="!!pending" />
+      </label>
+      <Button :label="t('xdebug.save')" :disabled="!!pending" @click="saveXdebug" />
     </div>
 
     <div v-if="loading && !details" class="panel-body">{{ t('loading') }}</div>

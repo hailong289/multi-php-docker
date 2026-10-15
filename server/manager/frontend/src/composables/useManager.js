@@ -580,6 +580,41 @@ export function useManager() {
     }
   }
 
+  async function savePreset(preset) {
+    busy.value = true
+    pendingAction.value = { kind: 'save' }
+    fieldErrors.value = {}
+    try {
+      const body = {
+        app_name: form.app_name,
+        domain_name: form.domain_name,
+        server_path: form.server_path,
+        php_version: form.php_version,
+        enabled: form.enabled,
+        ssl_enabled: !!form.ssl_enabled,
+        framework: preset,
+        preset,
+      }
+      const result = await apiSend('POST', '/api/servers/preset', body)
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      if (result.supervisor_file) {
+        showToast('success', t('preset.supervisor', { name: result.supervisor_file }))
+      } else {
+        toastFromResult(result)
+      }
+      closeModal()
+    } catch (error) {
+      const fields = error.payload?.error?.fields || {}
+      fieldErrors.value = Object.fromEntries(
+        Object.entries(fields).map(([k, v]) => [k, trKey(v.key, v.parameters || {})]),
+      )
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
   async function deleteServer(key, confirmKey = 'confirm.delete') {
     if (!(await confirmDialog(t(confirmKey), { acceptLabel: t('action.delete'), rejectLabel: t('action.cancel'), acceptSeverity: 'danger' }))) return
     busy.value = true
@@ -1619,6 +1654,7 @@ export function useManager() {
     closeModal,
     startEdit,
     saveServer,
+    savePreset,
     deleteServer,
     regenerateSsl,
     toggleServerEnabled,

@@ -166,6 +166,17 @@ chmod +x scripts/hosts/add_hostname.sh
 
 Trình duyệt mở `multi-php-hosts:write` rồi ghi hosts (UAC trên Windows / hộp thoại admin trên macOS). Cho phép mở ứng dụng nếu trình duyệt hỏi.
 
+### Tin cậy HTTPS local
+
+Cài [mkcert](https://github.com/FiloSottile/mkcert) trên máy. macOS, một lần:
+
+```bash
+chmod +x scripts/ssl/ensure_ssl_protocol_macos.sh scripts/ssl/trust_local_ca.sh scripts/ssl/ssl_protocol_macos.sh
+./scripts/ssl/ensure_ssl_protocol_macos.sh
+```
+
+Trong Server Manager bấm **Tin cậy HTTPS** trên site dùng chứng chỉ do Manager tạo. Windows: sau `choco install mkcert`, chạy `bash scripts/ssl/trust_local_ca.sh APP DOMAIN` trong shell quyền quản trị.
+
 4. Nhấn **Apply & Reload Nginx**.
 5. Mở domain, ví dụ `http://my-php85-app.test`.
 

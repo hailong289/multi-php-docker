@@ -1,3 +1,4 @@
+import { confirmPublishedPorts } from './healthPorts'
 import {
   getInfraWebUrl,
   hasInfraConnectionDetails,
@@ -28,14 +29,20 @@ export function buildInfraMenuItems(service, { t, router, mgr, onDetails }) {
       primary: true,
       disabled: !infraActionEnabled(service, 'create'),
       loading: isPending('infra', { service, action: 'create' }),
-      run: () => infraAction(service, 'create'),
+      run: async () => {
+        if (!(await confirmPublishedPorts(service, t))) return
+        return infraAction(service, 'create')
+      },
     },
     {
       id: 'start',
       label: t('services.start'),
       disabled: !infraActionEnabled(service, 'start'),
       loading: isPending('infra', { service, action: 'start' }),
-      run: () => infraAction(service, 'start'),
+      run: async () => {
+        if (!(await confirmPublishedPorts(service, t))) return
+        return infraAction(service, 'start')
+      },
     },
     {
       id: 'stop',
