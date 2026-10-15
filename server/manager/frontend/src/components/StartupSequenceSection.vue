@@ -105,7 +105,6 @@ const draftStartRows = computed(() => draftStart.value.map((entry) => catalogEnt
 const draftStopRows = computed(() => draftStop.value.map((entry) => catalogEntry(entry.kind, entry.id)))
 
 function nginxEnabled(action) {
-  if (data.php_controller_daemon?.state !== 'running') return false
   const state = nginxState()
   if (nginxPending.value || state === 'busy') return false
   if (action === 'start') return state === 'stopped'

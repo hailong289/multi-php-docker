@@ -6,7 +6,7 @@ namespace Manager\Support;
 
 /**
  * Start, stop, and restart an existing container through the Docker Engine API.
- * Create and install stay on the php-controller queue.
+ * Create and install run in a short-lived docker:cli helper.
  */
 final class ContainerControl
 {

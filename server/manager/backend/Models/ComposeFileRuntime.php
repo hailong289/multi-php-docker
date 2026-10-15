@@ -7,9 +7,9 @@ namespace Manager\Models;
 use Manager\Http\HttpException;
 use Manager\Support\ActionLogReader;
 use Manager\Support\AtomicFile;
+use Manager\Support\ComposeJobs;
 use Manager\Support\Config;
 use Manager\Support\ContainerControl;
-use Manager\Support\ControllerRequests;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
 use Manager\Support\JsonFile;
@@ -23,23 +23,18 @@ final class ComposeFileRuntime
 
     private readonly string $projectPath;
 
-    private ?PhpControllerDaemon $daemon;
+    private readonly ComposeJobs $jobs;
 
-    public function __construct(?string $basePath = null, ?string $projectPath = null, ?PhpControllerDaemon $daemon = null)
+    public function __construct(?string $basePath = null, ?string $projectPath = null, ?ComposeJobs $jobs = null)
     {
         $this->basePath = rtrim($basePath ?? Config::phpControllerPath(), '/');
         $this->projectPath = rtrim($projectPath ?? Config::projectPath(), '/');
-        $this->daemon = $daemon;
+        $this->jobs = $jobs ?? new ComposeJobs();
     }
 
     public static function queueKey(string $filename): string
     {
         return 'compose-file__' . basename(str_replace(['\\', "\0"], '', $filename));
-    }
-
-    private function daemon(): PhpControllerDaemon
-    {
-        return $this->daemon ??= new PhpControllerDaemon();
     }
 
     public function request(string $filename, string $action): string
@@ -57,28 +52,21 @@ final class ComposeFileRuntime
             throw new HttpException('services.compose_no_services', 422);
         }
 
-        $this->daemon()->assertRunning();
+        if ($action === 'start') {
+            $state = ContainerControl::apply($this->primaryContainer($name), 'start');
+            if ($state === null) {
+                throw new HttpException('services.request_failed', 502);
+            }
+            $this->persistFileStatus($name, $state, 'php_controller.action_success', '');
 
-        $requestDir = $this->basePath . '/requests';
-        if (!is_dir($requestDir) && !mkdir($requestDir, 0775, true) && !is_dir($requestDir)) {
-            throw new HttpException('services.request_failed', 500);
+            return bin2hex(random_bytes(16));
         }
 
-        $requestId = bin2hex(random_bytes(16));
-        $queueKey = self::queueKey($name);
-        $payload = json_encode([
-            'request_id' => $requestId,
+        return $this->jobs->begin($this->basePath, [
             'compose_file' => $name,
-            'queue_key' => $queueKey,
+            'queue_key' => self::queueKey($name),
             'action' => $action,
-            'requested_at' => date(DATE_ATOM),
-        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
-        $finalPath = $requestDir . '/' . $requestId . '__' . $queueKey . '__' . $action . '.json';
-        if (!AtomicFile::write($finalPath, $payload)) {
-            throw new HttpException('services.request_failed', 500);
-        }
-
-        return $requestId;
+        ]);
     }
 
     /**
@@ -259,11 +247,7 @@ final class ComposeFileRuntime
 
     public function hasBlockingRequests(string $filename): bool
     {
-        return ControllerRequests::hasBlocking(
-            $this->basePath . '/requests',
-            self::queueKey($filename),
-            self::ACTIONS,
-        );
+        return $this->jobs->blocks($this->basePath, self::queueKey($this->safeFilename($filename)));
     }
 
     /**
@@ -293,7 +277,7 @@ final class ComposeFileRuntime
             $fileState = $decoded['state'] ?? null;
         }
 
-        if ($this->daemon()->status()['state'] === 'running' && $this->hasBlockingRequests($name)) {
+        if ($this->hasBlockingRequests($name)) {
             $status['state'] = 'busy';
             $status['message_key'] = 'services.processing';
 
