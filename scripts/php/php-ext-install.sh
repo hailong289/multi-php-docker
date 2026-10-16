@@ -1,18 +1,27 @@
 #!/bin/sh
 # Usage: php-ext-install.sh <container> <extension>
+#        php-ext-install.sh --local <extension>
 # extension is already validated by caller ([a-z][a-z0-9_]*)
 set -eu
-container="$1"
-ext="$2"
 
-run() {
-    docker exec "$container" sh -c "$1"
+run_local() {
+    sh -c "$1"
 }
 
-already_loaded() {
-    # PHP 8.5+ reports the Zend extension as "Zend OPcache", not "opcache".
-    docker exec "$container" php -r "exit((extension_loaded('$ext') || ('$ext' === 'opcache' && extension_loaded('Zend OPcache'))) ? 0 : 1);" >/dev/null 2>&1
-}
+if [ "${1:-}" = "--local" ]; then
+    ext="$2"
+    run() { run_local "$1"; }
+    already_loaded() {
+        php -r "exit((extension_loaded('$ext') || ('$ext' === 'opcache' && extension_loaded('Zend OPcache'))) ? 0 : 1);" >/dev/null 2>&1
+    }
+else
+    container="$1"
+    ext="$2"
+    run() { docker exec "$container" sh -c "$1"; }
+    already_loaded() {
+        docker exec "$container" php -r "exit((extension_loaded('$ext') || ('$ext' === 'opcache' && extension_loaded('Zend OPcache'))) ? 0 : 1);" >/dev/null 2>&1
+    }
+fi
 
 is_alpine() {
     run "test -f /etc/alpine-release"

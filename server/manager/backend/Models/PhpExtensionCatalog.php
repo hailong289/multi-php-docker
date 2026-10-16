@@ -53,6 +53,25 @@ final class PhpExtensionCatalog
     }
 
     /**
+     * Extensions compiled into the image. These stay out of the replay manifest.
+     *
+     * @return list<string>
+     */
+    public static function imageBaseline(string $service, ?string $projectPath = null): array
+    {
+        $names = ['pdo_mysql', 'mysqli', 'gd', 'zip', 'opcache'];
+        if (!str_starts_with($service, 'php-7.')) {
+            array_push($names, 'redis', 'sockets', 'pcntl');
+        }
+        if (PhpVersionInstaller::isRemovable($service, $projectPath)) {
+            $names[] = 'pdo_pgsql';
+            $names[] = 'pgsql';
+        }
+
+        return $names;
+    }
+
+    /**
      * Extra names (custom pecl / non-curated) to show alongside curated.
      *
      * @param list<string> $extraNames
@@ -69,14 +88,17 @@ final class PhpExtensionCatalog
             $loaded[self::normalizeModuleName($m)] = true;
         }
         $names = self::NAMES;
+        $forced = [];
         foreach ($extraNames as $extra) {
             $extra = strtolower(trim($extra));
-            if ($extra === '' || !self::isValidName($extra) || self::isCurated($extra)) {
+            if ($extra === '' || !self::isValidName($extra)) {
                 continue;
             }
-            if (!in_array($extra, $names, true)) {
-                $names[] = $extra;
+            $forced[$extra] = true;
+            if (self::isCurated($extra) || in_array($extra, $names, true)) {
+                continue;
             }
+            $names[] = $extra;
         }
         foreach (array_keys($loaded) as $mod) {
             if (!self::isValidName($mod) || self::isCurated($mod) || self::isSkippedBuiltin($mod)) {
@@ -104,10 +126,10 @@ final class PhpExtensionCatalog
             } elseif ($line === 'active') {
                 // Enabled in php.ini but not loaded yet (needs install and/or FPM restart).
                 $out[] = ['name' => $name, 'status' => 'enabled_in_ini'];
-            } elseif (self::isCurated($name)) {
+            } elseif (self::isCurated($name) || isset($forced[$name])) {
                 $out[] = ['name' => $name, 'status' => 'available_to_install'];
             }
-            // Non-curated absent names are omitted (only shown once loaded / in ini).
+            // Other absent names are omitted (only shown once loaded / in ini).
         }
 
         return $out;

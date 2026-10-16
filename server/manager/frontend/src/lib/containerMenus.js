@@ -161,7 +161,8 @@ export function buildComposeMenuItems(item, { t, router, mgr }) {
 }
 
 export function buildPhpMenuItems(service, { t, router, mgr }) {
-  const { phpActionEnabled, phpAction, phpServiceState, isPending } = mgr
+  const { phpActionEnabled, phpAction, phpServiceState, isPending, removePhpVersion, data } = mgr
+  const removable = !!data.php_controllers?.targets?.[service]?.removable
   return [
     {
       id: 'create',
@@ -212,6 +213,15 @@ export function buildPhpMenuItems(service, { t, router, mgr }) {
       id: 'supervisor',
       label: t('php_controller.supervisor'),
       run: () => router.push({ name: 'php-version-supervisor', params: { service } }),
+    },
+    {
+      id: 'delete-version',
+      label: t('php_controller.delete_version'),
+      danger: true,
+      hidden: !removable,
+      disabled: phpServiceState(service) === 'busy' || isPending('php', { service }),
+      loading: isPending('php', { service, action: 'delete-version' }),
+      run: () => removePhpVersion(service),
     },
     {
       id: 'delete',

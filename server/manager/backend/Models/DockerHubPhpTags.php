@@ -38,6 +38,7 @@ final class DockerHubPhpTags
 
         $stem = $this->normalizeSearchStem($q);
         $installed = $this->installedTags();
+        $removable = $this->removableServices();
 
         if ($stem !== '' && self::isVersionStem($stem)) {
             $hub = $this->collectStemMatches($stem, $variant);
@@ -47,7 +48,7 @@ final class DockerHubPhpTags
             $slice = array_slice($rows, $offset, $perPage);
             $versions = [];
             foreach ($slice as $row) {
-                $mapped = $this->mapHubRow($row, $installed);
+                $mapped = $this->mapHubRow($row, $installed, $removable);
                 if ($mapped !== null) {
                     $versions[] = $mapped;
                 }
@@ -70,7 +71,7 @@ final class DockerHubPhpTags
             if (!is_array($row)) {
                 continue;
             }
-            $mapped = $this->mapHubRow($row, $installed);
+            $mapped = $this->mapHubRow($row, $installed, $removable);
             if ($mapped !== null) {
                 $versions[] = $mapped;
             }
@@ -109,9 +110,10 @@ final class DockerHubPhpTags
 
     /**
      * @param array<string, true> $installed
+     * @param array<string, true> $removable
      * @return array<string, mixed>|null
      */
-    private function mapHubRow(array $row, array $installed): ?array
+    private function mapHubRow(array $row, array $installed, array $removable): ?array
     {
         $tag = strtolower(trim((string) ($row['name'] ?? '')));
         if ($tag === '') {
@@ -141,6 +143,7 @@ final class DockerHubPhpTags
             'installed' => $installable
                 && (isset($installed[$tag])
                     || isset($installed[PhpVersionId::dockerTag($version, $rowVariant)])),
+            'removable' => $installable && isset($removable[$service]),
         ];
     }
 
@@ -444,6 +447,21 @@ final class DockerHubPhpTags
                 continue;
             }
             $keys[PhpVersionId::dockerTag($version, $variant)] = true;
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function removableServices(): array
+    {
+        $keys = [];
+        foreach (array_keys(PhpVersionCatalog::versions()) as $service) {
+            if (PhpVersionInstaller::isRemovable((string) $service)) {
+                $keys[(string) $service] = true;
+            }
         }
 
         return $keys;

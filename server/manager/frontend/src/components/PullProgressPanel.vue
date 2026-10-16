@@ -29,6 +29,12 @@ const title = computed(() => {
   if (job.action === 'recreate') {
     return t('progress.recreate_title', { service: job.label })
   }
+  if (job.action === 'install-ext') {
+    return t('progress.ext_install_title', { service: job.label, extension: job.extension || '' })
+  }
+  if (job.action === 'uninstall-ext') {
+    return t('progress.ext_uninstall_title', { service: job.label, extension: job.extension || '' })
+  }
   return t('progress.pull_create_title', { service: job.label })
 })
 
@@ -57,6 +63,29 @@ const bodyText = computed(() => {
 })
 
 const isBusy = computed(() => pullProgress.value?.state === 'busy')
+
+const extensionJob = computed(() => {
+  const action = pullProgress.value?.action
+  return action === 'install-ext' || action === 'uninstall-ext'
+})
+
+const jobStateLabel = computed(() => {
+  const job = pullProgress.value
+  if (!job?.state) return ''
+  if (extensionJob.value && job.state !== 'busy') {
+    return t(job.failed || job.state === 'error' ? 'progress.ext_failed' : 'progress.ext_done')
+  }
+  return stateLabel(job.state)
+})
+
+const jobStateSeverity = computed(() => {
+  const job = pullProgress.value
+  if (!job?.state) return 'contrast'
+  if (extensionJob.value && job.state !== 'busy') {
+    return job.failed || job.state === 'error' ? 'danger' : 'success'
+  }
+  return stateSeverity(job.state)
+})
 
 function stateSeverity(state) {
   if (state === 'running') return 'success'
@@ -115,8 +144,8 @@ watch(
         <Tag
           v-if="pullProgress?.state"
           class="pull-progress-state"
-          :value="stateLabel(pullProgress.state)"
-          :severity="stateSeverity(pullProgress.state)"
+          :value="jobStateLabel"
+          :severity="jobStateSeverity"
           rounded
         />
       </div>

@@ -24,33 +24,10 @@ const {
   startStatusStreams,
   stopStatusStreams,
   bootstrapped,
-  data,
-  stateLabel,
-  startPhpControllerDaemon,
-  isPending,
 } = useManager()
 const { startCurrentTour } = useTour()
 
 const showChrome = computed(() => route.meta?.manager === true)
-
-const PHP_CONTROLLER_BANNER_ROUTES = new Set([
-  'nginx',
-  'services',
-  'compose-yaml',
-  'service-logs',
-  'php-versions',
-  'php-version-catalog',
-  'php-version-detail',
-  'php-version-supervisor',
-  'php-version-run',
-  'php-version-logs',
-])
-
-const showPhpControllerBanner = computed(() => {
-  if (!showChrome.value || !bootstrapped.value) return false
-  if (data.php_controller_daemon?.state === 'running') return false
-  return PHP_CONTROLLER_BANNER_ROUTES.has(route.name)
-})
 
 const accessBadge = computed(() => t('header.local_only'))
 
@@ -231,41 +208,6 @@ watch(() => route.fullPath, updateTitle)
         </li>
       </ul>
     </nav>
-
-    <Message
-      v-if="showPhpControllerBanner"
-      severity="warn"
-      class="php-controller-banner"
-      :closable="false"
-      role="status"
-    >
-      <div class="php-controller-banner-inner">
-        <div class="php-controller-banner-copy">
-          <Tag
-            :value="stateLabel(data.php_controller_daemon?.state)"
-            severity="warn"
-          />
-          <p>{{ t('php_controller.daemon_banner') }}</p>
-          <p
-            v-if="!data.php_controller_daemon?.start_available"
-            class="create-hint"
-          >
-            {{ t('php_controller.daemon_not_created_hint') }}
-          </p>
-        </div>
-        <Button
-          type="button"
-          :label="
-            isPending('php-daemon')
-              ? t('action.working')
-              : t('php_controller.daemon_start')
-          "
-          :loading="isPending('php-daemon')"
-          :disabled="!data.php_controller_daemon?.start_available || isPending('php-daemon')"
-          @click="startPhpControllerDaemon"
-        />
-      </div>
-    </Message>
 
     <Message
       v-if="showChrome && fatalError"

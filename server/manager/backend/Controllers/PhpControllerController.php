@@ -7,7 +7,6 @@ namespace Manager\Controllers;
 use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
-use Manager\Models\PhpControllerDaemon;
 use Manager\Models\PhpDetails;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
@@ -15,6 +14,7 @@ use Manager\Models\PhpRuntime;
 use Manager\Models\PhpScratchPad;
 use Manager\Models\PhpSnippetRunner;
 use Manager\Models\DockerHubPhpTags;
+use Manager\Models\PhpVersionId;
 use Manager\Models\PhpVersionInstaller;
 
 final class PhpControllerController extends Controller
@@ -70,6 +70,17 @@ final class PhpControllerController extends Controller
         $result = (new PhpVersionInstaller())->install($version, $variant);
 
         return Response::json($result);
+    }
+
+    public function removeVersion(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        (new PhpVersionInstaller())->remove($service);
+        $payload = $this->phpPayload();
+        $payload['message_key'] = 'php_controller.version_removed';
+        $payload['message_parameters'] = ['version' => PhpVersionId::label($service)];
+
+        return Response::json($payload);
     }
 
     public function action(Request $request, array $params = []): Response
@@ -347,54 +358,5 @@ final class PhpControllerController extends Controller
             'message_key' => 'php_controller.extension_uninstall_requested',
             'message_parameters' => ['extension' => $name],
         ]);
-    }
-
-    public function showDaemon(Request $request, array $params = []): Response
-    {
-        return Response::json([
-            'php_controller_daemon' => (new PhpControllerDaemon())->details(),
-        ]);
-    }
-
-    public function startDaemon(Request $request, array $params = []): Response
-    {
-        $result = (new PhpControllerDaemon())->start();
-
-        return Response::json($result);
-    }
-
-    public function createDaemon(Request $request, array $params = []): Response
-    {
-        $result = (new PhpControllerDaemon())->create();
-
-        return Response::json($result);
-    }
-
-    public function stopDaemon(Request $request, array $params = []): Response
-    {
-        $result = (new PhpControllerDaemon())->stop();
-
-        return Response::json($result);
-    }
-
-    public function restartDaemon(Request $request, array $params = []): Response
-    {
-        $result = (new PhpControllerDaemon())->restart();
-
-        return Response::json($result);
-    }
-
-    public function removeDaemon(Request $request, array $params = []): Response
-    {
-        $result = (new PhpControllerDaemon())->remove();
-
-        return Response::json($result);
-    }
-
-    public function daemonLogs(Request $request, array $params = []): Response
-    {
-        $tail = (int) $request->queryParam('tail', 300);
-
-        return Response::json((new PhpControllerDaemon())->logs($tail));
     }
 }

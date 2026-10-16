@@ -5,28 +5,23 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ComposeJobs;
 use Manager\Support\Config;
 use Manager\Support\ContainerControl;
-use Manager\Support\ControllerRequests;
 use Manager\Support\DockerLiveState;
 use Manager\Support\JsonFile;
 
 final class NginxManagement
 {
-    private ?PhpControllerDaemon $daemon;
+    private readonly ComposeJobs $jobs;
 
     public function __construct(
         private readonly string $controllerPath = '',
         private readonly string $runtimePath = '',
         private readonly string $logsPath = '',
-        ?PhpControllerDaemon $daemon = null,
+        ?ComposeJobs $jobs = null,
     ) {
-        $this->daemon = $daemon;
-    }
-
-    private function daemon(): PhpControllerDaemon
-    {
-        return $this->daemon ??= new PhpControllerDaemon();
+        $this->jobs = $jobs ?? new ComposeJobs();
     }
 
     public function status(): array
@@ -45,7 +40,7 @@ final class NginxManagement
         if (is_array($decoded) && in_array($decoded['state'] ?? null, ['running', 'stopped', 'not_created', 'busy', 'error'], true)) {
             $status = array_merge($status, array_intersect_key($decoded, $status));
         }
-        if ($this->daemon()->status()['state'] === 'running' && ControllerRequests::hasBlocking($base . '/requests', 'nginx', ['start', 'stop', 'restart', 'create'])) {
+        if ($this->jobs->blocks($base, 'nginx')) {
             $status['state'] = 'busy';
             $status['message_key'] = 'nginx.processing';
         } else {
@@ -63,8 +58,6 @@ final class NginxManagement
         if (!in_array($action, ['start', 'stop', 'restart', 'create'], true)) {
             throw new HttpException('nginx.invalid_action', 400);
         }
-        $this->daemon()->assertRunning();
-
         $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/');
         if (in_array($action, ['start', 'stop', 'restart'], true)) {
             $state = ContainerControl::apply('nginx_container', $action);
@@ -83,24 +76,10 @@ final class NginxManagement
             return bin2hex(random_bytes(16));
         }
 
-        $dir = $base . '/requests';
-        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
-            throw new HttpException('nginx.request_failed', 500);
-        }
-        $id = bin2hex(random_bytes(16));
-        $payload = json_encode([
-            'request_id' => $id,
+        return $this->jobs->begin($base, [
             'service' => 'nginx',
             'action' => $action,
-            'requested_at' => date(DATE_ATOM),
-        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL;
-        $final = $dir . '/' . $id . '__nginx__' . $action . '.json';
-        $temp = $final . '.tmp';
-        if (file_put_contents($temp, $payload, LOCK_EX) === false || !rename($temp, $final)) {
-            @unlink($temp);
-            throw new HttpException('nginx.request_failed', 500);
-        }
-        return $id;
+        ]);
     }
 
     public function requestTest(): void

@@ -109,7 +109,6 @@ function waitForNginx(predicate, timeoutMs = 45000) {
 }
 
 function nginxEnabled(action) {
-  if (data.php_controller_daemon?.state !== 'running') return false
   const state = nginxState()
   if (nginxPending.value || state === 'busy') return false
   if (action === 'create') return state === 'not_created' || state === 'error'

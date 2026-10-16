@@ -75,7 +75,6 @@ function stateSeverity(state) {
 }
 
 function enabled(action) {
-  if (data.php_controller_daemon?.state !== 'running') return false
   if (pending.value || nginx.value.state === 'busy') return false
   if (action === 'create') return nginx.value.state === 'not_created' || nginx.value.state === 'error'
   if (action === 'start') return nginx.value.state === 'stopped'
