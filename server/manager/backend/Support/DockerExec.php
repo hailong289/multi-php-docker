@@ -646,6 +646,15 @@ PHP;
     /**
      * Host path bound into a container mount destination (Engine view).
      */
+    /** Image that already contains the Docker CLI. Falls back to the published manager tag. */
+    public static function helperImage(): string
+    {
+        $inspect = self::inspectNamedContainer('manager_container');
+        $image = is_array($inspect) ? (string) ($inspect['Config']['Image'] ?? '') : '';
+
+        return $image !== '' ? $image : 'long301001/multi-php-docker:manager';
+    }
+
     public static function mountSource(string $containerName, string $destination): ?string
     {
         $inspect = self::inspectNamedContainer($containerName);
@@ -824,7 +833,7 @@ SH;
         )));
 
         $exit = self::runEphemeral([
-            'Image' => 'docker:cli',
+            'Image' => self::helperImage(),
             'Cmd' => ['/bin/sh', '-c', $script],
             'Env' => $env,
             'WorkingDir' => '/project',
@@ -970,7 +979,7 @@ SH;
         // install exits before compose can pull or build.
 
         return self::startDetachedLocal([
-            'Image' => 'docker:cli',
+            'Image' => self::helperImage(),
             'Cmd' => ['/bin/sh', '/scripts/php/php-controller.sh', 'once'],
             'Env' => $env,
             'WorkingDir' => '/project',
