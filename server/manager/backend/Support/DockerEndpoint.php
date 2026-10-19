@@ -525,7 +525,7 @@ SH;
 
         // Use Docker Engine on LOCAL socket to run the helper (always local sock).
         $helperConfig = [
-            'Image' => 'docker:cli',
+            'Image' => DockerExec::helperImage(),
             'Cmd' => ['/bin/sh', '-c', $script],
             'Env' => [
                 'SSH_USER=' . $user,
