@@ -9,7 +9,14 @@ COPY server/manager/frontend/ ./
 # vite.config.js writes to ../public → /public
 RUN npm run build
 
+FROM docker:cli AS dockercli
+
 FROM php:8.5-cli-alpine
+
+# Compose actions run in this image. Shipping the CLI avoids a separate docker:cli pull.
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=dockercli /usr/local/bin/docker-compose /usr/local/bin/docker-compose
+COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 
 WORKDIR /app
 COPY server/manager/backend ./backend
