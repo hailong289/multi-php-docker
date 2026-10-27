@@ -39,6 +39,20 @@ final class DatabaseDump
         return ['sh', '-c', $this->script($engine, $database, $relativeFile, true)];
     }
 
+    public function deleteFiles(string $relativeFile): void
+    {
+        if (!preg_match('#^(mysql|postgres)/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.sql$#', $relativeFile)) {
+            throw new HttpException('database.invalid_file', 400);
+        }
+        $root = $this->backupsRoot();
+        foreach ([$relativeFile, $relativeFile . '.exit', $relativeFile . '.restore.exit'] as $name) {
+            $path = $root . '/' . $name;
+            if (is_file($path)) {
+                unlink($path);
+            }
+        }
+    }
+
     /** @param array<string, mixed> $row */
     public function syncStatus(array $row): array
     {

@@ -55,6 +55,7 @@ return [
     ['GET', '/databases/dumps', [DatabaseController::class, 'index']],
     ['POST', '/databases/dumps', [DatabaseController::class, 'store']],
     ['POST', '/databases/dumps/(?P<id>[a-f0-9]{16})/restore', [DatabaseController::class, 'restore']],
+    ['DELETE', '/databases/dumps/(?P<id>[a-f0-9]{16})', [DatabaseController::class, 'destroy']],
     ['GET', '/databases/(?P<engine>mysql|postgres)/names', [DatabaseController::class, 'names']],
     ['GET', '/infra-services', [InfraController::class, 'index']],
     ['GET', '/infra-services/compose-files', [InfraController::class, 'composeFiles']],

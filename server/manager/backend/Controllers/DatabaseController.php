@@ -108,6 +108,17 @@ final class DatabaseController extends Controller
         return Response::json(['dump' => $row], 202);
     }
 
+    public function destroy(Request $request, array $params = []): Response
+    {
+        $row = $this->indexModel()->remove((string) ($params['id'] ?? ''));
+        $file = (string) ($row['file'] ?? '');
+        if ($file !== '') {
+            $this->dump()->deleteFiles($file);
+        }
+
+        return Response::json(['message_key' => 'databases.deleted']);
+    }
+
     private function start(string $engine, array $cmd, string $id): void
     {
         $container = self::CONTAINERS[$engine] ?? '';

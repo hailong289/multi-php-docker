@@ -1543,6 +1543,16 @@ $index->mark($row['id'], 'ready');
 $listed = $index->list();
 assert_true(count($listed) === 1 && $listed[0]['status'] === 'ready', 'list shows ready dump');
 assert_true($index->find($row['id'])['database'] === 'app', 'find by id');
+$removed = $index->remove($row['id']);
+assert_true($removed['id'] === $row['id'], 'remove returns the row');
+assert_true($index->list() === [], 'remove clears the index');
+$removeMissing = false;
+try {
+    $index->remove($row['id']);
+} catch (HttpException $e) {
+    $removeMissing = $e->errorKey() === 'database.dump_missing';
+}
+assert_true($removeMissing, 'remove missing dump fails');
 
 $project = sys_get_temp_dir() . '/mgr-dump-cmd-' . bin2hex(random_bytes(4));
 mkdir($project . '/server/backups', 0775, true);
@@ -1559,6 +1569,13 @@ $pending = (new DatabaseDumpIndex($project . '/server/backups'))->add('mysql', '
 file_put_contents($project . '/server/backups/mysql/shop-1.sql.exit', "0\n");
 $synced = $dump->syncStatus($pending);
 assert_true($synced['status'] === 'ready', 'exit 0 marks the dump ready');
+$sqlPath = $project . '/server/backups/mysql/shop-1.sql';
+file_put_contents($sqlPath, "-- dump\n");
+file_put_contents($sqlPath . '.restore.exit', "0\n");
+$dump->deleteFiles('mysql/shop-1.sql');
+assert_true(!is_file($sqlPath), 'deleteFiles removes the sql');
+assert_true(!is_file($sqlPath . '.exit'), 'deleteFiles removes the exit marker');
+assert_true(!is_file($sqlPath . '.restore.exit'), 'deleteFiles removes restore exit');
 
 $ini = "memory_limit = 256M\n";
 $xdebug = new PhpXdebug();

@@ -85,6 +85,21 @@ final class DatabaseDumpIndex
         throw new HttpException('database.dump_missing', 404);
     }
 
+    /** @return array<string, mixed> */
+    public function remove(string $id): array
+    {
+        $data = $this->read();
+        foreach ($data['dumps'] as $i => $row) {
+            if (($row['id'] ?? '') === $id) {
+                array_splice($data['dumps'], $i, 1);
+                $this->write($data);
+
+                return $row;
+            }
+        }
+        throw new HttpException('database.dump_missing', 404);
+    }
+
     private function path(): string
     {
         return rtrim($this->rootDir, '/') . '/index.json';
