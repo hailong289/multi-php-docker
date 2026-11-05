@@ -240,6 +240,21 @@ final class PhpControllerController extends Controller
         ]);
     }
 
+    public function importScratch(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $sessions = $request->json()['sessions'] ?? null;
+        if (!is_array($sessions)) {
+            throw new HttpException('php_controller.session_import_invalid', 400);
+        }
+        $scratch = (new PhpScratchPad())->import($service, array_values($sessions));
+
+        return Response::json([
+            'message_key' => 'php_controller.session_imported',
+            'php_scratch' => $scratch,
+        ]);
+    }
+
     public function saveScratch(Request $request, array $params = []): Response
     {
         $service = (string) ($params['service'] ?? '');
