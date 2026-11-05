@@ -43,6 +43,7 @@ const nameDraft = ref('')
 const nameError = ref('')
 const nameTarget = ref(null)
 const nameInput = ref(null)
+const importInput = ref(null)
 const code = ref(DEFAULT_CODE)
 const result = ref(null)
 const updatedAt = ref('')
@@ -381,6 +382,49 @@ async function deleteSession(item) {
   }
 }
 
+async function exportSessions() {
+  await flushDraft()
+  const payload = {
+    service: service.value,
+    exported_at: new Date().toISOString(),
+    sessions: sessions.value.map(({ name, code: body }) => ({ name, code: body })),
+  }
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${service.value}-sessions.json`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function importSessions(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file || !service.value || mutating.value) return
+  let list
+  try {
+    const parsed = JSON.parse(await file.text())
+    list = Array.isArray(parsed) ? parsed : parsed?.sessions
+  } catch {
+    list = null
+  }
+  if (!Array.isArray(list)) {
+    showToast('failure', t('php_controller.session_import_invalid'))
+    return
+  }
+  await flushDraft()
+  mutating.value = 'import'
+  try {
+    const payload = await apiSend('POST', `/api/php-controllers/${service.value}/scratch/import`, { sessions: list })
+    applyPad(payload.php_scratch)
+    showToast('success', t(payload.message_key || 'php_controller.session_imported'))
+  } catch (error) {
+    showToast('failure', translateApiError(error))
+  } finally {
+    mutating.value = ''
+  }
+}
+
 async function runCode() {
   if (!canRun.value) return
   await flushDraft()
@@ -486,6 +530,32 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="panel-heading-actions">
+          <input
+            ref="importInput"
+            type="file"
+            accept=".json,application/json"
+            hidden
+            @change="importSessions"
+          />
+          <Button
+            type="button"
+            severity="secondary"
+            outlined
+            icon="pi pi-upload"
+            :label="mutating === 'import' ? t('action.working') : t('php_controller.session_import')"
+            :loading="mutating === 'import'"
+            :disabled="!!mutating || loading"
+            @click="importInput?.click()"
+          />
+          <Button
+            type="button"
+            severity="secondary"
+            outlined
+            icon="pi pi-download"
+            :label="t('php_controller.session_export')"
+            :disabled="!!mutating || loading || !sessions.length"
+            @click="exportSessions"
+          />
           <Button
             type="button"
             data-tour="php-run-session-add"

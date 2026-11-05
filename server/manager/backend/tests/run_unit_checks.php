@@ -825,6 +825,26 @@ assert_true($activated['code'] === "<?php echo 2;\n", 'scratch activate keeps fi
 $deleted = $pad->delete('php-8.5', $firstId);
 assert_true($deleted['id'] === $secondId, 'scratch delete switches to remaining');
 assert_true(count($deleted['sessions']) === 1, 'scratch delete leaves one');
+$imported = $pad->import('php-8.5', [
+    ['name' => 'Utils', 'code' => "<?php echo 'i';\n"],
+    ['name' => 'Bad'],
+    'junk',
+]);
+assert_true(count($imported['sessions']) === 2, 'scratch import skips invalid items');
+assert_true($imported['name'] === 'Utils (2)', 'scratch import dedupes names');
+assert_true($imported['code'] === "<?php echo 'i';\n", 'scratch import activates first imported');
+try {
+    $pad->import('php-8.5', [['name' => 'x']]);
+    assert_true(false, 'scratch import rejects empty');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.session_import_invalid', 'scratch import rejects empty');
+}
+try {
+    $pad->import('php-8.5', array_fill(0, PhpScratchPad::MAX_SESSIONS, ['code' => '<?php']));
+    assert_true(false, 'scratch import enforces limit');
+} catch (\Manager\Http\HttpException $e) {
+    assert_true($e->errorKey() === 'php_controller.session_limit', 'scratch import enforces limit');
+}
 $legacyDir = sys_get_temp_dir() . '/php-scratch-legacy-' . bin2hex(random_bytes(4));
 mkdir($legacyDir, 0775, true);
 file_put_contents($legacyDir . '/php-8.5.json', json_encode([
