@@ -88,6 +88,7 @@ return [
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/run', [PhpControllerController::class, 'runSnippet']],
     ['GET', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch', [PhpControllerController::class, 'showScratch']],
     ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch', [PhpControllerController::class, 'createScratch']],
+    ['POST', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch/import', [PhpControllerController::class, 'importScratch']],
     ['PUT', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch', [PhpControllerController::class, 'saveScratch']],
     ['PUT', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch/(?P<id>[a-f0-9]{12})', [PhpControllerController::class, 'saveScratch']],
     ['DELETE', '/php-controllers/(?P<service>php-[0-9.]+(?:-alpine|-trixie)?)/scratch/(?P<id>[a-f0-9]{12})', [PhpControllerController::class, 'deleteScratch']],
