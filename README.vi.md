@@ -15,7 +15,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 
 | Dịch vụ | Container | Cổng host | Thông tin mặc định |
 | --- | --- | --- | --- |
-| Nginx | `nginx_container` | `80`, `443` | Phục vụ domain trong `env.json` |
+| Nginx | `nginx_container` | `80`, `443` (đổi được) | Phục vụ domain trong `env.json` |
 | PHP 8.5 | `php8.5_container` | Không public | PHP-FPM cổng `9000` trong Docker network |
 | PHP 8.4 | `php8.4_container` | Không public | PHP-FPM cổng `9000` trong Docker network (profile) |
 | PHP 8.3 | `php8.3_container` | Không public | PHP-FPM cổng `9000` trong Docker network (profile) |
@@ -35,7 +35,7 @@ Repository cung cấp môi trường phát triển cục bộ gồm Nginx, PHP 7
 | PHP Controller | `php_controller_container` | Không public | Điều khiển allowlist PHP container qua Docker socket |
 | Env Init | `env_init_container` | Không public | Tạo `env.json` nếu thiếu rồi thoát với mã `0` |
 
-`docker compose up -d` khởi động Nginx, Server Manager và PHP Controller, và chạy `env-init` một lần trước đó (chỉ tạo `env.json` khi file chưa có). PHP 8.5 (`php-8.5`), các bản PHP còn lại, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO và Supervisor đều nằm trong profile riêng và mặc định không chạy cho đến khi bạn bật từ Server Manager hoặc bằng `--profile`.
+`docker compose up -d` khởi động Server Manager và PHP Controller, và chạy `env-init` một lần trước đó (chỉ tạo `env.json` khi file chưa có). PHP 8.5 (`php-8.5`), các bản PHP còn lại, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO và Supervisor đều nằm trong profile riêng và mặc định không chạy cho đến khi bạn bật từ Server Manager hoặc bằng `--profile`. `docker compose pull` vẫn tải image Nginx nhưng không tạo container Nginx cho đến khi bạn nhấn **Cài đặt** ở trang **Nginx**; thao tác này ghi `NGINX_SCALE=1` vào `.env` để các lần `docker compose up -d` sau giữ Nginx. Nếu bạn đã chạy Nginx trước thay đổi này, hãy thêm `NGINX_SCALE=1` vào `.env` (hoặc mở Server Manager một lần) trước khi chạy `docker compose up -d`, nếu không Compose sẽ xóa container hiện có.
 
 Image local (`multi-php-local`):
 
@@ -201,6 +201,8 @@ Server Manager cho phép:
 - Quản lý trực tiếp trạng thái các PHP container bằng các nút **Tạo**, **Khởi động**, **Dừng** và **Khởi động lại**.
 - Khởi động và dừng **MySQL**, **PostgreSQL**, **Redis**, **RabbitMQ**, **Kafka**, **Mailpit**, **MinIO** và **Supervisor** từ UI.
 - Mở **Chi tiết** từng phiên bản PHP để xem extension đã tải, bật/tắt dòng `extension=` trong `php.ini` đã mount, cài một số extension curated vào container đang chạy, và sửa nội dung `php.ini` (sau khi lưu có thể chọn Restart PHP-FPM).
+- Đổi port host của Nginx (HTTP/HTTPS) ở trang **Nginx**. Port được lưu thành `NGINX_HTTP_PORT` / `NGINX_HTTPS_PORT` trong `.env` và Nginx được tạo lại để áp dụng. Link site trong UI tự kèm port khi khác 80/443.
+- Đổi port host của MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit và MinIO ở **Services** → **Chi tiết**. Port được lưu thành các biến `<SERVICE>_HOST_PORT` trong `.env` (xem `.env.example`) và container được tạo lại; dữ liệu trong volume được giữ nguyên. Các container trong `app-network` vẫn dùng port gốc (`mysql_container:3306`, …). Port đang được service khác trong Manager dùng sẽ bị từ chối.
 - Quản lý Nginx tại menu riêng: **Khởi động**, **Dừng**, **Khởi động lại**, chạy `nginx -t`, **Apply & Reload**, và xem tối đa 200 dòng log test/reload, error, access gần nhất.
 - Bật **HTTPS** từng site (opt-in). Để trống file chứng chỉ để tự sinh self-signed, hoặc upload cặp `.crt`/`.pem` và `.key`. HTTP (cổng 80) và HTTPS (cổng 443) cùng phục vụ; trình duyệt sẽ cảnh báo cert tự ký. Sau khi đổi SSL, nhấn **Apply & Reload Nginx**. Cert nằm trong `nginx/ssl/<app-name>/` và không commit lên Git. Sau khi cập nhật code này, tạo lại Nginx một lần (`docker compose up -d nginx`) để mount `./nginx/ssl`.
 

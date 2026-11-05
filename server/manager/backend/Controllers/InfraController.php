@@ -77,6 +77,20 @@ final class InfraController extends Controller
         ]);
     }
 
+    public function ports(Request $request, array $params = []): Response
+    {
+        $service = (string) ($params['service'] ?? '');
+        $ports = $request->json()['ports'] ?? null;
+        $runtime = new InfraRuntime();
+        $requestId = $runtime->updatePorts($service, is_array($ports) ? $ports : []);
+
+        return Response::json([
+            'request_id' => $requestId,
+            'message_key' => $requestId === '' ? 'ports.saved' : 'ports.applying',
+            'infra_services' => $this->infraServicesPayload($runtime),
+        ]);
+    }
+
     public function composeFiles(Request $request, array $params = []): Response
     {
         $compose = new InfraCompose();

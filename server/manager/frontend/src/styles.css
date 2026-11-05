@@ -1786,6 +1786,40 @@ select:focus:not([class*='p-']) {
   margin: 0;
 }
 
+.service-conn-ports {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.service-conn-ports-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+
+.service-conn-ports-row label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.service-conn-ports .p-inputnumber-input {
+  width: 6.5rem;
+}
+
+.nginx-ports {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.nginx-ports .p-inputnumber-input {
+  width: 6.5rem;
+}
+
 .nginx-control-stack {
   display: flex;
   flex-direction: column;
@@ -2189,6 +2223,7 @@ select:focus:not([class*='p-']) {
   gap: 8px;
   max-width: 100%;
   overflow: hidden;
+  overflow-wrap: anywhere;
   font-weight: 650;
   font-size: 13px;
 }
@@ -2210,6 +2245,8 @@ select:focus:not([class*='p-']) {
 }
 
 .source-log-viewer {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   padding: 14px 16px 16px;
 }
@@ -2217,16 +2254,58 @@ select:focus:not([class*='p-']) {
 .source-log-viewer-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.45rem;
   margin-bottom: 0.75rem;
 }
 
+.source-log-expand.p-button {
+  margin-left: auto;
+}
+
+.source-log-viewer-file {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-log-viewer-meta {
+  margin: 0.5rem 0 0;
+}
+
+/* Same box for viewer and editor so toggling edit does not jump. */
+.service-logs-pre.source-logs-pre,
 .source-log-editor {
+  flex: 1 1 auto;
+  height: 60vh;
+  min-height: 320px;
+  max-height: none;
+}
+
+.source-log-viewer.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  padding: 12px 16px 16px;
+  background: var(--panel);
+}
+
+.source-log-viewer.is-expanded .service-logs-pre.source-logs-pre,
+.source-log-viewer.is-expanded .source-log-editor {
+  height: auto;
+  min-height: 0;
+}
+
+.source-log-editor {
+  display: block;
   width: 100%;
-  min-height: 28vh;
-  max-height: calc(100vh - 420px);
+  margin: 0;
   padding: 0.85rem 1rem;
-  resize: vertical;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
   border: 1px solid var(--p-content-border-color, var(--line));
   border-radius: var(--p-content-border-radius, 10px);
   background: var(--log-bg, #0b1220);
@@ -2292,11 +2371,6 @@ select:focus:not([class*='p-']) {
 .source-log-config .p-error,
 .source-log-file .p-error {
   margin: 0;
-}
-
-.source-logs-pre {
-  min-height: 28vh;
-  max-height: calc(100vh - 420px);
 }
 
 .source-logs-pre .log-line {

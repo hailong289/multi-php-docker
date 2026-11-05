@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Manager\Models;
 
 use Manager\Http\HttpException;
+use Manager\Support\ComposeEnv;
 use Manager\Support\ComposeJobs;
 use Manager\Support\Config;
 use Manager\Support\ContainerControl;
 use Manager\Support\DockerLiveState;
+use Manager\Support\HostPorts;
 use Manager\Support\JsonFile;
 
 final class NginxManagement
@@ -20,6 +22,7 @@ final class NginxManagement
         private readonly string $runtimePath = '',
         private readonly string $logsPath = '',
         ?ComposeJobs $jobs = null,
+        private readonly string $envPath = '',
     ) {
         $this->jobs = $jobs ?? new ComposeJobs();
     }
@@ -50,7 +53,44 @@ final class NginxManagement
                 'php_controller.status_refreshed'
             );
         }
-        return $status;
+        $env = $this->envPath ?: ComposeEnv::path();
+        // Containers created before NGINX_SCALE existed: pin scale so the next `compose up` keeps them.
+        if ($status['state'] !== 'not_created' && $status['state'] !== 'busy' && ComposeEnv::get('NGINX_SCALE', $env) === null) {
+            ComposeEnv::set(['NGINX_SCALE' => '1'], $env);
+        }
+
+        return [...$status, ...$this->ports()];
+    }
+
+    /** @return array{http_port: int, https_port: int} */
+    public function ports(): array
+    {
+        $ports = HostPorts::read('nginx', $this->envPath ?: null);
+
+        return ['http_port' => $ports['http'], 'https_port' => $ports['https']];
+    }
+
+    /**
+     * Saves host ports to .env; recreates nginx when it exists so the new mapping applies.
+     *
+     * @return string request id of the recreate job, '' when nginx is not created yet
+     */
+    public function updatePorts(mixed $http, mixed $https): string
+    {
+        $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/');
+        if ($this->jobs->blocks($base, 'nginx')) {
+            throw new HttpException('php_controller.busy', 409);
+        }
+        HostPorts::save('nginx', ['http' => $http, 'https' => $https], $this->envPath ?: null);
+        // A stopped container keeps its old port mapping on `docker start`, so recreate it too.
+        if (!in_array(DockerLiveState::stateFor('nginx_container'), ['running', 'stopped'], true)) {
+            return '';
+        }
+
+        return $this->jobs->begin($base, [
+            'service' => 'nginx',
+            'action' => 'recreate',
+        ]);
     }
 
     public function requestAction(string $action): string
@@ -74,6 +114,11 @@ final class NginxManagement
             }
 
             return bin2hex(random_bytes(16));
+        }
+
+        // scale 0 makes `compose create nginx` a no-op, so opt in before the job runs.
+        if (!ComposeEnv::set(['NGINX_SCALE' => '1'], $this->envPath ?: ComposeEnv::path())) {
+            throw new HttpException('nginx.request_failed', 500);
         }
 
         return $this->jobs->begin($base, [
@@ -128,7 +173,7 @@ final class NginxManagement
         $base = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/') . '/status';
         $best = '';
         $bestMtime = -1;
-        foreach (['nginx.last-start.log', 'nginx.last-restart.log', 'nginx.last-stop.log'] as $name) {
+        foreach (['nginx.last-create.log', 'nginx.last-recreate.log', 'nginx.last-start.log', 'nginx.last-restart.log', 'nginx.last-stop.log'] as $name) {
             $path = $base . '/' . $name;
             if (!is_file($path)) {
                 continue;
@@ -160,6 +205,8 @@ final class NginxManagement
         $controllerStatus = rtrim($this->controllerPath ?: Config::phpControllerPath(), '/') . '/status';
         $paths = match ($name) {
             'action' => [
+                $controllerStatus . '/nginx.last-create.log',
+                $controllerStatus . '/nginx.last-recreate.log',
                 $controllerStatus . '/nginx.last-start.log',
                 $controllerStatus . '/nginx.last-restart.log',
                 $controllerStatus . '/nginx.last-stop.log',

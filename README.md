@@ -15,7 +15,7 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 
 | Service | Container | Host ports | Default configuration |
 | --- | --- | --- | --- |
-| Nginx | `nginx_container` | `80`, `443` | Serves domains defined in `env.json` |
+| Nginx | `nginx_container` | `80`, `443` (configurable) | Serves domains defined in `env.json` |
 | PHP 8.5 | `php8.5_container` | Not published | PHP-FPM on port `9000` inside the Docker network |
 | PHP 8.4 | `php8.4_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
 | PHP 8.3 | `php8.3_container` | Not published | PHP-FPM on port `9000` inside the Docker network (profile) |
@@ -35,7 +35,7 @@ This repository provides a local development environment with Nginx, PHP 7.4, PH
 | PHP Controller | `php_controller_container` | Not published | Controls the allowlisted PHP containers through the Docker socket |
 | Env Init | `env_init_container` | Not published | Creates a missing `env.json`, then exits with code `0` |
 
-`docker compose up -d` starts Nginx, Server Manager, and PHP Controller, and runs one-shot `env-init` first (creates `env.json` only when it is missing). PHP 8.5 (`php-8.5`), the other PHP versions, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor each use a Compose profile and stay off until you start them from Server Manager or with `--profile`.
+`docker compose up -d` starts Server Manager and PHP Controller, and runs one-shot `env-init` first (creates `env.json` only when it is missing). PHP 8.5 (`php-8.5`), the other PHP versions, MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, MinIO, and Supervisor each use a Compose profile and stay off until you start them from Server Manager or with `--profile`. `docker compose pull` downloads the Nginx image, but no Nginx container is created until you click **Install** on the **Nginx** page; that writes `NGINX_SCALE=1` to `.env` so later `docker compose up -d` runs keep it. If you already ran Nginx before this change, add `NGINX_SCALE=1` to `.env` (or open Server Manager once) before running `docker compose up -d`, otherwise Compose removes the existing container.
 
 Local images (`multi-php-local`):
 
@@ -201,6 +201,8 @@ Server Manager can:
 - Manage PHP container state directly with **Create**, **Start**, **Stop**, and **Restart** controls.
 - Start and stop **MySQL**, **PostgreSQL**, **Redis**, **RabbitMQ**, **Kafka**, **Mailpit**, **MinIO**, and **Supervisor** from the UI.
 - Open **Details** for each PHP version to list loaded extensions, toggle `extension=` lines in the mounted `php.ini`, install a curated set of extensions into a running container, and edit `php.ini` (after save you can choose to restart PHP-FPM).
+- Change the Nginx host ports (HTTP/HTTPS) on the **Nginx** page. They are saved as `NGINX_HTTP_PORT` / `NGINX_HTTPS_PORT` in `.env`, and Nginx is recreated to apply them. Site links in the UI include the port when it is not 80/443.
+- Change the host ports of MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, and MinIO in **Services** → **Details**. They are saved as `<SERVICE>_HOST_PORT` variables in `.env` (see `.env.example`) and the container is recreated; data volumes are kept. Containers on `app-network` keep using the original ports (`mysql_container:3306`, …). A port already used by another managed service is rejected.
 - Manage Nginx from a dedicated menu: **Start**, **Stop**, **Restart**, run `nginx -t`, **Apply & Reload**, and inspect up to 200 recent test/reload, error, and access log lines.
 - Enable **HTTPS** per site (opt-in). Leave the certificate files empty to generate a self-signed cert, or upload a `.crt`/`.pem` and `.key`. HTTP (port 80) and HTTPS (port 443) both keep serving; browsers warn on self-signed certs. Click **Apply & Reload Nginx** after changing SSL. Certificates are stored in `nginx/ssl/<app-name>/` and are not committed to Git. After pulling this change, recreate Nginx once (`docker compose up -d nginx`) so `./nginx/ssl` is mounted.
 
