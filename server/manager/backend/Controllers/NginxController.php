@@ -130,16 +130,6 @@ final class NginxController extends Controller
         ]);
     }
 
-    public function test(Request $request, array $params = []): Response
-    {
-        $runtime = new NginxManagement();
-        $runtime->requestTest();
-        return Response::json([
-            'message_key' => 'nginx.test_requested',
-            'nginx_management' => $runtime->details(),
-        ]);
-    }
-
     public function status(Request $request, array $params = []): Response
     {
         return Response::json([

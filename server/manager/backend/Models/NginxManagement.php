@@ -127,23 +127,11 @@ final class NginxManagement
         ]);
     }
 
-    public function requestTest(): void
-    {
-        $runtime = rtrim($this->runtimePath ?: Config::runtimePath(), '/');
-        if (!is_dir($runtime) && !mkdir($runtime, 0775, true) && !is_dir($runtime)) {
-            throw new HttpException('error.runtime_directory', 500);
-        }
-        if (file_put_contents($runtime . '/nginx.test', date(DATE_ATOM), LOCK_EX) === false) {
-            throw new HttpException('nginx.test_request_failed', 500);
-        }
-    }
-
     public function details(): array
     {
         $runtime = rtrim($this->runtimePath ?: Config::runtimePath(), '/');
         return [
             ...$this->status(),
-            'test_status' => $this->readJson($runtime . '/nginx.test.status.json'),
             'reload_status' => $this->readJson($runtime . '/nginx.status.json'),
             'logs' => $this->logs(),
         ];
@@ -153,13 +141,10 @@ final class NginxManagement
     {
         $runtime = rtrim($this->runtimePath ?: Config::runtimePath(), '/');
         $logs = rtrim($this->logsPath ?: Config::nginxLogsPath(), '/');
-        $test = $runtime . '/nginx.test.log';
-        $reload = $runtime . '/nginx.reload.log';
-        $operation = (is_file($test) && (!is_file($reload) || filemtime($test) >= filemtime($reload))) ? $test : $reload;
 
         return [
             'action' => $this->tailFile($this->newestControllerActionLog()),
-            'operation' => $this->tailFile($operation),
+            'operation' => $this->tailFile($runtime . '/nginx.reload.log'),
             'error' => $this->tailFile($logs . '/error.log'),
             'access' => $this->tailFile($logs . '/access.log'),
         ];
@@ -211,10 +196,7 @@ final class NginxManagement
                 $controllerStatus . '/nginx.last-restart.log',
                 $controllerStatus . '/nginx.last-stop.log',
             ],
-            'operation' => [
-                $runtime . '/nginx.test.log',
-                $runtime . '/nginx.reload.log',
-            ],
+            'operation' => [$runtime . '/nginx.reload.log'],
             'error' => [$logs . '/error.log'],
             'access' => [$logs . '/access.log'],
         };

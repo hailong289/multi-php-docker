@@ -27,7 +27,6 @@ const pending = ref('')
 const nginx = ref({
   container: 'nginx_container',
   state: 'not_created',
-  test_status: null,
   reload_status: null,
   logs: {},
 })
@@ -116,7 +115,6 @@ function applyManagement(next) {
           ...next.logs,
         }
       : nginx.value.logs || {},
-    test_status: next.test_status !== undefined ? next.test_status : nginx.value.test_status,
     reload_status: next.reload_status !== undefined ? next.reload_status : nginx.value.reload_status,
   }
 }
@@ -186,7 +184,6 @@ function waitForManagement(predicate, timeoutMs = 45000) {
       () => [
         nginx.value.state,
         nginx.value.reload_status?.updated_at,
-        nginx.value.test_status?.updated_at,
         nginx.value.logs?.action?.updated_at,
       ],
       check,
@@ -333,7 +330,6 @@ async function savePorts() {
 async function run(action, path, method = 'POST', body = {}) {
   pending.value = action
   const previousReloadAt = nginx.value.reload_status?.updated_at || ''
-  const previousTestAt = nginx.value.test_status?.updated_at || ''
   const previousActionAt = nginx.value.logs?.action?.updated_at || ''
   try {
     const result = await apiSend(method, path, body)
@@ -345,22 +341,20 @@ async function run(action, path, method = 'POST', body = {}) {
         ...result.nginx_management,
       }
     }
-    if (action === 'reload' || action === 'test') {
-      showToast('success', t(action === 'reload' ? 'reload.waiting' : 'nginx.test_requested'))
-      const prev = action === 'reload' ? previousReloadAt : previousTestAt
+    if (action === 'reload') {
+      showToast('success', t('reload.waiting'))
       const okWait = await waitForManagement(() => {
-        const rs = action === 'reload' ? nginx.value.reload_status : nginx.value.test_status
-        return !!(rs && rs.updated_at && rs.updated_at !== prev)
+        const rs = nginx.value.reload_status
+        return !!(rs && rs.updated_at && rs.updated_at !== previousReloadAt)
       }, 30000)
       if (!okWait) {
-        showToast('failure', t(action === 'reload' ? 'reload.timeout' : 'nginx.no_result'))
+        showToast('failure', t('reload.timeout'))
         return
       }
-      const rs = action === 'reload' ? nginx.value.reload_status : nginx.value.test_status
-      const msg = statusText(rs)
+      const rs = nginx.value.reload_status
       const ok = rs?.status === 'success'
-      showToast(ok ? 'success' : 'failure', msg)
-      if (ok && action === 'reload') loadTemplates({ silent: true }).catch(() => {})
+      showToast(ok ? 'success' : 'failure', statusText(rs))
+      if (ok) loadTemplates({ silent: true }).catch(() => {})
       return
     }
     if (action === 'ports' && !result.request_id) {
@@ -558,16 +552,6 @@ onUnmounted(() => {
                     <Button
                       type="button"
                       size="small"
-                      severity="secondary"
-                      outlined
-                      :label="pending === 'test' ? t('action.working') : t('nginx.test')"
-                      :loading="pending === 'test'"
-                      :disabled="!enabled('test')"
-                      @click="run('test', '/api/nginx/test')"
-                    />
-                    <Button
-                      type="button"
-                      size="small"
                       data-tour="nginx-apply-reload"
                       :label="pending === 'reload' ? t('reload.waiting') : t('nginx.apply_reload')"
                       :loading="pending === 'reload'"
@@ -624,13 +608,6 @@ onUnmounted(() => {
                 </Message>
 
                 <div class="nginx-results">
-                  <Message
-                    :severity="resultSeverity(nginx.test_status)"
-                    :closable="false"
-                  >
-                    <strong>{{ t('nginx.test_result') }}:</strong>
-                    {{ statusText(nginx.test_status) }}
-                  </Message>
                   <Message
                     v-if="pending === 'reload'"
                     severity="info"
