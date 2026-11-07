@@ -267,13 +267,6 @@ export function buildNginxMenuItems({ t, nginx }) {
       run: () => run('restart'),
     },
     {
-      id: 'test',
-      label: t('nginx.test'),
-      disabled: !enabled('test'),
-      loading: pending('test'),
-      run: () => run('test'),
-    },
-    {
       id: 'reload',
       label: t('nginx.apply_reload'),
       disabled: !enabled('reload'),

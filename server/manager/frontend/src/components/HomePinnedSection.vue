@@ -97,7 +97,6 @@ function waitForNginx(predicate, timeoutMs = 45000) {
       () => [
         data.nginx_management?.state,
         data.nginx_management?.reload_status?.updated_at,
-        data.nginx_management?.test_status?.updated_at,
         data.nginx_management?.logs?.action?.updated_at,
       ],
       check,
@@ -122,14 +121,12 @@ async function nginxRun(action) {
     start: '/api/nginx/actions/start',
     stop: '/api/nginx/actions/stop',
     restart: '/api/nginx/actions/restart',
-    test: '/api/nginx/test',
     reload: '/api/nginx/reload',
   }
   const path = paths[action]
   if (!path) return
   nginxPending.value = action
   const previousReloadAt = data.nginx_management?.reload_status?.updated_at || ''
-  const previousTestAt = data.nginx_management?.test_status?.updated_at || ''
   const previousActionAt = data.nginx_management?.logs?.action?.updated_at || ''
   try {
     const result = await apiSend('POST', path, {})
@@ -146,24 +143,17 @@ async function nginxRun(action) {
       }
     }
 
-    if (action === 'reload' || action === 'test') {
-      showToast('success', t(action === 'reload' ? 'reload.waiting' : 'nginx.test_requested'))
-      const prev = action === 'reload' ? previousReloadAt : previousTestAt
+    if (action === 'reload') {
+      showToast('success', t('reload.waiting'))
       const okWait = await waitForNginx(() => {
-        const rs =
-          action === 'reload'
-            ? data.nginx_management?.reload_status
-            : data.nginx_management?.test_status
-        return !!(rs && rs.updated_at && rs.updated_at !== prev)
+        const rs = data.nginx_management?.reload_status
+        return !!(rs && rs.updated_at && rs.updated_at !== previousReloadAt)
       }, 30000)
       if (!okWait) {
-        showToast('failure', t(action === 'reload' ? 'reload.timeout' : 'nginx.no_result'))
+        showToast('failure', t('reload.timeout'))
         return
       }
-      const rs =
-        action === 'reload'
-          ? data.nginx_management?.reload_status
-          : data.nginx_management?.test_status
+      const rs = data.nginx_management?.reload_status
       const ok = rs?.status === 'success'
       showToast(ok ? 'success' : 'failure', nginxStatusText(rs))
       return

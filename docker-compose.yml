@@ -71,9 +71,11 @@ services:
       context: .
       dockerfile: ./docker_files/nginx.Dockerfile
     container_name: nginx_container
+    # Image is pulled but no container is created until Manager sets NGINX_SCALE=1 in .env.
+    scale: ${NGINX_SCALE:-0}
     ports:
-      - "80:80"
-      - "443:443"
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
       - ./server:/var/www
       - ./scripts:/var/scripts
@@ -116,7 +118,7 @@ services:
       MANAGER_DOCKER_SOCK: /var/run/docker.sock
       # php -S is otherwise single-threaded; terminal + status SSE + actions must overlap.
       PHP_CLI_SERVER_WORKERS: "12"
-    command: ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
+    command: ["php", "-d", "memory_limit=512M", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
     restart: unless-stopped
     depends_on:
       env-init:

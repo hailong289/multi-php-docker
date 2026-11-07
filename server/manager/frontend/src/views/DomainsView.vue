@@ -37,6 +37,7 @@ const {
   hostsStateLabel,
   hostsStatusText,
   isPending,
+  siteUrl,
 } = useManager()
 
 const copied = ref(false)
@@ -141,7 +142,7 @@ async function copyManualLines() {
       <DataTable :value="domainEntries" data-key="key" striped-rows>
         <Column :header="t('domains.table.domain')">
           <template #body="{ data: row }">
-            <a :href="'http://' + row.domain_name" target="_blank" rel="noreferrer">
+            <a :href="siteUrl(row.domain_name)" target="_blank" rel="noreferrer">
               {{ row.domain_name }}
             </a>
           </template>
