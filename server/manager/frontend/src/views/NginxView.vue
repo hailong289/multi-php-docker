@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } fr
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Column from 'primevue/column'
+import InputNumber from 'primevue/inputnumber'
 import DataTable from 'primevue/datatable'
 import Message from 'primevue/message'
 import Tab from 'primevue/tab'
@@ -26,7 +27,6 @@ const pending = ref('')
 const nginx = ref({
   container: 'nginx_container',
   state: 'not_created',
-  test_status: null,
   reload_status: null,
   logs: {},
 })
@@ -38,6 +38,13 @@ const draft = ref('')
 const original = ref('')
 const templateMeta = ref(null)
 const templateLoading = ref(false)
+
+const portDraft = ref({ http: 80, https: 443 })
+const portsDirty = computed(
+  () =>
+    portDraft.value.http !== (nginx.value.http_port ?? 80) ||
+    portDraft.value.https !== (nginx.value.https_port ?? 443),
+)
 
 const domainLogList = ref([])
 const domainLogsLoading = ref(false)
@@ -78,6 +85,7 @@ function enabled(action) {
   if (pending.value || nginx.value.state === 'busy') return false
   if (action === 'create') return nginx.value.state === 'not_created' || nginx.value.state === 'error'
   if (action === 'start') return nginx.value.state === 'stopped'
+  if (action === 'ports') return portsDirty.value && !!portDraft.value.http && !!portDraft.value.https
   return nginx.value.state === 'running'
 }
 
@@ -95,6 +103,9 @@ function formatTime(iso) {
 
 function applyManagement(next) {
   if (!next || typeof next !== 'object') return
+  if (next.http_port && !portsDirty.value) {
+    portDraft.value = { http: next.http_port, https: next.https_port }
+  }
   nginx.value = {
     ...nginx.value,
     ...next,
@@ -104,7 +115,6 @@ function applyManagement(next) {
           ...next.logs,
         }
       : nginx.value.logs || {},
-    test_status: next.test_status !== undefined ? next.test_status : nginx.value.test_status,
     reload_status: next.reload_status !== undefined ? next.reload_status : nginx.value.reload_status,
   }
 }
@@ -174,7 +184,6 @@ function waitForManagement(predicate, timeoutMs = 45000) {
       () => [
         nginx.value.state,
         nginx.value.reload_status?.updated_at,
-        nginx.value.test_status?.updated_at,
         nginx.value.logs?.action?.updated_at,
       ],
       check,
@@ -308,13 +317,23 @@ async function saveTemplate() {
   }
 }
 
-async function run(action, path) {
+async function savePorts() {
+  if (!enabled('ports')) return
+  const recreate = nginx.value.state !== 'not_created'
+  if (recreate && !(await confirmDialog(t('nginx.ports_confirm'), { acceptLabel: t('nginx.ports_save'), rejectLabel: t('action.cancel') }))) return
+  await run('ports', '/api/nginx/ports', 'PUT', {
+    http_port: portDraft.value.http,
+    https_port: portDraft.value.https,
+  })
+}
+
+async function run(action, path, method = 'POST', body = {}) {
   pending.value = action
   const previousReloadAt = nginx.value.reload_status?.updated_at || ''
-  const previousTestAt = nginx.value.test_status?.updated_at || ''
   const previousActionAt = nginx.value.logs?.action?.updated_at || ''
   try {
-    const result = await apiSend('POST', path, {})
+    const result = await apiSend(method, path, body)
+    if (action === 'ports') portDraft.value = { http: body.http_port, https: body.https_port }
     if (result.nginx_management) {
       applyManagement(result.nginx_management)
       data.nginx_management = {
@@ -322,28 +341,30 @@ async function run(action, path) {
         ...result.nginx_management,
       }
     }
-    if (action === 'reload' || action === 'test') {
-      showToast('success', t(action === 'reload' ? 'reload.waiting' : 'nginx.test_requested'))
-      const prev = action === 'reload' ? previousReloadAt : previousTestAt
+    if (action === 'reload') {
+      showToast('success', t('reload.waiting'))
       const okWait = await waitForManagement(() => {
-        const rs = action === 'reload' ? nginx.value.reload_status : nginx.value.test_status
-        return !!(rs && rs.updated_at && rs.updated_at !== prev)
+        const rs = nginx.value.reload_status
+        return !!(rs && rs.updated_at && rs.updated_at !== previousReloadAt)
       }, 30000)
       if (!okWait) {
-        showToast('failure', t(action === 'reload' ? 'reload.timeout' : 'nginx.no_result'))
+        showToast('failure', t('reload.timeout'))
         return
       }
-      const rs = action === 'reload' ? nginx.value.reload_status : nginx.value.test_status
-      const msg = statusText(rs)
+      const rs = nginx.value.reload_status
       const ok = rs?.status === 'success'
-      showToast(ok ? 'success' : 'failure', msg)
-      if (ok && action === 'reload') loadTemplates({ silent: true }).catch(() => {})
+      showToast(ok ? 'success' : 'failure', statusText(rs))
+      if (ok) loadTemplates({ silent: true }).catch(() => {})
       return
     }
-    if (action === 'start' || action === 'stop' || action === 'restart' || action === 'create') {
+    if (action === 'ports' && !result.request_id) {
+      showToast('success', t(result.message_key || 'nginx.ports_saved'))
+      return
+    }
+    if (['start', 'stop', 'restart', 'create', 'ports'].includes(action)) {
       showToast('success', t('nginx.action_requested'))
       const minSettleAt = Date.now() + 900
-      const waitMs = action === 'create' ? 600000 : 45000
+      const waitMs = action === 'create' ? 600000 : action === 'ports' ? 180000 : 45000
       const settled = await waitForManagement(() => {
         if (nginx.value.state === 'busy') return false
         if (Date.now() < minSettleAt) return false
@@ -362,6 +383,12 @@ async function run(action, path) {
         showToast(
           'failure',
           excerpt ? t('nginx.start_failed_detail', { detail: excerpt }) : t('nginx.create_failed'),
+        )
+      } else if (action === 'ports' && state !== 'running') {
+        const excerpt = actionLogExcerpt.value
+        showToast(
+          'failure',
+          excerpt ? t('nginx.ports_failed_detail', { detail: excerpt }) : t('nginx.ports_failed'),
         )
       } else if (action === 'start' && state !== 'running') {
         const excerpt = actionLogExcerpt.value
@@ -485,6 +512,16 @@ onUnmounted(() => {
                   </div>
                   <div class="controller-actions" data-tour="nginx-actions">
                     <Button
+                      v-if="nginx.state === 'not_created' || nginx.state === 'error'"
+                      type="button"
+                      size="small"
+                      :label="pending === 'create' ? t('action.working') : t('nginx.create')"
+                      :loading="pending === 'create'"
+                      :disabled="!enabled('create')"
+                      :title="t('nginx.create_hint')"
+                      @click="run('create', '/api/nginx/actions/create')"
+                    />
+                    <Button
                       type="button"
                       size="small"
                       :label="pending === 'start' ? t('action.working') : t('nginx.start')"
@@ -515,16 +552,6 @@ onUnmounted(() => {
                     <Button
                       type="button"
                       size="small"
-                      severity="secondary"
-                      outlined
-                      :label="pending === 'test' ? t('action.working') : t('nginx.test')"
-                      :loading="pending === 'test'"
-                      :disabled="!enabled('test')"
-                      @click="run('test', '/api/nginx/test')"
-                    />
-                    <Button
-                      type="button"
-                      size="small"
                       data-tour="nginx-apply-reload"
                       :label="pending === 'reload' ? t('reload.waiting') : t('nginx.apply_reload')"
                       :loading="pending === 'reload'"
@@ -534,6 +561,36 @@ onUnmounted(() => {
                     <PinButton kind="nginx" id="nginx" />
                   </div>
                 </div>
+
+                <form class="nginx-ports" @submit.prevent="savePorts">
+                  <label for="nginx-http-port">{{ t('nginx.http_port') }}</label>
+                  <InputNumber
+                    v-model="portDraft.http"
+                    input-id="nginx-http-port"
+                    :min="1"
+                    :max="65535"
+                    :use-grouping="false"
+                    :disabled="!!pending || nginx.state === 'busy'"
+                    size="small"
+                  />
+                  <label for="nginx-https-port">{{ t('nginx.https_port') }}</label>
+                  <InputNumber
+                    v-model="portDraft.https"
+                    input-id="nginx-https-port"
+                    :min="1"
+                    :max="65535"
+                    :use-grouping="false"
+                    :disabled="!!pending || nginx.state === 'busy'"
+                    size="small"
+                  />
+                  <Button
+                    type="submit"
+                    size="small"
+                    :label="pending === 'ports' ? t('action.working') : t('nginx.ports_save')"
+                    :loading="pending === 'ports'"
+                    :disabled="!enabled('ports')"
+                  />
+                </form>
 
                 <Message severity="info" :closable="false" class="nginx-apply-hint">
                   {{ t('nginx.apply_reload_hint') }}
@@ -551,13 +608,6 @@ onUnmounted(() => {
                 </Message>
 
                 <div class="nginx-results">
-                  <Message
-                    :severity="resultSeverity(nginx.test_status)"
-                    :closable="false"
-                  >
-                    <strong>{{ t('nginx.test_result') }}:</strong>
-                    {{ statusText(nginx.test_status) }}
-                  </Message>
                   <Message
                     v-if="pending === 'reload'"
                     severity="info"

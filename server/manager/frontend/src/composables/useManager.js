@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiGet, apiRelativeUrl, apiSend, setCsrfToken } from '../api'
 import { applySessionPayload, authState } from '../lib/authState'
@@ -8,6 +8,7 @@ import { composeLocalDomain, parseLocalDomain } from '../lib/localDomain'
 import { addToast, toastSeverityFromType } from '../lib/toast'
 import { confirmDialog } from '../lib/confirm'
 import { SOURCE_PREFIX } from '../lib/frameworkPaths'
+import { setInfraHostPorts } from '../lib/infraConnectionDetails'
 
 const STATUS_STREAM_PATH = '/api/status/stream'
 const STATUS_STREAM_EVENTS = ['servers', 'nginx', 'hosts', 'php', 'infra', 'supervisor']
@@ -55,6 +56,8 @@ const data = reactive({
   infra_services: { targets: {}, statuses: {}, compose_files: [] },
   supervisor_services: { targets: {}, statuses: {} },
 })
+
+watch(() => data.infra_services?.targets, setInfraHostPorts, { immediate: true })
 
 const form = reactive({
   app_name: '',
@@ -229,6 +232,14 @@ export function useManager() {
   function trKey(key, params = {}) {
     if (!key) return ''
     return t(key, params)
+  }
+
+  /** Site URL including the nginx host port when it is not the scheme default. */
+  function siteUrl(domain, secure = false) {
+    const port = Number(secure ? data.nginx_management?.https_port : data.nginx_management?.http_port)
+    const fallback = secure ? 443 : 80
+    const suffix = port && port !== fallback ? `:${port}` : ''
+    return `${secure ? 'https' : 'http'}://${domain}${suffix}`
   }
 
   function translateApiError(error) {
@@ -1583,6 +1594,7 @@ export function useManager() {
   }
 
   return {
+    siteUrl,
     loading,
     fatalError,
     editingKey,

@@ -1,4 +1,5 @@
 /** Connection presets for managed infra services (matches README defaults). */
+import { reactive } from 'vue'
 
 const HTTP_URL = /^https?:\/\//i
 
@@ -16,13 +17,26 @@ function webUrlFromFields(fields) {
   return withUrl?.value || null
 }
 
-/** @type {Record<string, ConnectionDetails>} */
-const DETAILS = {
+/** service => { key: host port }, fed from infra targets.host_ports */
+const hostPorts = reactive({})
+
+export function setInfraHostPorts(targets) {
+  for (const [service, target] of Object.entries(targets || {})) {
+    if (target?.host_ports) hostPorts[service] = { ...target.host_ports }
+  }
+}
+
+function port(service, key, fallback) {
+  return String(hostPorts[service]?.[key] ?? fallback)
+}
+
+/** @returns {Record<string, ConnectionDetails>} */
+const buildDetails = () => ({
   mysql: {
     fields: [
       { labelKey: 'services.conn.host_docker', value: 'mysql_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
-      { labelKey: 'services.conn.port', value: '3306' },
+      { labelKey: 'services.conn.port', value: port('mysql', 'main', 3306) },
       { labelKey: 'services.conn.user', value: 'root' },
       { labelKey: 'services.conn.password', value: '1' },
     ],
@@ -37,7 +51,7 @@ const DETAILS = {
     fields: [
       { labelKey: 'services.conn.host_docker', value: 'postgres_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
-      { labelKey: 'services.conn.port', value: '5432' },
+      { labelKey: 'services.conn.port', value: port('postgres', 'main', 5432) },
       { labelKey: 'services.conn.database', value: 'postgres' },
       { labelKey: 'services.conn.user', value: 'postgres' },
       { labelKey: 'services.conn.password', value: '1' },
@@ -55,7 +69,7 @@ const DETAILS = {
     fields: [
       { labelKey: 'services.conn.host_docker', value: 'redis_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
-      { labelKey: 'services.conn.port', value: '6379' },
+      { labelKey: 'services.conn.port', value: port('redis', 'main', 6379) },
       { labelKey: 'services.conn.password', value: '(none)' },
     ],
     env: ['REDIS_HOST=redis_container', 'REDIS_PORT=6379'].join('\n'),
@@ -64,13 +78,13 @@ const DETAILS = {
     fields: [
       { labelKey: 'services.conn.host_docker', value: 'rabbitmq_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
-      { labelKey: 'services.conn.port_amqp', value: '5672' },
-      { labelKey: 'services.conn.port_mgmt', value: '15672' },
+      { labelKey: 'services.conn.port_amqp', value: port('rabbitmq', 'amqp', 5672) },
+      { labelKey: 'services.conn.port_mgmt', value: port('rabbitmq', 'mgmt', 15672) },
       { labelKey: 'services.conn.user', value: 'admin' },
       { labelKey: 'services.conn.password', value: 'admin' },
       {
         labelKey: 'services.conn.web_url',
-        value: 'http://localhost:15672',
+        value: `http://localhost:${port('rabbitmq', 'mgmt', 15672)}`,
         web: true,
       },
     ],
@@ -84,7 +98,7 @@ const DETAILS = {
   kafka: {
     fields: [
       { labelKey: 'services.conn.broker_docker', value: 'kafka_container:29092' },
-      { labelKey: 'services.conn.broker_local', value: 'localhost:9092' },
+      { labelKey: 'services.conn.broker_local', value: `localhost:${port('kafka', 'main', 9092)}` },
     ],
     env: ['KAFKA_BROKERS=kafka_container:29092'].join('\n'),
     notes: ['services.conn.kafka_note'],
@@ -93,11 +107,11 @@ const DETAILS = {
     fields: [
       { labelKey: 'services.conn.host_docker', value: 'mailpit_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
-      { labelKey: 'services.conn.port_smtp', value: '1025' },
-      { labelKey: 'services.conn.port_web', value: '8025' },
+      { labelKey: 'services.conn.port_smtp', value: port('mailpit', 'smtp', 1025) },
+      { labelKey: 'services.conn.port_web', value: port('mailpit', 'web', 8025) },
       {
         labelKey: 'services.conn.web_url',
-        value: 'http://localhost:8025',
+        value: `http://localhost:${port('mailpit', 'web', 8025)}`,
         web: true,
       },
     ],
@@ -115,13 +129,13 @@ const DETAILS = {
     fields: [
       { labelKey: 'services.conn.host_docker', value: 'minio_container' },
       { labelKey: 'services.conn.host_local', value: '127.0.0.1' },
-      { labelKey: 'services.conn.port_api', value: '9000' },
-      { labelKey: 'services.conn.port_console', value: '9001' },
+      { labelKey: 'services.conn.port_api', value: port('minio', 'api', 9000) },
+      { labelKey: 'services.conn.port_console', value: port('minio', 'console', 9001) },
       { labelKey: 'services.conn.user', value: 'minioadmin' },
       { labelKey: 'services.conn.password', value: 'minioadmin' },
       {
         labelKey: 'services.conn.web_url',
-        value: 'http://localhost:9001',
+        value: `http://localhost:${port('minio', 'console', 9001)}`,
         web: true,
       },
     ],
@@ -135,21 +149,21 @@ const DETAILS = {
     ].join('\n'),
     notes: ['services.conn.minio_note'],
   },
-}
+})
 
 /** @returns {ConnectionDetails | null} */
 export function getInfraConnectionDetails(service) {
-  return DETAILS[service] || null
+  return buildDetails()[service] || null
 }
 
 export function hasInfraConnectionDetails(service) {
-  return Boolean(DETAILS[service])
+  return Boolean(buildDetails()[service])
 }
 
 /** @returns {string | null} */
 export function getInfraWebUrl(service) {
   if (!service) return null
-  const details = DETAILS[service]
+  const details = buildDetails()[service]
   if (!details) return null
   if (typeof details.webUrl === 'string' && details.webUrl) return details.webUrl
   return webUrlFromFields(details.fields)

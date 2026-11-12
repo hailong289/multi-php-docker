@@ -1078,6 +1078,83 @@ assert_true(($nginxStatusDown['state'] ?? '') !== 'busy', 'nginx not busy from a
 @unlink($nginxTmp . '/requests/aaa__nginx__start.json');
 assert_true((glob($nginxTmp . '/requests/*.json') ?: []) === [], 'nginx request wrote no files');
 
+$envFile = $nginxTmp . '/.env';
+file_put_contents($envFile, "HOSTS_FILE=/etc/hosts\nNGINX_HTTP_PORT=80");
+assert_true(\Manager\Support\ComposeEnv::get('HOSTS_FILE', $envFile) === '/etc/hosts', 'compose env reads key');
+assert_true(\Manager\Support\ComposeEnv::get('MISSING', $envFile) === null, 'compose env missing key');
+\Manager\Support\ComposeEnv::set(['NGINX_HTTP_PORT' => '8081', 'NGINX_SCALE' => '1'], $envFile);
+assert_true(
+    file_get_contents($envFile) === "HOSTS_FILE=/etc/hosts\nNGINX_HTTP_PORT=8081\nNGINX_SCALE=1\n",
+    'compose env replaces in place and appends'
+);
+$nginxPorts = new NginxManagement($nginxTmp, '', '', $jobs, $envFile);
+assert_true($nginxPorts->ports() === ['http_port' => 8081, 'https_port' => 443], 'nginx ports from env with default');
+foreach ([[0, 443], [80, 80], ['80', 443], [80, 70000]] as [$badHttp, $badHttps]) {
+    try {
+        $nginxPorts->updatePorts($badHttp, $badHttps);
+        assert_true(false, 'nginx rejects ports ' . json_encode([$badHttp, $badHttps]));
+    } catch (HttpException $e) {
+        assert_true($e->errorKey() === 'ports.invalid', 'nginx rejects ports ' . json_encode([$badHttp, $badHttps]));
+    }
+}
+assert_true($nginxPorts->updatePorts(8000, 8443) === '', 'nginx ports saved without recreate when not created');
+assert_true($nginxPorts->ports() === ['http_port' => 8000, 'https_port' => 8443], 'nginx ports persisted');
+
+use Manager\Support\HostPorts;
+
+foreach ([[8080, 443, 'manager'], [8000, 3306, 'mysql']] as [$cHttp, $cHttps, $cOwner]) {
+    try {
+        $nginxPorts->updatePorts($cHttp, $cHttps);
+        assert_true(false, 'nginx port conflict with ' . $cOwner);
+    } catch (HttpException $e) {
+        assert_true(
+            $e->errorKey() === 'ports.conflict' && ($e->parameters()['service'] ?? '') === $cOwner,
+            'nginx port conflict with ' . $cOwner
+        );
+    }
+}
+assert_true(HostPorts::read('mysql', $envFile) === ['main' => 3306], 'host ports default when unset');
+HostPorts::save('mysql', ['main' => 13306], $envFile);
+assert_true(HostPorts::read('mysql', $envFile) === ['main' => 13306], 'host ports saved');
+try {
+    HostPorts::save('postgres', ['main' => 13306], $envFile);
+    assert_true(false, 'host ports reject port used by another service');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'ports.conflict', 'host ports reject port used by another service');
+}
+try {
+    HostPorts::save('rabbitmq', ['amqp' => 5672], $envFile);
+    assert_true(false, 'host ports require every key');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'ports.invalid', 'host ports require every key');
+}
+$repoComposeDir = $repoRoot . '/compose';
+foreach (array_keys(HostPorts::MAP) as $portService) {
+    if ($portService === 'nginx') {
+        continue;
+    }
+    assert_true(
+        HostPorts::configurable($portService, $repoComposeDir . '/' . $portService . '.yml'),
+        'compose/' . $portService . '.yml interpolates its host port variables'
+    );
+}
+assert_true(HostPorts::configurable('nginx', $repoRoot . '/docker-compose.yml'), 'docker-compose.yml interpolates nginx ports');
+$handEdited = $nginxTmp . '/redis.yml';
+file_put_contents($handEdited, "services:\n  redis:\n    ports:\n      - \"6379:6379\"\n");
+assert_true(!HostPorts::configurable('redis', $handEdited), 'hand-edited compose file is not port configurable');
+$infraPorts = new \Manager\Models\InfraRuntime($nginxTmp, $jobs);
+try {
+    $infraPorts->updatePorts('redis', ['main' => 16379], $envFile, $handEdited);
+    assert_true(false, 'infra ports refuse non-configurable compose file');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'ports.not_configurable', 'infra ports refuse non-configurable compose file');
+}
+assert_true(
+    $infraPorts->updatePorts('redis', ['main' => 16379], $envFile, $repoComposeDir . '/redis.yml') === '',
+    'infra ports saved without recreate when not created'
+);
+assert_true(HostPorts::read('redis', $envFile) === ['main' => 16379], 'infra ports persisted');
+
 file_put_contents($infraTmp . '/requests/ccc__mysql__start.json', "{}\n");
 $infraBusyDown = new InfraRuntime($infraTmp, $jobs);
 $downStatuses = $infraBusyDown->statuses();

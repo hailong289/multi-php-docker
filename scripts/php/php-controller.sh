@@ -558,7 +558,7 @@ handle_compose_file_request() {
     ok=0
     host_project=$(resolve_host_project) || true
     if [ -n "$host_project" ]; then
-        project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
+        project_name=$(docker inspect manager_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
         if [ -z "$project_name" ]; then
             project_name=$(basename "$host_project")
         fi
@@ -952,7 +952,7 @@ if [ -z "$host_project" ]; then
     write_status "$service" "$(container_state "$container")" "php_controller.action_failed" "$request_id"
     exit 1
 fi
-project_name=$(docker inspect nginx_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
+project_name=$(docker inspect manager_container --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null) || true
 if [ -z "$project_name" ]; then
     project_name=$(basename "$host_project")
 fi

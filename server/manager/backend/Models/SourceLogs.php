@@ -17,9 +17,6 @@ final class SourceLogs
 {
     public const SOURCE_PREFIX = '/var/www/source';
 
-    /** Largest log body that can be loaded or saved in the editor. */
-    public const MAX_EDIT_BYTES = 1048576;
-
     /** @var list<string> */
     public const FRAMEWORKS = [
         'laravel',
@@ -259,9 +256,6 @@ final class SourceLogs
      */
     public function write(string $key, string $file, string $content): array
     {
-        if (strlen($content) > self::MAX_EDIT_BYTES) {
-            throw new HttpException('source_logs.too_large', 413);
-        }
         [$server] = $this->requireSource($key);
         $source = $this->describe($key, $server);
         $path = $this->resolveFile($server, $source, $file);
@@ -483,10 +477,6 @@ final class SourceLogs
     {
         if (!is_file($path) || !is_readable($path)) {
             return ['available' => false, 'content' => '', 'updated_at' => '', 'full' => true];
-        }
-        $size = (int) filesize($path);
-        if ($size > self::MAX_EDIT_BYTES) {
-            throw new HttpException('source_logs.too_large', 413);
         }
         $content = file_get_contents($path);
         if ($content === false) {
