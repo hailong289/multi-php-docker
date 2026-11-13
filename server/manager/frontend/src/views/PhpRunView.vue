@@ -10,6 +10,7 @@ import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
+import { useTabActive } from '../lib/routeTabs'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
@@ -457,8 +458,11 @@ function goBack() {
   router.push({ name: 'php-versions' })
 }
 
+const tabActive = useTabActive()
+
 function onKeydown(event) {
-  if (nameModalOpen.value) return
+  // Hidden run tabs keep their listener; only the visible one may run code.
+  if (nameModalOpen.value || !tabActive.value) return
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
     event.preventDefault()
     runCode()

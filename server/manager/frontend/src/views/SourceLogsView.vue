@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -415,6 +415,15 @@ watch(selectedFile, () => {
 watch(serverKey, () => {
   loadSource()
 }, { immediate: true })
+
+onDeactivated(() => {
+  stopFollow()
+  expanded.value = false
+})
+
+onActivated(() => {
+  if (followLogs.value) onFollowChange(true)
+})
 
 onUnmounted(() => {
   stopFollow()

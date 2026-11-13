@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -163,6 +163,12 @@ watch([service, composeName, logsKind], () => {
 onMounted(async () => {
   await loadBootstrap()
   await openForService()
+})
+
+onDeactivated(stopFollow)
+
+onActivated(() => {
+  if (followLogs.value) onFollowChange(true)
 })
 
 onUnmounted(() => {

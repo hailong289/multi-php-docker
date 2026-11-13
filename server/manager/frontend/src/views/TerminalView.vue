@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -20,6 +20,10 @@ function toggleExpanded() {
 
 watch(expanded, (value) => {
   document.body.style.overflow = value ? 'hidden' : ''
+})
+
+onDeactivated(() => {
+  expanded.value = false
 })
 
 onBeforeUnmount(() => {
