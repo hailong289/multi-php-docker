@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
@@ -9,13 +9,17 @@ import Tag from 'primevue/tag'
 import ToastHost from './components/ToastHost.vue'
 import PullProgressPanel from './components/PullProgressPanel.vue'
 import AppearanceMenu from './components/AppearanceMenu.vue'
+import RouteTabs from './components/RouteTabs.vue'
+import SplitPane from './components/SplitPane.vue'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useManager } from './composables/useManager'
 import { useTour } from './composables/useTour'
 import { applyThemeMode, readStoredThemeMode } from './lib/appearance'
+import { isSubPageRoute, resolveTab, routeTabs, splitTabs, tabLabel, tabWrapper, upsertTab } from './lib/routeTabs'
 
 const { t, locale } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const {
   fatalError,
   loadForRoute,
@@ -24,10 +28,32 @@ const {
   startStatusStreams,
   stopStatusStreams,
   bootstrapped,
+  data,
 } = useManager()
 const { startCurrentTour } = useTour()
 
 const showChrome = computed(() => route.meta?.manager === true)
+
+// Runs before the first render so KeepAlive already includes the landing view.
+// Only track sub-pages (not top-level nav routes) as open tabs.
+watch(
+  () => route.fullPath,
+  () => {
+    if (showChrome.value && isSubPageRoute(route.name))
+      routeTabs.value = upsertTab(routeTabs.value, route.path, route.fullPath)
+  },
+  { immediate: true },
+)
+const tabPaths = computed(() => routeTabs.value.map((tab) => tab.path))
+
+// One status stream feeds every pane, so widen it when they need different subsystems.
+const statusScope = computed(() => {
+  const main = screenScope(route.name)
+  const same = splitTabs.value.every((pane) => screenScope(resolveTab(router, pane.fullPath).name) === main)
+  return same ? main : 'all'
+})
+const paneCount = computed(() => (showChrome.value ? splitTabs.value.length + 1 : 1))
+const mainLabel = computed(() => tabLabel(router, t, data.servers, route.fullPath))
 
 const accessBadge = computed(() => t('header.local_only'))
 
@@ -109,7 +135,7 @@ function shouldStreamStatus() {
 }
 
 function syncStatusTransport() {
-  if (shouldStreamStatus()) startStatusStreams(screenScope(route.name))
+  if (shouldStreamStatus()) startStatusStreams(statusScope.value)
   else stopStatusStreams()
 }
 
@@ -133,13 +159,13 @@ onUnmounted(() => {
 function onVisibilityRefresh() {
   if (shouldStreamStatus()) {
     refreshForRoute(route.name)
-    startStatusStreams(screenScope(route.name))
+    startStatusStreams(statusScope.value)
   } else {
     stopStatusStreams()
   }
 }
 
-watch([bootstrapped, showChrome], () => {
+watch([bootstrapped, showChrome, statusScope], () => {
   syncStatusTransport()
 })
 
@@ -209,6 +235,8 @@ watch(() => route.fullPath, updateTitle)
       </ul>
     </nav>
 
+    <RouteTabs v-if="showChrome && routeTabs.length > 0" />
+
     <Message
       v-if="showChrome && fatalError"
       severity="error"
@@ -216,7 +244,28 @@ watch(() => route.fullPath, updateTitle)
     >
       {{ fatalError }}
     </Message>
-    <RouterView v-if="!showChrome || !fatalError" />
+    <div
+      v-if="!showChrome || !fatalError"
+      class="workspace"
+      :class="paneCount > 1 && ['is-split', `panes-${paneCount}`]"
+    >
+      <div class="workspace-main">
+        <!-- Same bar height as side panes so every area starts on one line. -->
+        <header v-if="paneCount > 1" class="split-pane-bar is-main">
+          <span class="split-pane-title">{{ mainLabel }}</span>
+        </header>
+        <RouterView v-slot="{ Component, route: viewRoute }">
+          <KeepAlive :include="tabPaths">
+            <component :is="tabWrapper(viewRoute.path)" :key="viewRoute.path">
+              <component :is="Component" />
+            </component>
+          </KeepAlive>
+        </RouterView>
+      </div>
+      <template v-if="showChrome">
+        <SplitPane v-for="pane in splitTabs" :key="pane.id" :pane-id="pane.id" />
+      </template>
+    </div>
     <ToastHost />
     <ConfirmDialog class="manager-confirm-dialog" />
     <PullProgressPanel />
