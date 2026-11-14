@@ -15,6 +15,7 @@ import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
+import { useTabActive } from '../lib/routeTabs'
 import PinButton from '../components/PinButton.vue'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
@@ -119,6 +120,8 @@ function applyManagement(next) {
   }
 }
 
+const tabActive = useTabActive()
+
 function stopStatusPoll() {
   if (statusPollTimer) {
     clearInterval(statusPollTimer)
@@ -133,7 +136,7 @@ function startStatusPoll() {
   if (tab.value === 'control') return
   const ms = dockerStatusBusy.value || nginx.value.state === 'busy' ? STATUS_POLL_BUSY_MS : STATUS_POLL_IDLE_MS
   statusPollTimer = setInterval(() => {
-    if (document.visibilityState !== 'visible') return
+    if (document.visibilityState !== 'visible' || !tabActive.value) return
     if (tab.value === 'domain-logs') {
       if (pending.value) return
       loadDomainLogList({ silent: true })
