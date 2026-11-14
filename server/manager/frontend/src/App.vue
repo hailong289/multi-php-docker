@@ -15,7 +15,7 @@ import ConfirmDialog from 'primevue/confirmdialog'
 import { useManager } from './composables/useManager'
 import { useTour } from './composables/useTour'
 import { applyThemeMode, readStoredThemeMode } from './lib/appearance'
-import { resolveTab, routeTabs, splitTabs, tabLabel, tabWrapper, upsertTab } from './lib/routeTabs'
+import { isSubPageRoute, resolveTab, routeTabs, splitTabs, tabLabel, tabWrapper, upsertTab } from './lib/routeTabs'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -35,10 +35,12 @@ const { startCurrentTour } = useTour()
 const showChrome = computed(() => route.meta?.manager === true)
 
 // Runs before the first render so KeepAlive already includes the landing view.
+// Only track sub-pages (not top-level nav routes) as open tabs.
 watch(
   () => route.fullPath,
   () => {
-    if (showChrome.value) routeTabs.value = upsertTab(routeTabs.value, route.path, route.fullPath)
+    if (showChrome.value && isSubPageRoute(route.name))
+      routeTabs.value = upsertTab(routeTabs.value, route.path, route.fullPath)
   },
   { immediate: true },
 )
@@ -233,7 +235,7 @@ watch(() => route.fullPath, updateTitle)
       </ul>
     </nav>
 
-    <RouteTabs v-if="showChrome && routeTabs.length > 1" />
+    <RouteTabs v-if="showChrome && routeTabs.length > 0" />
 
     <Message
       v-if="showChrome && fatalError"

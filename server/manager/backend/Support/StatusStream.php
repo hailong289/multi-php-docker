@@ -6,8 +6,8 @@ namespace Manager\Support;
 
 final class StatusStream
 {
-    private const LIFETIME_SECONDS = 1200;
-    private const PING_SECONDS = 15;
+    private const LIFETIME_SECONDS = 60;
+    private const PING_SECONDS = 10;
     private const SLEEP_BUSY_US = 200_000;
     private const SLEEP_IDLE_US = 1_500_000;
 

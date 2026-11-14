@@ -233,7 +233,7 @@ p {
 }
 
 .app-nav {
-  margin: 0 0 20px;
+  margin: 0 0 16px;
 }
 
 .app-nav-list {
@@ -279,123 +279,166 @@ p {
   outline-offset: 1px;
 }
 
-.route-tabs {
+/* Workspace sub-page tabs — IDE / Chrome style tab strip */
+.workspace-tabs-bar {
   display: flex;
-  gap: 6px;
-  margin: -10px 0 16px;
-  padding: 2px 2px 4px;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  align-items: flex-end;
+  margin: 0 0 18px;
+  border-bottom: 1px solid var(--p-content-border-color, var(--line));
+  padding: 0;
 }
 
-.route-tab {
+.workspace-tabs-list {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.workspace-tabs-list::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-tab {
   display: inline-flex;
-  flex: none;
   align-items: center;
-  max-width: 240px;
-  height: 30px;
-  padding: 0 4px 0 0;
-  border: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--line)) 80%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--p-content-background, var(--panel)) 55%, transparent);
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 100px;
+  max-width: 260px;
+  height: 34px;
+  padding: 0 8px 0 12px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, var(--p-content-background, var(--panel)) 45%, transparent);
   color: var(--p-text-muted-color, var(--muted));
+  font-size: 0.83rem;
+  font-weight: 550;
+  position: relative;
   transition:
     background 0.14s ease,
     border-color 0.14s ease,
     color 0.14s ease;
 }
 
-.route-tab:hover {
+.workspace-tab:hover {
   color: var(--p-text-color, var(--text));
-  border-color: color-mix(in srgb, var(--p-primary-color, var(--primary)) 30%, var(--p-content-border-color, var(--line)));
+  background: color-mix(in srgb, var(--p-content-background, var(--panel)) 80%, transparent);
 }
 
-.route-tab.is-active {
+.workspace-tab.is-active {
   color: var(--p-primary-color, var(--primary));
-  border-color: color-mix(in srgb, var(--p-primary-color, var(--primary)) 45%, transparent);
-  background: color-mix(in srgb, var(--p-primary-color, var(--primary)) 10%, var(--p-content-background, var(--panel)));
+  font-weight: 650;
+  background: var(--p-content-background, var(--panel));
+  border-color: var(--p-content-border-color, var(--line));
+  margin-bottom: -1px;
+  padding-bottom: 1px;
 }
 
-.route-tab-link {
+.workspace-tab.is-active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--p-primary-color, var(--primary));
+  border-radius: 8px 8px 0 0;
+}
+
+.workspace-tab-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1;
   height: 100%;
-  padding: 0 8px 0 12px;
-  border-radius: 999px;
   color: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
   text-decoration: none;
 }
 
-.route-tab-link::before {
-  content: '';
+.workspace-tab-icon {
   flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.35;
+  font-size: 0.78rem;
+  opacity: 0.7;
+  transition: opacity 0.14s ease;
 }
 
-.route-tab.is-active .route-tab-link::before {
+.workspace-tab.is-active .workspace-tab-icon,
+.workspace-tab:hover .workspace-tab-icon {
   opacity: 1;
 }
 
-.route-tab-text {
+.workspace-tab-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.route-tab-close {
+.workspace-tab-btn {
+  appearance: none;
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0;
+  border: none !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  box-shadow: none !important;
   color: inherit;
   opacity: 0.55;
   cursor: pointer;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
+  line-height: 1;
+  transition:
+    opacity 0.14s ease,
+    background 0.14s ease,
+    transform 0.1s ease;
 }
 
-.route-tab-close:hover {
+.workspace-tab-btn:hover {
   opacity: 1;
-  background: color-mix(in srgb, currentColor 14%, transparent);
+  background: color-mix(in srgb, currentColor 16%, transparent) !important;
 }
 
-.route-tab:not(:has(.route-tab-close)) .route-tab-link {
-  padding-right: 12px;
+.workspace-tab-btn:active {
+  transform: scale(0.92);
 }
 
-.route-tab-link:focus-visible,
-.route-tab-close:focus-visible {
+.workspace-tab-link:focus-visible,
+.workspace-tab-btn:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--p-primary-color, var(--primary)) 55%, transparent);
   outline-offset: 1px;
 }
 
-/* Split icon stays out of the way until the tab is hovered or focused. */
-.route-tab .route-tab-split {
-  width: 0;
+.workspace-tab-split {
+  width: 0 !important;
   opacity: 0;
   overflow: hidden;
+  pointer-events: none;
+  transition:
+    width 0.14s ease,
+    opacity 0.14s ease;
 }
 
-.route-tab:hover .route-tab-split,
-.route-tab:focus-within .route-tab-split {
-  width: 20px;
+.workspace-tab:hover .workspace-tab-split,
+.workspace-tab:focus-within .workspace-tab-split {
+  width: 18px !important;
   opacity: 0.55;
+  pointer-events: auto;
 }
 
-.route-tab:hover .route-tab-split:hover {
+.workspace-tab:hover .workspace-tab-split:hover {
   opacity: 1;
 }
 
@@ -1339,7 +1382,7 @@ button.action-menu-item.is-accent:focus-visible:not(:disabled),
   }
 }
 
-button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not([class*='driver-']),
+button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not(.workspace-tab-btn):not([class*='driver-']),
 .button,
 select:not([class*='p-']) {
   appearance: none;
@@ -1360,17 +1403,17 @@ select:not([class*='p-']) {
   vertical-align: middle;
 }
 
-button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not([class*='driver-']):hover,
+button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not(.workspace-tab-btn):not([class*='driver-']):hover,
 .button:hover {
   border-color: var(--blue);
 }
 
-button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not([class*='driver-']):disabled {
+button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not(.workspace-tab-btn):not([class*='driver-']):disabled {
   cursor: not-allowed;
   opacity: 0.42;
 }
 
-button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not([class*='driver-']).is-loading:disabled {
+button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not(.workspace-tab-btn):not([class*='driver-']).is-loading:disabled {
   opacity: 0.85;
 }
 

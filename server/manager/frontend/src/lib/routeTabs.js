@@ -18,7 +18,25 @@ export const HOME_TAB = '/'
 /** Side panes next to the main area (4 areas total: 2 cols, 3 cols, then 2×2). */
 export const MAX_SPLITS = 3
 
-/** Opens or refreshes the tab for `path`; past `max` the oldest closable tab is dropped. */
+/**
+ * Top-level nav routes that already appear in the main nav bar.
+ * These are NOT tracked as open tabs — only sub-pages are tabbed.
+ */
+export const NAV_ROUTES = new Set([
+  'home',
+  'domains',
+  'nginx',
+  'php-controller',
+  'services',
+  'php-versions',
+])
+
+/** Returns true if this route name should be tracked as an open tab. */
+export function isSubPageRoute(routeName) {
+  return routeName != null && !NAV_ROUTES.has(routeName)
+}
+
+/** Opens or refreshes the tab for `path`; past `max` the oldest tab is dropped. */
 export function upsertTab(list, path, fullPath, max = MAX_TABS) {
   const index = list.findIndex((tab) => tab.path === path)
   if (index >= 0) {
@@ -28,18 +46,21 @@ export function upsertTab(list, path, fullPath, max = MAX_TABS) {
     return next
   }
   const next = [...list, { path, fullPath }]
-  // ponytail: evicts by open order, not last use; switch to LRU if users complain.
-  if (next.length > max) next.splice(next.findIndex((tab) => tab.path !== HOME_TAB), 1)
+  // ponytail: evicts oldest tab; switch to LRU if users complain.
+  if (next.length > max) next.splice(0, 1)
   return next
 }
 
-/** Removes `path` (home stays); `neighbor` is the tab to show if `path` was active. */
+/** Removes `path`; `neighbor` is the tab to show if `path` was active. */
 export function removeTab(list, path) {
   const index = list.findIndex((tab) => tab.path === path)
-  if (index < 0 || path === HOME_TAB) return { list, neighbor: null }
+  if (index < 0) return { list, neighbor: null }
   const next = list.filter((_, i) => i !== index)
   return { list: next, neighbor: next[Math.min(index, next.length - 1)] || null }
 }
+
+/** Exact paths of top-level nav routes — used to filter out old saved tabs. */
+const NAV_PATHS = new Set(['/', '/domains', '/nginx', '/php-controller', '/services', '/php-versions'])
 
 function readTabs() {
   let saved = []
@@ -49,8 +70,8 @@ function readTabs() {
       saved = raw.filter((tab) => typeof tab?.path === 'string' && typeof tab?.fullPath === 'string')
     }
   } catch (_) {}
-  const home = saved.find((tab) => tab.path === HOME_TAB) || { path: HOME_TAB, fullPath: HOME_TAB }
-  return [home, ...saved.filter((tab) => tab.path !== HOME_TAB)].slice(0, MAX_TABS)
+  // Only restore sub-page tabs; silently drop any saved nav-level routes.
+  return saved.filter((tab) => !NAV_PATHS.has(tab.path)).slice(0, MAX_TABS)
 }
 
 export const routeTabs = ref(readTabs())
@@ -100,12 +121,42 @@ export function resolveTab(router, to) {
   return typeof redirect === 'string' ? router.resolve(redirect) : target
 }
 
+/** Route name to PrimeIcons class mapping for sub-page tabs. */
+const ROUTE_ICONS = {
+  terminal: 'pi-terminal',
+  'source-logs': 'pi-align-left',
+  'compose-yaml': 'pi-file-edit',
+  'compose-file-logs': 'pi-align-left',
+  'service-logs': 'pi-align-left',
+  'php-compose-yaml': 'pi-file-edit',
+  'php-version-catalog': 'pi-download',
+  'php-version-supervisor': 'pi-sitemap',
+  'php-version-run': 'pi-play',
+  'php-version-logs': 'pi-align-left',
+  'php-version-detail': 'pi-sliders-h',
+}
+
+export function tabIcon(router, fullPath) {
+  const target = resolveTab(router, fullPath)
+  return ROUTE_ICONS[target.name] || 'pi-window-maximize'
+}
+
 /** "Page title · subject" for a tab or the split pane. */
 export function tabLabel(router, t, servers, fullPath) {
   const target = resolveTab(router, fullPath)
-  const title = target.meta?.titleKey ? t(target.meta.titleKey) : target.path
   const { serverKey, service, name } = target.params
-  const subject = serverKey ? servers?.[serverKey]?.APP_NAME || serverKey : service || name
+  const cleanService = service ? service.replace(/^php-/, 'PHP ') : ''
+  const subject = serverKey ? servers?.[serverKey]?.APP_NAME || serverKey : cleanService || name
+
+  if (target.name === 'php-version-detail' && cleanService) {
+    return cleanService
+  }
+  if (target.name === 'php-version-run' && service) {
+    const title = target.meta?.titleKey ? t(target.meta.titleKey) : 'Run PHP'
+    return `${title} · ${service.replace(/^php-/, '')}`
+  }
+
+  const title = target.meta?.titleKey ? t(target.meta.titleKey) : target.path
   return subject ? `${title} · ${subject}` : title
 }
 
