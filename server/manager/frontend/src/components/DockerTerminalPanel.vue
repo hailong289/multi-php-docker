@@ -3,7 +3,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { apiRelativeUrl, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { terminalThemeFromDocument } from '../lib/monaco'
@@ -485,6 +485,10 @@ onMounted(async () => {
     emit('close')
   }
 })
+
+// A hidden tab releases its php -S worker; `since=offset` resumes without losing output.
+onDeactivated(stopOutputStream)
+onActivated(startOutputStream)
 
 onBeforeUnmount(() => {
   teardownIo()

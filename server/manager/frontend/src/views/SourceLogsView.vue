@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -33,6 +33,7 @@ const frameworkDraft = ref('laravel')
 const logPathDraft = ref('')
 const fieldErrors = ref({})
 const logPre = ref(null)
+const expanded = ref(false)
 /** @type {EventSource|null} */
 let followSource = null
 
@@ -393,6 +394,20 @@ async function clearLog() {
   }
 }
 
+function toggleExpanded() {
+  expanded.value = !expanded.value
+}
+
+function onExpandedKey(event) {
+  if (event.key === 'Escape') expanded.value = false
+}
+
+watch(expanded, (value) => {
+  document.body.style.overflow = value ? 'hidden' : ''
+  if (value) window.addEventListener('keydown', onExpandedKey)
+  else window.removeEventListener('keydown', onExpandedKey)
+})
+
 watch(selectedFile, () => {
   if (followLogs.value) onFollowChange(true)
 })
@@ -401,8 +416,20 @@ watch(serverKey, () => {
   loadSource()
 }, { immediate: true })
 
+onDeactivated(() => {
+  stopFollow()
+  expanded.value = false
+})
+
+onActivated(() => {
+  if (followLogs.value) onFollowChange(true)
+})
+
 onUnmounted(() => {
   stopFollow()
+  expanded.value = false
+  document.body.style.overflow = ''
+  window.removeEventListener('keydown', onExpandedKey)
 })
 </script>
 
@@ -563,8 +590,9 @@ onUnmounted(() => {
               </li>
             </ul>
           </aside>
-          <div class="source-log-viewer">
+          <div class="source-log-viewer" :class="{ 'is-expanded': expanded }">
             <div class="source-log-viewer-actions">
+              <span v-if="expanded" class="source-log-viewer-file">{{ selectedFile }}</span>
               <Button
                 v-if="!editing"
                 type="button"
@@ -603,6 +631,19 @@ onUnmounted(() => {
                 :disabled="!!pending || !selectedFile"
                 @click="deleteFile"
               />
+              <Button
+                type="button"
+                class="source-log-expand"
+                size="small"
+                severity="secondary"
+                text
+                rounded
+                :icon="expanded ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"
+                :aria-label="expanded ? t('source_logs.collapse') : t('source_logs.expand')"
+                :title="expanded ? t('source_logs.collapse') : t('source_logs.expand')"
+                :disabled="!selectedFile"
+                @click="toggleExpanded"
+              />
             </div>
             <textarea
               v-if="editing"
@@ -621,8 +662,8 @@ onUnmounted(() => {
               class="service-logs-pre source-logs-pre"
               v-html="logHtml"
             />
-            <p v-if="log?.updated_at" class="nginx-template-meta">
-              {{ log.updated_at }}
+            <p v-if="log?.updated_at" class="nginx-template-meta source-log-viewer-meta">
+              {{ formatTime(log.updated_at) || log.updated_at }}
               <template v-if="log.size != null"> · {{ formatSize(log.size) }}</template>
             </p>
           </div>

@@ -18,6 +18,7 @@ import Tag from 'primevue/tag'
 import { apiGet, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
+import { useTabActive } from '../lib/routeTabs'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
@@ -218,6 +219,8 @@ async function runLifecycle(action) {
   await phpAction(service.value, action)
 }
 
+const tabActive = useTabActive()
+
 function stopStatusPoll() {
   if (statusPollTimer) {
     clearInterval(statusPollTimer)
@@ -230,7 +233,7 @@ function startStatusPoll() {
   const busy = state.value === 'busy' || dockerStatusBusy.value || !!pending.value
   const ms = busy ? 2000 : 5000
   statusPollTimer = setInterval(() => {
-    if (document.visibilityState !== 'visible' || !service.value) return
+    if (document.visibilityState !== 'visible' || !tabActive.value || !service.value) return
     load({ silent: true })
   }, ms)
 }

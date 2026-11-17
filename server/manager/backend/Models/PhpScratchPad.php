@@ -105,6 +105,43 @@ final class PhpScratchPad
     }
 
     /**
+     * Appends exported sessions; all-or-nothing so a partial import never happens.
+     *
+     * @param list<mixed> $items
+     * @return array<string, mixed>
+     */
+    public function import(string $service, array $items): array
+    {
+        $pad = $this->loadPad($service);
+        $imported = [];
+        foreach ($items as $item) {
+            $code = is_array($item) ? ($item['code'] ?? null) : null;
+            if (!is_string($code) || trim($code) === '') {
+                continue;
+            }
+            if (strlen($code) > PhpSnippetRunner::MAX_CODE_BYTES) {
+                throw new HttpException('php_controller.code_too_large', 400);
+            }
+            $imported[] = [$code, is_string($item['name'] ?? null) ? $item['name'] : ''];
+        }
+        if ($imported === []) {
+            throw new HttpException('php_controller.session_import_invalid', 400);
+        }
+        if (count($pad['sessions']) + count($imported) > self::MAX_SESSIONS) {
+            throw new HttpException('php_controller.session_limit', 400);
+        }
+        $firstId = '';
+        foreach ($imported as [$code, $name]) {
+            $session = $this->makeSession($code, null, date(DATE_ATOM), $this->uniqueName($pad['sessions'], $name));
+            $pad['sessions'][] = $session;
+            $firstId = $firstId ?: $session['id'];
+        }
+        $pad['active_id'] = $firstId;
+
+        return $this->persist($pad);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rename(string $service, string $id, string $name): array

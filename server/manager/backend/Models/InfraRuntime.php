@@ -13,6 +13,7 @@ use Manager\Support\ContainerControl;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerImageIndex;
 use Manager\Support\DockerLiveState;
+use Manager\Support\HostPorts;
 use Manager\Support\JsonFile;
 
 final class InfraRuntime
@@ -22,43 +23,36 @@ final class InfraRuntime
             'label' => 'MySQL',
             'container' => 'mysql_container',
             'profile' => 'mysql',
-            'ports' => '3306',
         ],
         'postgres' => [
             'label' => 'PostgreSQL',
             'container' => 'postgres_container',
             'profile' => 'postgres',
-            'ports' => '5432',
         ],
         'redis' => [
             'label' => 'Redis',
             'container' => 'redis_container',
             'profile' => 'redis',
-            'ports' => '6379',
         ],
         'rabbitmq' => [
             'label' => 'RabbitMQ',
             'container' => 'rabbitmq_container',
             'profile' => 'rabbitmq',
-            'ports' => '5672, 15672',
         ],
         'kafka' => [
             'label' => 'Kafka',
             'container' => 'kafka_container',
             'profile' => 'kafka',
-            'ports' => '9092',
         ],
         'mailpit' => [
             'label' => 'Mailpit',
             'container' => 'mailpit_container',
             'profile' => 'mailpit',
-            'ports' => '1025, 8025',
         ],
         'minio' => [
             'label' => 'MinIO',
             'container' => 'minio_container',
             'profile' => 'minio',
-            'ports' => '9000, 9001',
         ],
     ];
 
@@ -79,11 +73,14 @@ final class InfraRuntime
         foreach (self::SERVICES as $service => $config) {
             $image = self::imageFromCompose($projectPath, $service);
             $imagePresent = $image !== null && DockerImageIndex::contains($image);
+            $hostPorts = HostPorts::read($service);
             $targets[$service] = [
                 'label' => $config['label'],
                 'container' => $config['container'],
                 'profile' => $config['profile'],
-                'ports' => $config['ports'],
+                'ports' => implode(', ', $hostPorts),
+                'host_ports' => $hostPorts,
+                'ports_configurable' => HostPorts::configurable($service, $projectPath . '/compose/' . $service . '.yml'),
                 'compose_file' => 'compose/' . $service . '.yml',
                 'create_command' => 'docker compose --profile ' . $config['profile'] . ' create ' . $service,
                 'image' => $image,
@@ -183,6 +180,36 @@ final class InfraRuntime
         return $this->jobs->begin($this->basePath, [
             'service' => $service,
             'action' => $action,
+        ]);
+    }
+
+    /**
+     * Saves host ports to .env; recreates the container when it exists so the new mapping applies.
+     *
+     * @param array<string, mixed> $ports key => port, keys from HostPorts::MAP
+     * @return string request id of the recreate job, '' when the container is not created
+     */
+    public function updatePorts(string $service, array $ports, ?string $envPath = null, ?string $composeFile = null): string
+    {
+        if (!isset(self::SERVICES[$service])) {
+            throw new HttpException('services.invalid_service', 400);
+        }
+        $composeFile ??= rtrim(Config::projectPath(), '/') . '/compose/' . $service . '.yml';
+        if (!HostPorts::configurable($service, $composeFile)) {
+            throw new HttpException('ports.not_configurable', 400);
+        }
+        if ($this->hasBlockingRequests($service)) {
+            throw new HttpException('php_controller.busy', 409);
+        }
+        HostPorts::save($service, $ports, $envPath);
+        // A stopped container keeps its old port mapping on `docker start`, so recreate it too.
+        if (!in_array(DockerLiveState::stateFor((string) self::SERVICES[$service]['container']), ['running', 'stopped'], true)) {
+            return '';
+        }
+
+        return $this->jobs->begin($this->basePath, [
+            'service' => $service,
+            'action' => 'recreate',
         ]);
     }
 

@@ -26,4 +26,4 @@ COPY --from=frontend /public ./public
 
 EXPOSE 8080
 
-CMD ["php", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]
+CMD ["php", "-d", "memory_limit=512M", "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]

@@ -1,5 +1,15 @@
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -461,6 +471,8 @@ onMounted(async () => {
   }
 })
 
+onDeactivated(stopLogStream)
+onActivated(startLogStream)
 onUnmounted(stopFollow)
 </script>
 

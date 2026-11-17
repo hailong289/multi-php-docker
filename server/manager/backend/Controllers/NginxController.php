@@ -117,12 +117,15 @@ final class NginxController extends Controller
         ]);
     }
 
-    public function test(Request $request, array $params = []): Response
+    public function ports(Request $request, array $params = []): Response
     {
+        $body = $request->json();
         $runtime = new NginxManagement();
-        $runtime->requestTest();
+        $requestId = $runtime->updatePorts($body['http_port'] ?? null, $body['https_port'] ?? null);
+
         return Response::json([
-            'message_key' => 'nginx.test_requested',
+            'request_id' => $requestId,
+            'message_key' => $requestId === '' ? 'nginx.ports_saved' : 'nginx.ports_applying',
             'nginx_management' => $runtime->details(),
         ]);
     }

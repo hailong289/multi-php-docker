@@ -7,8 +7,8 @@ services:
       dockerfile: ./docker_files/rabbitMQ.Dockerfile
     container_name: rabbitmq_container
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_HOST_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_HOST_PORT:-15672}:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=admin

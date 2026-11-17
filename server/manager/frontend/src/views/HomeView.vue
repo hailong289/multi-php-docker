@@ -54,6 +54,7 @@ const {
   isPending,
   phpServiceState,
   stateLabel,
+  siteUrl,
 } = useManager()
 
 const frameworkId = ref('laravel')
@@ -332,15 +333,15 @@ onUnmounted(() => window.clearInterval(healthTimer))
             />
             <br />
             <template v-if="item.server.DOMAIN_NAME">
-              <a :href="'http://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
-                http://{{ item.server.DOMAIN_NAME }}
+              <a :href="siteUrl(item.server.DOMAIN_NAME)" target="_blank" rel="noreferrer">
+                {{ siteUrl(item.server.DOMAIN_NAME) }}
               </a>
             </template>
             <span v-else>{{ t('servers.no_domain') }}</span>
             <template v-if="item.server.DOMAIN_NAME && isSslEnabled(item.server)">
               <br />
-              <a :href="'https://' + item.server.DOMAIN_NAME" target="_blank" rel="noreferrer">
-                https://{{ item.server.DOMAIN_NAME }}
+              <a :href="siteUrl(item.server.DOMAIN_NAME, true)" target="_blank" rel="noreferrer">
+                {{ siteUrl(item.server.DOMAIN_NAME, true) }}
               </a>
               <Button
                 type="button"
