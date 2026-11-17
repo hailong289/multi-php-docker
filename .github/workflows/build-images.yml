@@ -58,7 +58,7 @@ permissions:
 
 jobs:
   select:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       images: ${{ steps.set.outputs.images }}
     steps:
@@ -124,7 +124,7 @@ jobs:
   build-and-push:
     needs: select
     if: needs.select.outputs.images != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
