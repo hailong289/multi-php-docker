@@ -23,8 +23,8 @@ docker compose version
 ### 1. Clone and start
 
 ```bash
-git clone <repository-url>
-cd <repository-folder>
+git clone https://github.com/hailong289/multi-php-docker.git
+cd multi-php-docker
 docker compose pull
 docker compose up -d
 ```
@@ -257,7 +257,7 @@ The document root is the folder that contains `index.php`, as a path inside the 
 
 ### A port is already in use
 
-Stop the other process, or change the host side of the port mapping. In `compose/mysql.yml`, `"3306:3306"` can become `"3307:3306"`. In `compose/postgres.yml`, `"5432:5432"` can become `"5433:5432"`.
+Stop the other process, or change the host port: Nginx on the **Nginx** page, other services in **Services** → **Details**. Without the UI, set the matching variable in `.env` (for example `MYSQL_HOST_PORT=3307`; see [`.env.example`](.env.example)) and recreate the container.
 
 ### PHP cannot reach MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit, or MinIO
 
@@ -432,26 +432,7 @@ docker compose start mysql
 
 ### Contributing
 
-Open a bug on [Issues](https://github.com/hailong289/multi-php-docker/issues) with steps to reproduce, expected and actual behavior, your OS, `docker --version`, `docker compose version`, and relevant logs (`docker compose logs`, the Manager UI, or files under `runtime/` and `php-controller-runtime/status/`). Leave out passwords, tokens, and private project paths.
-
-Check out the latest `develop`, create your branch from it, and do the work on that branch:
-
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b fix/short-description
-```
-
-Name the branch with one of these prefixes, then a short description:
-
-| Prefix | Use when |
-| --- | --- |
-| `fix/` | You are fixing a bug. Example: `fix/nginx-reload-timeout` |
-| `feat/` | You are adding a feature. Example: `feat/add-php-8.6` |
-| `docs/` | You are changing documentation only. Example: `docs/readme-hosts` |
-| `chore/` | You are changing build, CI, or tooling, with no product behavior change. Example: `chore/update-ci` |
-
-Push the branch and open a pull request into `develop`. Link the issue, for example `Fixes #123`.
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## A coffee, if you like
 

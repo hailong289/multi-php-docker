@@ -23,8 +23,8 @@ docker compose version
 ### 1. Clone và khởi động
 
 ```bash
-git clone <repository-url>
-cd <repository-folder>
+git clone https://github.com/hailong289/multi-php-docker.git
+cd multi-php-docker
 docker compose pull
 docker compose up -d
 ```
@@ -257,7 +257,7 @@ Document root là thư mục chứa `index.php`, theo đường dẫn bên trong
 
 ### Cổng đã được dùng
 
-Tắt tiến trình đang chiếm cổng, hoặc đổi phía host của ánh xạ cổng. Trong `compose/mysql.yml`, `"3306:3306"` có thể thành `"3307:3306"`. Trong `compose/postgres.yml`, `"5432:5432"` có thể thành `"5433:5432"`.
+Tắt tiến trình đang chiếm cổng, hoặc đổi cổng host: Nginx ở trang **Nginx**, các service khác ở **Services** → **Details**. Nếu không dùng UI, đặt biến tương ứng trong `.env` (ví dụ `MYSQL_HOST_PORT=3307`; xem [`.env.example`](.env.example)) rồi recreate container.
 
 ### PHP không tới được MySQL, PostgreSQL, Redis, RabbitMQ, Kafka, Mailpit hoặc MinIO
 
@@ -432,26 +432,7 @@ docker compose start mysql
 
 ### Đóng góp
 
-Mở lỗi trên [Issues](https://github.com/hailong289/multi-php-docker/issues) với các bước tái hiện, kết quả mong đợi và kết quả thực tế, hệ điều hành, `docker --version`, `docker compose version`, và log liên quan (`docker compose logs`, UI Manager, hoặc file trong `runtime/` và `php-controller-runtime/status/`). Không đưa mật khẩu, token hay đường dẫn project riêng tư.
-
-Checkout `develop` mới nhất, tạo nhánh từ đó, rồi làm việc trên nhánh mới:
-
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b fix/mo-ta-ngan
-```
-
-Đặt tên nhánh bằng một trong các tiền tố sau, rồi thêm mô tả ngắn:
-
-| Tiền tố | Dùng khi |
-| --- | --- |
-| `fix/` | Sửa lỗi. Ví dụ: `fix/nginx-reload-timeout` |
-| `feat/` | Thêm tính năng. Ví dụ: `feat/add-php-8.6` |
-| `docs/` | Chỉ sửa tài liệu. Ví dụ: `docs/readme-hosts` |
-| `chore/` | Sửa build, CI hoặc tooling, không đổi hành vi sản phẩm. Ví dụ: `chore/update-ci` |
-
-Push nhánh và mở pull request vào `develop`. Gắn issue, ví dụ `Fixes #123`.
+Mọi báo lỗi và pull request đều được hoan nghênh. Xem [CONTRIBUTING.vi.md](CONTRIBUTING.vi.md).
 
 ## Mời một ly cà phê
 

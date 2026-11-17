@@ -1,0 +1,66 @@
+name: Bug report
+description: Something is broken or behaves incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Search existing issues first, and never paste passwords, tokens, or private project paths.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Server Manager → PHP versions
+        2. Click Create on php-8.3
+        3. See error ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Server Manager UI
+        - PHP containers / extensions
+        - Nginx / domains / HTTPS
+        - Hosts file
+        - Services (MySQL, Redis, RabbitMQ, ...)
+        - Supervisor
+        - Docker build / Compose
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+        - WSL
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Docker and Compose versions
+      description: Output of `docker --version` and `docker compose version`
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: "`docker compose logs <service>`, Manager UI errors, or files under `runtime/` / `php-controller-runtime/status/`"
+      render: shell
