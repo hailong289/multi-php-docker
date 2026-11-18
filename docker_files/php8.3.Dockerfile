@@ -1,5 +1,8 @@
 FROM php:8.3-fpm-alpine
 
+# Composer from the official image: cached as its own layer, no installer download.
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
 # Runtime libraries stay. Compilers are installed in a virtual package and removed
 # in this same layer, so they are not part of the image.
 RUN apk add --no-cache \
@@ -17,7 +20,6 @@ RUN apk add --no-cache \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli gd zip sockets pcntl \
-    && curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
     && apk del .php-build \
     && rm -rf /tmp/pear \
     && docker-php-source delete

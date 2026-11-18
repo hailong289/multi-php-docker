@@ -8,6 +8,7 @@ use Manager\Http\HttpException;
 use Manager\Support\DockerExec;
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\ComposerLibrary;
 use Manager\Models\PhpDetails;
 use Manager\Models\PhpExtensionCatalog;
 use Manager\Models\PhpIniEditor;
@@ -404,6 +405,45 @@ final class PhpControllerController extends Controller
             'extension_installed' => $current['extension_installed'],
             'reload' => $reloaded ? 'ok' : 'failed',
         ]);
+    }
+
+    public function composerShow(Request $request, array $params = []): Response
+    {
+        return Response::json((new ComposerLibrary())->show());
+    }
+
+    public function composerDownload(Request $request, array $params = []): Response
+    {
+        $version = $request->json()['version'] ?? null;
+        if (!is_string($version)) {
+            throw new HttpException('composer.invalid_version', 400);
+        }
+        $library = new ComposerLibrary();
+        $downloaded = $library->download($version);
+
+        return Response::json(['downloaded' => $downloaded] + $library->show());
+    }
+
+    public function composerRemove(Request $request, array $params = []): Response
+    {
+        $library = new ComposerLibrary();
+        $library->remove((string) ($params['version'] ?? ''));
+
+        return Response::json($library->show());
+    }
+
+    public function composerAssign(Request $request, array $params = []): Response
+    {
+        $body = $request->json();
+        $target = $body['target'] ?? null;
+        $version = $body['version'] ?? null;
+        if (!is_string($target) || ($version !== null && !is_string($version))) {
+            throw new HttpException('composer.invalid_target', 400);
+        }
+        $library = new ComposerLibrary();
+        $library->assign($target, $version);
+
+        return Response::json($library->show());
     }
 
     /** @return array{enabled: bool, client_port: int, extension_installed: bool} */

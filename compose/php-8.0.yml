@@ -9,9 +9,13 @@ services:
     volumes:
       - ./server/source:/var/www/source
       - ./scripts:/var/scripts
+      - ./runtime/composer:/opt/composer:ro
+      - ./scripts/composer/bin/composer:/usr/local/sbin/composer:ro
       - ./configs/php8.0/php.ini:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf
     working_dir: /var/www/source
+    environment:
+      COMPOSER_PHP_SERVICE: php-8.0
     networks:
       - app-network
 

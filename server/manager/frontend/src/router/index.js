@@ -11,6 +11,7 @@ import NginxView from '../views/NginxView.vue'
 import ServicesView from '../views/ServicesView.vue'
 import ComposeYamlView from '../views/ComposeYamlView.vue'
 import PhpComposeYamlView from '../views/PhpComposeYamlView.vue'
+import ComposerView from '../views/ComposerView.vue'
 import ServiceLogsView from '../views/ServiceLogsView.vue'
 import SourceLogsView from '../views/SourceLogsView.vue'
 import SupervisorView from '../views/SupervisorView.vue'
@@ -100,6 +101,12 @@ const router = createRouter({
       name: 'php-compose-yaml',
       component: PhpComposeYamlView,
       meta: { titleKey: 'php_controller.manage_yaml', manager: true },
+    },
+    {
+      path: '/php-versions/composer',
+      name: 'php-composer',
+      component: ComposerView,
+      meta: { titleKey: 'composer.title', manager: true },
     },
     {
       path: '/php-versions/catalog',

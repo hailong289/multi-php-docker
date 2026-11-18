@@ -9,8 +9,12 @@ services:
     volumes:
       - ./server/source:/var/www/source
       - ./scripts:/var/scripts
+      - ./runtime/composer:/opt/composer:ro
+      - ./scripts/composer/bin/composer:/usr/local/sbin/composer:ro
       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
     working_dir: /var/www/source
+    environment:
+      COMPOSER_PHP_SERVICE: php-7.4
     networks:
       - app-network
 

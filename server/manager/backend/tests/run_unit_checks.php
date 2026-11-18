@@ -18,6 +18,7 @@ use Manager\Http\HttpException;
 use Manager\Models\DockerConnection;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
+use Manager\Models\ComposerLibrary;
 use Manager\Models\ContainerStats;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
@@ -234,6 +235,112 @@ assert_true($compose->isCoreFile('postgres.yml'), 'postgres is core');
 assert_true($compose->isCoreFile('kafka.yml'), 'kafka is core');
 assert_true($compose->isCoreFile('mailpit.yml'), 'mailpit is core');
 assert_true($compose->isCoreFile('minio.yml'), 'minio is core');
+
+$composerError = static function (callable $fn): string {
+    try {
+        $fn();
+    } catch (HttpException $e) {
+        return $e->errorKey();
+    }
+
+    return '';
+};
+assert_true(ComposerLibrary::parseReleases('{"stable":[{"version":"2.11.2","min-php":70205,"lts":false},{"version":"2.2.32","min-php":50300,"lts":true}]}')[1] === ['key' => 'lts', 'version' => '2.2.32', 'min_php' => 50300], 'composer releases parsed');
+assert_true(ComposerLibrary::parseReleases('not json') === [], 'composer bad releases json');
+assert_true(ComposerLibrary::phpVersionId('php-7.4') === 70499, 'composer php version id');
+
+$libRoot = sys_get_temp_dir() . '/mgr-composer-lib-' . bin2hex(random_bytes(4));
+$pharBody = "<?php echo 'fake';";
+$libHttp = [
+    'https://getcomposer.org/versions' => '{"stable":[{"version":"2.11.2","min-php":80100,"lts":false},{"version":"2.2.32","min-php":50300,"lts":true}]}',
+    'https://getcomposer.org/download/2.11.2/composer.phar' => $pharBody,
+    'https://getcomposer.org/download/2.11.2/composer.phar.sha256sum' => hash('sha256', $pharBody) . "  composer.phar\n",
+    'https://getcomposer.org/download/2.2.32/composer.phar' => $pharBody,
+    'https://getcomposer.org/download/2.2.32/composer.phar.sha256sum' => hash('sha256', 'other') . "  composer.phar\n",
+];
+$libFetch = static function (string $url) use (&$libHttp): ?string {
+    return $libHttp[$url] ?? null;
+};
+$libTargets = static fn (): array => ['php-8.2' => 'php8.2_container', 'php-7.4' => 'php7.4_container'];
+$lib = new ComposerLibrary($libRoot, $libFetch, $libTargets, static fn (string $container): bool => $container === 'php8.2_container');
+
+assert_true($lib->download('latest') === '2.11.2', 'composer download latest resolves version');
+assert_true(is_file($libRoot . '/versions/2.11.2/composer.phar'), 'composer phar stored');
+assert_true(array_column($lib->versions(), 'version') === ['2.11.2'], 'composer versions listed');
+assert_true($composerError(static fn () => $lib->download('lts')) === 'composer.checksum_mismatch', 'composer bad checksum refused');
+assert_true(!is_dir($libRoot . '/versions/2.2.32'), 'composer bad checksum leaves nothing');
+assert_true($composerError(static fn () => $lib->download('3.0.0')) === 'composer.download_failed', 'composer network failure');
+assert_true($composerError(static fn () => $lib->download('x;rm')) === 'composer.invalid_version', 'composer invalid version');
+
+assert_true($composerError(static fn () => $lib->assign('php-8.2', '9.9.9')) === 'composer.version_missing', 'composer assign needs downloaded version');
+assert_true($composerError(static fn () => $lib->assign('php-7.4', '2.11.2')) === 'composer.unsupported_php', 'composer assign respects min php');
+assert_true($composerError(static fn () => $lib->assign('../etc', '2.11.2')) === 'composer.invalid_target', 'composer assign rejects bad target');
+$lib->assign('php-8.2', '2.11.2');
+assert_true(trim((string) file_get_contents($libRoot . '/assigned/php-8.2')) === '2.11.2', 'composer assignment file written');
+assert_true($composerError(static fn () => $lib->remove('2.11.2')) === 'composer.version_in_use', 'composer cannot remove assigned version');
+
+$libShown = $lib->show();
+$rows = array_column($libShown['targets'], null, 'service');
+assert_true(array_keys($rows) === ['php-7.4', 'php-8.2'], 'composer targets sorted by php version');
+assert_true($rows['php-8.2']['version'] === '2.11.2' && $rows['php-8.2']['effective'] === '2.11.2', 'composer service assignment effective');
+assert_true($rows['php-7.4']['version'] === null && $rows['php-7.4']['effective'] === null, 'composer unassigned uses image');
+assert_true($rows['php-8.2']['mounted'] === true && $rows['php-7.4']['mounted'] === false, 'composer mount state reported');
+assert_true($libShown['versions'][0]['assigned_to'] === ['php-8.2'], 'composer version lists its targets');
+
+$libHttp['https://getcomposer.org/download/2.2.32/composer.phar.sha256sum'] = hash('sha256', $pharBody) . "  composer.phar\n";
+(new ComposerLibrary($libRoot . '-fresh', $libFetch, $libTargets, static fn (): bool => true))->download('lts');
+$lib->download('2.2.32');
+$lib->assign('default', '2.2.32');
+$rows = array_column($lib->show()['targets'], null, 'service');
+assert_true($rows['php-7.4']['effective'] === '2.2.32', 'composer default applies to unassigned php');
+$lib->assign('php-8.2', null);
+assert_true(!is_file($libRoot . '/assigned/php-8.2'), 'composer unassign removes file');
+$lib->assign('default', null);
+$lib->remove('2.11.2');
+assert_true(!is_dir($libRoot . '/versions/2.11.2'), 'composer remove deletes version');
+assert_true($composerError(static fn () => $lib->download("2.11.2\n")) === 'composer.invalid_version', 'composer version with trailing newline refused');
+assert_true($composerError(static fn () => $lib->assign("php-8.2\n", '2.2.32')) === 'composer.invalid_target', 'composer target with trailing newline refused');
+// An assignment left behind by a removed PHP version must not lock that Composer version.
+file_put_contents($libRoot . '/assigned/php-8.6', "2.2.32\n");
+assert_true($lib->versions()[0]['assigned_to'] === [], 'composer ignores assignment of uninstalled php');
+$lib->remove('2.2.32');
+assert_true(!is_dir($libRoot . '/versions/2.2.32'), 'composer removes version held only by uninstalled php');
+// Containers that do not exist yet are not "needs recreate".
+$noContainer = new ComposerLibrary($libRoot, $libFetch, $libTargets, static fn (string $container): ?bool => $container === 'php8.2_container' ? true : null);
+$rows = array_column($noContainer->show()['targets'], null, 'service');
+assert_true($rows['php-7.4']['mounted'] === null && $rows['php-8.2']['mounted'] === true, 'composer mount unknown for missing container');
+$composerErrorParams = static function (callable $fn): array {
+    try {
+        $fn();
+    } catch (HttpException $e) {
+        return [$e->errorKey(), $e->parameters()];
+    }
+
+    return ['', []];
+};
+// No feed: the error still names what was asked for.
+$noFeed = new ComposerLibrary(sys_get_temp_dir() . '/mgr-composer-nofeed-' . bin2hex(random_bytes(4)), static fn (): ?string => null, $libTargets, static fn (): bool => true);
+assert_true($composerErrorParams(static fn () => $noFeed->download('latest')) === ['composer.download_failed', ['version' => 'latest']], 'composer missing feed error names the choice');
+// Removing a version that is not there is an error, not a silent success.
+assert_true($composerError(static fn () => $lib->remove('7.7.7')) === 'composer.version_missing', 'composer remove missing version errors');
+// A minor-only service means "latest patch of that minor" (Docker tags), so 7.2 runs Composer 2.x (min-php 70205).
+assert_true(ComposerLibrary::phpVersionId('php-7.2') === 70299 && ComposerLibrary::phpVersionId('php-8.2.5') === 80205, 'composer php version id keeps the patch');
+// A phar without its meta.json (interrupted write) is not offered nor used.
+mkdir($libRoot . '/versions/3.3.3', 0775, true);
+file_put_contents($libRoot . '/versions/3.3.3/composer.phar', 'trunc');
+assert_true(!in_array('3.3.3', array_column($lib->versions(), 'version'), true), 'composer half-written version hidden');
+assert_true($composerError(static fn () => $lib->assign('php-8.2', '3.3.3')) === 'composer.version_missing', 'composer half-written version not assignable');
+// A re-download drops meta.json before touching the phar, and the written file is verified.
+$lib->download('2.11.2');
+assert_true(is_file($libRoot . '/versions/2.11.2/meta.json'), 'composer meta written after phar');
+// Feed calls use a short timeout; only the phar download waits longer.
+$timeouts = [];
+(new ComposerLibrary(sys_get_temp_dir() . '/mgr-composer-to2-' . bin2hex(random_bytes(4)), static function (string $url, int $timeout) use (&$timeouts): ?string {
+    $timeouts[$url] = $timeout;
+
+    return null;
+}, $libTargets, static fn (): bool => true))->show();
+assert_true(($timeouts['https://getcomposer.org/versions'] ?? 0) === 4, 'composer feed uses short timeout');
 assert_true($compose->isProtectedFile('php-8.1.yml'), 'php compose protected');
 try {
     $compose->deleteFile('mysql.yml');
@@ -516,6 +623,8 @@ $installRuntime = new PhpRuntime($installStoppedProj, $jobs, $extensions, $insta
 $installed = (new PhpVersionInstaller($installStoppedProj, $installRuntime))->install('8.6');
 assert_true(strlen((string) ($installed['request_id'] ?? '')) === 32, 'PHP install starts compose helper');
 assert_true(is_file($installStoppedProj . '/compose/php-8.6.yml'), 'PHP install writes compose');
+$installedCompose = (string) file_get_contents($installStoppedProj . '/compose/php-8.6.yml');
+assert_true(str_contains($installedCompose, '- ./runtime/composer:/opt/composer:ro') && str_contains($installedCompose, 'COMPOSER_PHP_SERVICE: php-8.6'), 'PHP install mounts the shared composer library');
 assert_true((glob($installStoppedProj . '/requests/*.json') ?: []) === [], 'PHP install wrote no request files');
 assert_true(PhpVersionInstaller::isRemovable('php-8.6', $installStoppedProj), 'generated PHP version is removable');
 $shippedRoot = dirname(__DIR__, 4);

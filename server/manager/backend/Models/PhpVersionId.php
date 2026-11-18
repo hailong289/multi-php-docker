@@ -17,12 +17,13 @@ final class PhpVersionId
 
     public static function isValidService(string $service): bool
     {
-        return (bool) preg_match('/^php-' . self::VERSION_RE . self::VARIANT_SERVICE_RE . '$/', $service);
+        // /D: a trailing "\n" must not pass, the service ends up in file paths.
+        return (bool) preg_match('/^php-' . self::VERSION_RE . self::VARIANT_SERVICE_RE . '$/D', $service);
     }
 
     public static function isValidMinor(string $version): bool
     {
-        return (bool) preg_match('/^' . self::VERSION_RE . '$/', $version);
+        return (bool) preg_match('/^' . self::VERSION_RE . '$/D', $version);
     }
 
     public static function isValidVariant(string $variant): bool

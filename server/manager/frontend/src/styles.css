@@ -4435,3 +4435,109 @@ select:focus:not([class*='p-']) {
   }
 }
 
+
+.composer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-row .p-select {
+  min-width: 15rem;
+}
+
+.composer-sections {
+  display: grid;
+  gap: 20px;
+}
+
+.composer-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.composer-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.composer-block h3 {
+  margin: 0;
+}
+
+.composer-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.composer-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 14px;
+}
+
+.composer-list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.composer-list-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.composer-list-main strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-assign .p-select {
+  min-width: 13rem;
+}
+
+.composer-assign-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.composer-list li.composer-version-row {
+  flex-wrap: nowrap;
+}
+
+.composer-muted,
+.composer-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.composer-empty {
+  margin: 0;
+}
+
+.composer-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: 0.85rem;
+}

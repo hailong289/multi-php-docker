@@ -114,7 +114,8 @@ const navItems = computed(() => [
       route.name === 'php-version-supervisor' ||
       route.name === 'php-version-run' ||
       route.name === 'php-version-logs' ||
-      route.name === 'php-compose-yaml',
+      route.name === 'php-compose-yaml' ||
+      route.name === 'php-composer',
   },
 ])
 

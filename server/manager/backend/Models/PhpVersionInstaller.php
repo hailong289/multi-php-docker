@@ -88,6 +88,8 @@ final class PhpVersionInstaller
             $content = <<<DOCKER
 FROM php:{$tag}
 
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
 RUN apk add --no-cache \\
         git curl unzip supervisor \\
         freetype libjpeg-turbo libpng libzip libxml2 oniguruma libpq \\
@@ -105,7 +107,6 @@ RUN apk add --no-cache \\
     && pecl install redis \\
     && docker-php-ext-enable redis \\
     && docker-php-ext-install pdo_mysql pdo_pgsql pgsql mysqli gd zip sockets pcntl \\
-    && curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \\
     && apk del .php-build \\
     && rm -rf /tmp/pear \\
     && docker-php-source delete
@@ -118,6 +119,8 @@ DOCKER;
             $content = <<<DOCKER
 FROM php:{$tag}
 
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
 RUN set -eux; \\
     apt-get update; \\
     apt-get install -y --no-install-recommends \\
@@ -128,7 +131,6 @@ RUN set -eux; \\
     pecl install redis; \\
     docker-php-ext-enable redis; \\
     docker-php-ext-install -j"\$(nproc)" pdo_mysql pdo_pgsql pgsql mysqli gd zip sockets pcntl; \\
-    curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer; \\
     rm -rf /tmp/pear; \\
     ext_dir="\$(php -d display_errors=0 -r 'echo ini_get("extension_dir");')"; \\
     { for so in "\$ext_dir"/*.so; do ldd "\$so"; done; } \\
@@ -191,9 +193,13 @@ services:
     volumes:
       - ./server/{$source}:/var/www/{$source}
       - ./scripts:/var/scripts
+      - ./runtime/composer:/opt/composer:ro
+      - ./scripts/composer/bin/composer:/usr/local/sbin/composer:ro
       - ./{$iniRel}:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf
     working_dir: /var/www/{$source}
+    environment:
+      COMPOSER_PHP_SERVICE: {$service}
     networks:
       - app-network
 

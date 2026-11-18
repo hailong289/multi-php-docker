@@ -65,6 +65,12 @@ const { stats: containerStats } = useContainerStats(computed(() => phpRows.value
         <div class="panel-heading-actions">
           <Button
             type="button"
+            :label="t('composer.title')"
+            :disabled="busy || loading"
+            @click="router.push({ name: 'php-composer' })"
+          />
+          <Button
+            type="button"
             data-tour="php-compose-yaml"
             :label="t('php_controller.manage_yaml')"
             :disabled="busy || loading"

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Runs the Composer version assigned to this PHP service on the manager's Composer page.
+# Falls back to the image's own composer when nothing is assigned or the version is incomplete.
+lib="${COMPOSER_LIBRARY_DIR:-/opt/composer}"
+for target in "${COMPOSER_PHP_SERVICE:-}" default; do
+    [ -n "$target" ] && [ -f "$lib/assigned/$target" ] || continue
+    version=$(tr -d ' \r\n' < "$lib/assigned/$target")
+    dir="$lib/versions/$version"
+    # meta.json is written after the phar is verified; without it the phar may be half-written.
+    if [ -f "$dir/composer.phar" ] && [ -f "$dir/meta.json" ]; then
+        case "${1:-}" in
+            self-update|selfupdate)
+                echo "Composer $version is assigned on the manager's Composer page (PHP versions > Composer)." >&2
+                echo "Change or download versions there; self-update cannot modify the shared library." >&2
+                exit 1
+                ;;
+        esac
+        exec php "$dir/composer.phar" "$@"
+    fi
+done
+exec /usr/local/bin/composer "$@"
