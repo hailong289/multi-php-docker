@@ -21,8 +21,6 @@ use Manager\Support\DockerLiveState;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\ComposeFileParser;
-use Manager\Models\DatabaseDump;
-use Manager\Models\DatabaseDumpIndex;
 use Manager\Models\PhpXdebug;
 use Manager\Models\SiteCron;
 use Manager\Models\SiteHealth;
@@ -1623,56 +1621,6 @@ foreach ($rewriteSources as $rewriteSource) {
     assert_true(str_contains($rewriteBody, 's|- \\\\./|- ${repl}/|'), basename($rewriteSource) . ' rewrite keeps list marker');
     assert_true(!str_contains($rewriteBody, 's|- \\\\./|${repl}/|'), basename($rewriteSource) . ' rewrite does not drop the dash');
 }
-
-$dumpRoot = sys_get_temp_dir() . '/mgr-dumps-' . bin2hex(random_bytes(4));
-mkdir($dumpRoot, 0775, true);
-$index = new DatabaseDumpIndex($dumpRoot);
-$thrown = false;
-try {
-    $index->assertDatabaseName('bad name');
-} catch (HttpException $e) {
-    $thrown = $e->errorKey() === 'database.invalid_name';
-}
-assert_true($thrown, 'reject database name with a space');
-$row = $index->add('mysql', 'app', 'SERVER_NAME1', 'mysql/app-1.sql');
-assert_true($row['status'] === 'pending', 'new dump is pending');
-$index->mark($row['id'], 'ready');
-$listed = $index->list();
-assert_true(count($listed) === 1 && $listed[0]['status'] === 'ready', 'list shows ready dump');
-assert_true($index->find($row['id'])['database'] === 'app', 'find by id');
-$removed = $index->remove($row['id']);
-assert_true($removed['id'] === $row['id'], 'remove returns the row');
-assert_true($index->list() === [], 'remove clears the index');
-$removeMissing = false;
-try {
-    $index->remove($row['id']);
-} catch (HttpException $e) {
-    $removeMissing = $e->errorKey() === 'database.dump_missing';
-}
-assert_true($removeMissing, 'remove missing dump fails');
-
-$project = sys_get_temp_dir() . '/mgr-dump-cmd-' . bin2hex(random_bytes(4));
-mkdir($project . '/server/backups', 0775, true);
-$dump = new DatabaseDump($project);
-$argv = $dump->command('mysql', 'shop', 'mysql/shop-1.sql');
-assert_true($argv[0] === 'sh' && $argv[1] === '-c', 'dump runs through sh');
-assert_true(str_contains($argv[2], 'mysqldump'), 'mysql uses mysqldump');
-assert_true(str_contains($argv[2], '/backups/mysql/shop-1.sql'), 'writes inside the mount');
-assert_true(!str_contains($argv[2], 'shop;'), 'name is not concatenated raw');
-$pg = $dump->command('postgres', 'shop', 'postgres/shop-1.sql');
-assert_true(str_contains($pg[2], 'pg_dump'), 'postgres uses pg_dump');
-mkdir($project . '/server/backups/mysql', 0775, true);
-$pending = (new DatabaseDumpIndex($project . '/server/backups'))->add('mysql', 'shop', null, 'mysql/shop-1.sql');
-file_put_contents($project . '/server/backups/mysql/shop-1.sql.exit', "0\n");
-$synced = $dump->syncStatus($pending);
-assert_true($synced['status'] === 'ready', 'exit 0 marks the dump ready');
-$sqlPath = $project . '/server/backups/mysql/shop-1.sql';
-file_put_contents($sqlPath, "-- dump\n");
-file_put_contents($sqlPath . '.restore.exit', "0\n");
-$dump->deleteFiles('mysql/shop-1.sql');
-assert_true(!is_file($sqlPath), 'deleteFiles removes the sql');
-assert_true(!is_file($sqlPath . '.exit'), 'deleteFiles removes the exit marker');
-assert_true(!is_file($sqlPath . '.restore.exit'), 'deleteFiles removes restore exit');
 
 $ini = "memory_limit = 256M\n";
 $xdebug = new PhpXdebug();

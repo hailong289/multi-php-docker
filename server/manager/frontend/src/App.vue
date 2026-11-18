@@ -94,12 +94,6 @@ const navItems = computed(() => [
     active: route.name === 'cron',
   },
   {
-    label: t('nav.databases'),
-    route: '/databases',
-    tour: 'nav-databases',
-    active: route.name === 'databases',
-  },
-  {
     label: t('nav.services'),
     route: '/services',
     tour: 'nav-services',

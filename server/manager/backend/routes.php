@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Manager\Controllers\BootstrapController;
-use Manager\Controllers\DatabaseController;
 use Manager\Controllers\DockerConnectionController;
 use Manager\Controllers\CronController;
 use Manager\Controllers\DomainController;
@@ -52,11 +51,6 @@ return [
     ['DELETE', '/domains/extra/(?P<domain>[a-zA-Z0-9._-]+)', [DomainController::class, 'destroyExtra']],
     ['PUT', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'update']],
     ['DELETE', '/domains/(?P<key>SERVER_NAME\d+)', [DomainController::class, 'destroy']],
-    ['GET', '/databases/dumps', [DatabaseController::class, 'index']],
-    ['POST', '/databases/dumps', [DatabaseController::class, 'store']],
-    ['POST', '/databases/dumps/(?P<id>[a-f0-9]{16})/restore', [DatabaseController::class, 'restore']],
-    ['DELETE', '/databases/dumps/(?P<id>[a-f0-9]{16})', [DatabaseController::class, 'destroy']],
-    ['GET', '/databases/(?P<engine>mysql|postgres)/names', [DatabaseController::class, 'names']],
     ['GET', '/infra-services', [InfraController::class, 'index']],
     ['GET', '/infra-services/compose-files', [InfraController::class, 'composeFiles']],
     ['POST', '/infra-services/compose-files', [InfraController::class, 'composeFileCreate']],

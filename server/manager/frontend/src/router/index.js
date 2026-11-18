@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import CronView from '../views/CronView.vue'
-import DatabasesView from '../views/DatabasesView.vue'
 import DomainsView from '../views/DomainsView.vue'
 import HomeView from '../views/HomeView.vue'
 import PhpVersionsView from '../views/PhpVersionsView.vue'
@@ -53,12 +52,6 @@ const router = createRouter({
       name: 'cron',
       component: CronView,
       meta: { titleKey: 'nav.cron', manager: true },
-    },
-    {
-      path: '/databases',
-      name: 'databases',
-      component: DatabasesView,
-      meta: { titleKey: 'nav.databases', manager: true },
     },
     {
       path: '/nginx',
