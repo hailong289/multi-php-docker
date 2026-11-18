@@ -18,6 +18,7 @@ use Manager\Http\HttpException;
 use Manager\Models\DockerConnection;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
+use Manager\Models\ContainerStats;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\ComposeFileParser;
@@ -1621,6 +1622,17 @@ foreach ($rewriteSources as $rewriteSource) {
     assert_true(str_contains($rewriteBody, 's|- \\\\./|- ${repl}/|'), basename($rewriteSource) . ' rewrite keeps list marker');
     assert_true(!str_contains($rewriteBody, 's|- \\\\./|${repl}/|'), basename($rewriteSource) . ' rewrite does not drop the dash');
 }
+
+$statsBody = [
+    'cpu_stats' => ['cpu_usage' => ['total_usage' => 3_000], 'system_cpu_usage' => 20_000, 'online_cpus' => 4],
+    'memory_stats' => ['usage' => 500, 'limit' => 2000, 'stats' => ['inactive_file' => 100]],
+];
+$first = ContainerStats::compute($statsBody, null);
+assert_true($first['stats']['cpu_percent'] === null, 'first stats poll has no cpu percent');
+assert_true($first['stats']['mem_bytes'] === 400, 'memory excludes page cache');
+assert_true($first['stats']['mem_limit'] === 2000, 'memory limit passes through');
+$second = ContainerStats::compute($statsBody, ['cpu' => 2_000, 'system' => 10_000]);
+assert_true($second['stats']['cpu_percent'] === 40.0, 'cpu percent from delta times cpus');
 
 $ini = "memory_limit = 256M\n";
 $xdebug = new PhpXdebug();

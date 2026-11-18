@@ -7,6 +7,11 @@ import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } fr
 import { apiRelativeUrl, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { terminalThemeFromDocument } from '../lib/monaco'
+import {
+  PRESET_TERMINAL_COMMANDS,
+  loadCustomTerminalCommands,
+  saveCustomTerminalCommands,
+} from '../lib/terminalCommands'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Tag from 'primevue/tag'
@@ -29,6 +34,8 @@ const cwdLabel = ref('')
 const searchQuery = ref('')
 const resultIndex = ref(-1)
 const resultCount = ref(0)
+const customCommands = ref(loadCustomTerminalCommands())
+const newCommand = ref('')
 let term = null
 let fitAddon = null
 let searchAddon = null
@@ -357,6 +364,26 @@ async function flushInput() {
   if (inputBuf) queueInput('')
 }
 
+// Ctrl+U clears whatever is half-typed so the command runs alone.
+function runQuickCommand(cmd) {
+  if (status.value !== 'ready') return
+  queueInput(`\x15${cmd}\r`)
+  term?.focus()
+}
+
+function addCustomCommand() {
+  const cmd = newCommand.value.trim()
+  newCommand.value = ''
+  if (!cmd || customCommands.value.includes(cmd)) return
+  customCommands.value = [...customCommands.value, cmd]
+  saveCustomTerminalCommands(customCommands.value)
+}
+
+function removeCustomCommand(cmd) {
+  customCommands.value = customCommands.value.filter((entry) => entry !== cmd)
+  saveCustomTerminalCommands(customCommands.value)
+}
+
 function queueInput(data) {
   if (data) inputBuf += data
   if (!inputBuf) return
@@ -535,6 +562,63 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <div class="terminal-screen">
+      <div class="terminal-quick" :aria-label="$t('terminal.quick_label')">
+        <Button
+          v-for="cmd in PRESET_TERMINAL_COMMANDS"
+          :key="`preset:${cmd}`"
+          type="button"
+          class="terminal-quick-cmd"
+          :label="cmd"
+          severity="secondary"
+          outlined
+          size="small"
+          :disabled="status !== 'ready'"
+          @click="runQuickCommand(cmd)"
+        />
+        <span v-for="cmd in customCommands" :key="`custom:${cmd}`" class="terminal-quick-custom">
+          <Button
+            type="button"
+            class="terminal-quick-cmd"
+            :label="cmd"
+            size="small"
+            outlined
+            :disabled="status !== 'ready'"
+            @click="runQuickCommand(cmd)"
+          />
+          <Button
+            type="button"
+            icon="pi pi-times"
+            severity="secondary"
+            text
+            rounded
+            size="small"
+            :aria-label="$t('terminal.quick_remove', { cmd })"
+            :title="$t('terminal.quick_remove', { cmd })"
+            @click="removeCustomCommand(cmd)"
+          />
+        </span>
+        <form class="terminal-quick-add" @submit.prevent="addCustomCommand">
+          <InputText
+            v-model="newCommand"
+            class="terminal-quick-input"
+            size="small"
+            :placeholder="$t('terminal.quick_add_placeholder')"
+            :aria-label="$t('terminal.quick_add_placeholder')"
+            autocomplete="off"
+          />
+          <Button
+            type="submit"
+            icon="pi pi-plus"
+            severity="secondary"
+            text
+            rounded
+            size="small"
+            :disabled="!newCommand.trim()"
+            :aria-label="$t('terminal.quick_add')"
+            :title="$t('terminal.quick_add')"
+          />
+        </form>
+      </div>
       <form class="terminal-search" @submit.prevent>
         <InputText
           ref="searchInputEl"

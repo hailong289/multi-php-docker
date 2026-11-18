@@ -6,6 +6,7 @@ namespace Manager\Controllers;
 
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\ContainerStats;
 use Manager\Models\EnvConfig;
 use Manager\Models\SiteHealth;
 use Manager\Support\DockerEndpoint;
@@ -54,5 +55,15 @@ final class HealthController extends Controller
         );
 
         return Response::json(['conflicts' => $conflicts]);
+    }
+
+    public function containers(Request $request, array $params = []): Response
+    {
+        $names = array_values(array_filter(
+            explode(',', (string) $request->queryParam('names', '')),
+            static fn (string $name): bool => preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/', $name) === 1,
+        ));
+
+        return Response::json(['containers' => (new ContainerStats())->forNames($names)]);
     }
 }

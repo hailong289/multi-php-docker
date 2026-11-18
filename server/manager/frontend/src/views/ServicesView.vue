@@ -8,6 +8,8 @@ import ActionMenu from '../components/ActionMenu.vue'
 import PinButton from '../components/PinButton.vue'
 import ServiceConnectionDialog from '../components/ServiceConnectionDialog.vue'
 import { useManager } from '../composables/useManager'
+import ContainerStatsBadge from '../components/ContainerStatsBadge.vue'
+import { useContainerStats } from '../composables/useContainerStats'
 import { usePinnedContainers } from '../composables/usePinnedContainers'
 import {
   buildComposeMenuItems,
@@ -109,6 +111,8 @@ const serviceRows = computed(() => {
 
   return rows
 })
+
+const { stats: containerStats } = useContainerStats(computed(() => serviceRows.value.map((row) => row.container)))
 
 function openComposeYaml() {
   router.push({ name: 'compose-yaml' })
@@ -228,6 +232,10 @@ function rowDescription(row) {
             <div>
               <dt>{{ t('services.container') }}</dt>
               <dd><code>{{ row.container }}</code></dd>
+            </div>
+            <div v-if="containerStats[row.container]">
+              <dt>{{ t('services.resources') }}</dt>
+              <dd><ContainerStatsBadge :stats="containerStats[row.container]" /></dd>
             </div>
             <div>
               <dt>{{ t('services.profile') }}</dt>

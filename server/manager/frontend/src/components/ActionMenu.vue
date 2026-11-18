@@ -13,6 +13,11 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  /** Icon-only "⋯" trigger for inline row toolbars. */
+  compact: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const { t } = useI18n()
@@ -66,8 +71,14 @@ function toggle(event) {
     <Button
       type="button"
       size="small"
-      :label="triggerLabel"
+      :label="compact ? undefined : triggerLabel"
       :loading="anyLoading"
+      :text="compact"
+      :rounded="compact"
+      :severity="compact ? 'secondary' : undefined"
+      :icon="compact ? 'pi pi-ellipsis-h' : undefined"
+      :aria-label="triggerLabel"
+      :title="compact ? triggerLabel : undefined"
       aria-haspopup="true"
       @click="toggle"
     />

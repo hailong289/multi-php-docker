@@ -11,6 +11,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
+import ActionMenu from '../components/ActionMenu.vue'
 import { useManager } from '../composables/useManager'
 import HomePinnedSection from '../components/HomePinnedSection.vue'
 import DomainNameCombobox from '../components/DomainNameCombobox.vue'
@@ -86,14 +87,6 @@ function serverPhpState(server) {
 
 function serverPhpRunning(server) {
   return serverPhpState(server) === 'running'
-}
-
-function phpStateSeverity(state) {
-  if (state === 'running') return 'success'
-  if (state === 'stopped') return 'secondary'
-  if (state === 'error') return 'danger'
-  if (state === 'busy') return 'warn'
-  return 'contrast'
 }
 
 const sourcePrefix = computed(() => SOURCE_PREFIX)
@@ -244,12 +237,102 @@ function openHttps(domain) {
   window.open('https://' + domain)
 }
 
-function healthText(key) {
+/** ok | warn | bad, or '' before the first probe. Drives the row rail and the HTTP number. */
+function healthTone(key) {
   const row = siteHealth.value[key]
   if (!row) return ''
-  if (row.state === 'up') return `${row.status} · ${row.ms} ms`
-  if (row.state === 'down') return String(row.status ?? '')
-  return t('health.unreachable')
+  const status = Number(row.status)
+  if (row.state === 'up' && status < 300) return 'ok'
+  if ((row.state === 'up' || row.state === 'down') && status < 500) return 'warn'
+  return 'bad'
+}
+
+const statusFilter = ref('all')
+const siteQuery = ref('')
+
+/** ok | warn | bad | off (disabled) | unknown (not probed yet). */
+function rowTone(item) {
+  if (!isServerEnabled(item.server)) return 'off'
+  return healthTone(item.key) || 'unknown'
+}
+
+const filterOptions = computed(() => {
+  const counts = { all: serverEntries.value.length, bad: 0, warn: 0, ok: 0 }
+  for (const item of serverEntries.value) {
+    const tone = rowTone(item)
+    if (tone in counts) counts[tone] += 1
+  }
+  return ['all', 'bad', 'warn', 'ok'].map((id) => ({
+    id,
+    label: t(`servers.filter_${id}`),
+    count: counts[id],
+  }))
+})
+
+const visibleEntries = computed(() => {
+  const query = siteQuery.value.trim().toLowerCase()
+  return serverEntries.value.filter((item) => {
+    if (statusFilter.value !== 'all' && rowTone(item) !== statusFilter.value) return false
+    if (!query) return true
+    const name = String(item.server.APP_NAME || '').toLowerCase()
+    const domain = String(item.server.DOMAIN_NAME || '').toLowerCase()
+    return name.includes(query) || domain.includes(query)
+  })
+})
+
+function tileCode(item) {
+  if (!isServerEnabled(item.server)) return t('servers.tile_off')
+  const row = siteHealth.value[item.key]
+  if (!row) return '…'
+  if (row.state === 'up' || row.state === 'down') return String(row.status ?? '—')
+  return '—'
+}
+
+function tileSub(item) {
+  if (!isServerEnabled(item.server)) return 'Nginx'
+  const row = siteHealth.value[item.key]
+  if (!row) return ''
+  if (row.state === 'up') return `${row.ms} ms`
+  if (row.state === 'down') return t(`servers.filter_${rowTone(item)}`)
+  return t('servers.tile_down')
+}
+
+function tileTitle(item) {
+  if (!isServerEnabled(item.server)) return t('action.enable_hint')
+  const row = siteHealth.value[item.key]
+  if (!row) return ''
+  return row.state === 'up' || row.state === 'down' ? `HTTP ${row.status}` : t('health.unreachable')
+}
+
+function serverPhpLabel(server) {
+  const container = server?.CONTAINER_PHP_VERSION || ''
+  const match = Object.values(data.php_versions || {}).find((config) => config?.container === container)
+  return match?.label || container
+}
+
+function docRootParts(path) {
+  const value = String(path || '')
+  const prefix = `${SOURCE_PREFIX}/`
+  return value.startsWith(prefix) ? { prefix, rest: value.slice(prefix.length) } : { prefix: '', rest: value }
+}
+
+function serverMenuItems(item) {
+  const enabled = isServerEnabled(item.server)
+  return [
+    {
+      label: enabled ? t('action.disable') : t('action.enable'),
+      loading: isPending('toggle', { key: item.key }),
+      disabled: busy.value,
+      run: () => toggleServerEnabled(item.key),
+    },
+    {
+      label: t('action.delete'),
+      danger: true,
+      loading: isPending('delete', { key: item.key }),
+      disabled: busy.value,
+      run: () => deleteServer(item.key),
+    },
+  ]
 }
 
 onMounted(() => {
@@ -264,38 +347,45 @@ onUnmounted(() => window.clearInterval(healthTimer))
   <section class="panel" data-tour="home-panel">
     <div class="panel-heading">
       <div class="panel-heading-row">
-        <h2>{{ t('servers.title') }}</h2>
+        <div class="home-servers-title">
+          <h2>{{ t('servers.title') }}</h2>
+          <p v-if="!loading && isPending('reload')" class="status-line">
+            {{ t('reload.waiting') }}
+          </p>
+          <p v-else-if="!loading && data.nginx_status && nginxStatusOk()" class="home-nginx-ok">
+            <i class="pi pi-check" aria-hidden="true" />
+            {{ nginxStatusText() }}
+          </p>
+        </div>
         <div class="panel-heading-actions">
-          <Button
-            type="button"
-            data-tour="home-add"
-            :label="t('form.add')"
-            :disabled="busy || loading"
-            @click="openAdd"
-          />
           <Button
             v-if="nginxReloadAvailable"
             type="button"
             data-tour="home-reload"
+            severity="secondary"
+            outlined
             :label="isPending('reload') ? t('reload.waiting') : t('reload.button')"
             :loading="isPending('reload')"
             :disabled="busy || loading"
             @click="reloadNginx"
           />
+          <Button
+            type="button"
+            data-tour="home-add"
+            icon="pi pi-plus"
+            :label="t('form.add')"
+            :disabled="busy || loading"
+            @click="openAdd"
+          />
         </div>
       </div>
-      <p v-if="!loading && isPending('reload')" class="status-line">
-        {{ t('reload.waiting') }}
-      </p>
       <Message
-        v-else-if="!loading && data.nginx_status"
-        :severity="nginxStatusOk() ? 'success' : 'error'"
+        v-if="!loading && !isPending('reload') && data.nginx_status && !nginxStatusOk()"
+        severity="error"
         :closable="false"
         class="home-status-msg"
       >
-        <strong>
-          {{ nginxStatusOk() ? t('reload.success') : t('reload.error') }}:
-        </strong>
+        <strong>{{ t('reload.error') }}:</strong>
         {{ nginxStatusText() }}
       </Message>
     </div>
@@ -309,37 +399,70 @@ onUnmounted(() => window.clearInterval(healthTimer))
       <Column :header="t('table.app_domain')" />
       <Column :header="t('table.php')" />
       <Column :header="t('table.document_root')" />
-      <Column :header="t('table.actions')" />
     </DataTable>
     <div v-else-if="serverEntries.length === 0" class="empty" data-tour="home-table">
       {{ t('servers.empty') }}
     </div>
     <div v-else data-tour="home-table">
-      <DataTable
-        :value="serverEntries"
-        data-key="key"
-        striped-rows
-        :row-class="(row) => (!isServerEnabled(row.server) ? 'is-disabled' : '')"
-      >
-        <Column :header="t('table.app_domain')">
-          <template #body="{ data: item }">
-            <strong>{{ item.server.APP_NAME }}</strong>
-            <Tag
-              v-if="!isServerEnabled(item.server)"
-              class="home-inline-tag"
-              :value="t('servers.disabled_badge')"
-              severity="secondary"
-              rounded
-            />
-            <br />
-            <template v-if="item.server.DOMAIN_NAME">
-              <a :href="siteUrl(item.server.DOMAIN_NAME)" target="_blank" rel="noreferrer">
-                {{ siteUrl(item.server.DOMAIN_NAME) }}
-              </a>
-            </template>
-            <span v-else>{{ t('servers.no_domain') }}</span>
-            <template v-if="item.server.DOMAIN_NAME && isSslEnabled(item.server)">
-              <br />
+      <div class="home-site-tools">
+        <div class="home-site-filters" role="group" :aria-label="t('servers.filter_label')">
+          <button
+            v-for="option in filterOptions"
+            :key="option.id"
+            type="button"
+            class="home-site-filter"
+            :class="`is-${option.id}`"
+            :aria-pressed="statusFilter === option.id ? 'true' : 'false'"
+            @click="statusFilter = option.id"
+          >
+            <span class="home-site-filter-dot" aria-hidden="true" />
+            {{ option.label }}
+            <span class="home-site-filter-count">{{ option.count }}</span>
+          </button>
+        </div>
+        <span class="home-site-search">
+          <i class="pi pi-search" aria-hidden="true" />
+          <InputText
+            v-model="siteQuery"
+            type="search"
+            size="small"
+            :placeholder="t('servers.search')"
+            :aria-label="t('servers.search')"
+            autocomplete="off"
+          />
+        </span>
+      </div>
+
+      <ul class="home-site-list">
+        <li
+          v-for="item in visibleEntries"
+          :key="item.key"
+          class="home-site"
+          :class="{ 'is-disabled': !isServerEnabled(item.server) }"
+        >
+          <div class="home-site-tile" :class="`is-${rowTone(item)}`" :title="tileTitle(item)">
+            <strong>{{ tileCode(item) }}</strong>
+            <small>{{ tileSub(item) }}</small>
+          </div>
+
+          <div class="home-site-main">
+            <div class="home-site-name">
+              <strong>{{ item.server.APP_NAME }}</strong>
+              <Tag
+                v-if="!isServerEnabled(item.server)"
+                :value="t('servers.disabled_badge')"
+                severity="secondary"
+                rounded
+              />
+            </div>
+            <a
+              v-if="item.server.DOMAIN_NAME"
+              :href="siteUrl(item.server.DOMAIN_NAME)"
+              target="_blank"
+              rel="noreferrer"
+            >{{ siteUrl(item.server.DOMAIN_NAME) }}</a>
+            <span v-else class="home-site-muted">{{ t('servers.no_domain') }}</span>
+            <div v-if="item.server.DOMAIN_NAME && isSslEnabled(item.server)" class="home-site-ssl">
               <a :href="siteUrl(item.server.DOMAIN_NAME, true)" target="_blank" rel="noreferrer">
                 {{ siteUrl(item.server.DOMAIN_NAME, true) }}
               </a>
@@ -360,7 +483,6 @@ onUnmounted(() => window.clearInterval(healthTimer))
                 @click="trustSsl(item.key)"
               />
               <Tag
-                class="home-inline-tag"
                 :value="
                   item.server.ssl_mode === 'uploaded'
                     ? t('ssl.badge_uploaded')
@@ -385,94 +507,58 @@ onUnmounted(() => window.clearInterval(healthTimer))
               <p v-else-if="item.server.ssl_names_match === false" class="ssl-warn">
                 {{ t('ssl.names_mismatch') }}
               </p>
-            </template>
-          </template>
-        </Column>
-        <Column :header="t('health.column')">
-          <template #body="{ data: item }">
-            {{ healthText(item.key) }}
-          </template>
-        </Column>
-        <Column :header="t('table.php')">
-          <template #body="{ data: item }">
-            <code>{{ item.server.CONTAINER_PHP_VERSION }}</code>
-            <Tag
-              class="home-inline-tag"
-              :value="stateLabel(serverPhpState(item.server))"
-              :severity="phpStateSeverity(serverPhpState(item.server))"
-              rounded
-            />
-          </template>
-        </Column>
-        <Column :header="t('table.document_root')">
-          <template #body="{ data: item }">
-            <code>{{ item.server.SERVER_PATH }}</code>
-          </template>
-        </Column>
-        <Column :header="t('table.actions')">
-          <template #body="{ data: item }">
-            <div class="actions">
-              <Button
-                type="button"
-                size="small"
-                :label="
-                  isPending('toggle', { key: item.key })
-                    ? t('action.working')
-                    : isServerEnabled(item.server)
-                      ? t('action.disable')
-                      : t('action.enable')
-                "
-                :loading="isPending('toggle', { key: item.key })"
-                :disabled="busy"
-                :title="
-                  isServerEnabled(item.server)
-                    ? t('action.disable_hint')
-                    : t('action.enable_hint')
-                "
-                @click="toggleServerEnabled(item.key)"
-              />
-              <Button
-                type="button"
-                size="small"
-                :label="t('action.terminal')"
-                :disabled="busy || !serverPhpRunning(item.server)"
-                :title="
-                  serverPhpRunning(item.server) ? '' : t('terminal.container_not_running')
-                "
-                @click="openTerminal(item)"
-              />
-              <Button
-                type="button"
-                size="small"
-                :label="t('action.logs')"
-                :disabled="busy"
-                @click="openSourceLogs(item)"
-              />
-              <Button
-                type="button"
-                size="small"
-                :label="t('action.edit')"
-                :disabled="busy"
-                @click="openEdit(item.key)"
-              />
-              <Button
-                type="button"
-                size="small"
-                severity="danger"
-                outlined
-                :label="
-                  isPending('delete', { key: item.key })
-                    ? t('action.working')
-                    : t('action.delete')
-                "
-                :loading="isPending('delete', { key: item.key })"
-                :disabled="busy"
-                @click="deleteServer(item.key)"
-              />
             </div>
-          </template>
-        </Column>
-      </DataTable>
+          </div>
+
+          <div class="home-php-cell" :title="item.server.CONTAINER_PHP_VERSION">
+            <span class="home-php-name">{{ serverPhpLabel(item.server) }}</span>
+            <span class="home-php-state" :class="`is-${serverPhpState(item.server)}`">
+              {{ stateLabel(serverPhpState(item.server)) }}
+            </span>
+          </div>
+
+          <div class="home-site-path">
+            <i class="pi pi-folder" aria-hidden="true" />
+            <code class="home-doc-root" :title="item.server.SERVER_PATH"><span
+                v-if="docRootParts(item.server.SERVER_PATH).prefix"
+                class="home-doc-root-prefix"
+              >{{ docRootParts(item.server.SERVER_PATH).prefix }}</span>{{ docRootParts(item.server.SERVER_PATH).rest }}</code>
+          </div>
+
+          <div class="home-row-toolbar">
+            <Button
+              type="button"
+              text
+              size="small"
+              icon="pi pi-desktop"
+              :label="t('action.terminal')"
+              :title="serverPhpRunning(item.server) ? '' : t('terminal.container_not_running')"
+              :disabled="busy || !serverPhpRunning(item.server)"
+              @click="openTerminal(item)"
+            />
+            <Button
+              type="button"
+              text
+              size="small"
+              icon="pi pi-file"
+              :label="t('action.logs')"
+              :disabled="busy"
+              @click="openSourceLogs(item)"
+            />
+            <Button
+              type="button"
+              text
+              size="small"
+              icon="pi pi-pencil"
+              :label="t('action.edit')"
+              :disabled="busy"
+              @click="openEdit(item.key)"
+            />
+            <ActionMenu compact :label="t('action.more')" :items="serverMenuItems(item)" />
+          </div>
+        </li>
+      </ul>
+      <p v-if="!visibleEntries.length" class="home-site-empty">{{ t('servers.no_match') }}</p>
     </div>
   </section>
 

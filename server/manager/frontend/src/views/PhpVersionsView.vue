@@ -7,6 +7,8 @@ import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
 import PinButton from '../components/PinButton.vue'
 import { useManager } from '../composables/useManager'
+import ContainerStatsBadge from '../components/ContainerStatsBadge.vue'
+import { useContainerStats } from '../composables/useContainerStats'
 import { usePinnedContainers } from '../composables/usePinnedContainers'
 import { buildPhpMenuItems, buildPinMenuItem } from '../lib/containerMenus'
 
@@ -48,6 +50,8 @@ const phpRows = computed(() =>
     target,
   })),
 )
+
+const { stats: containerStats } = useContainerStats(computed(() => phpRows.value.map((row) => row.target.container)))
 </script>
 
 <template>
@@ -133,6 +137,10 @@ const phpRows = computed(() =>
             <div>
               <dt>{{ t('php_controller.container') }}</dt>
               <dd><code>{{ row.target.container }}</code></dd>
+            </div>
+            <div v-if="containerStats[row.target.container]">
+              <dt>{{ t('services.resources') }}</dt>
+              <dd><ContainerStatsBadge :stats="containerStats[row.target.container]" /></dd>
             </div>
             <div>
               <dt>{{ t('php_controller.profile') }}</dt>

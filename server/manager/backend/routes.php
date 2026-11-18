@@ -111,6 +111,7 @@ return [
     ['GET', '/sources/(?P<key>SERVER_NAME\d+)/logs', [SourceLogController::class, 'show']],
     ['GET', '/health/sites', [HealthController::class, 'sites']],
     ['GET', '/health/ports', [HealthController::class, 'ports']],
+    ['GET', '/health/containers', [HealthController::class, 'containers']],
     ['POST', '/ssl/trust', [SslTrustController::class, 'store']],
     ['GET', '/ssl/trust', [SslTrustController::class, 'show']],
     ['GET', '/crons/(?P<service>supervisor(?:-[0-9.]+(?:-alpine|-trixie)?))', [CronController::class, 'index']],

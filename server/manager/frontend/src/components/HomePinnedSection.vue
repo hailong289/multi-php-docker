@@ -10,6 +10,8 @@ import ServiceConnectionDialog from './ServiceConnectionDialog.vue'
 import StartupSequenceSection from './StartupSequenceSection.vue'
 import { apiSend } from '../api'
 import { useManager } from '../composables/useManager'
+import { useContainerStats } from '../composables/useContainerStats'
+import ContainerStatsBadge from './ContainerStatsBadge.vue'
 import { usePinnedContainers } from '../composables/usePinnedContainers'
 import { pinKey } from '../lib/pinnedContainers'
 import {
@@ -222,6 +224,7 @@ const rows = computed(() =>
         available: true,
         label: t('nginx.name'),
         state: nginxState(),
+        container: data.nginx_management?.container || 'nginx_container',
       }
     }
     if (pin.kind === 'infra') {
@@ -233,6 +236,7 @@ const rows = computed(() =>
         available: !!target,
         label: target?.label || pin.id,
         state: target ? infraServiceState(pin.id) : 'not_created',
+        container: target?.container,
       }
     }
     if (pin.kind === 'php') {
@@ -244,6 +248,7 @@ const rows = computed(() =>
         available: !!target,
         label: target?.label || pin.id,
         state: target ? phpServiceState(pin.id) : 'not_created',
+        container: target?.container,
       }
     }
     const item = (data.infra_services?.compose_files || []).find((file) => file.name === pin.id)
@@ -255,10 +260,13 @@ const rows = computed(() =>
       available: !!item,
       label: svc?.name || pin.id.replace(/\.ya?ml$/i, ''),
       state: item ? composeFileState(item) : 'not_created',
+      container: svc?.container,
       item,
     }
   }),
 )
+
+const { stats: containerStats } = useContainerStats(computed(() => rows.value.map((row) => row.container)))
 
 function menuItems(row) {
   if (row.kind === 'nginx') {
@@ -378,6 +386,10 @@ function onDrop(toIndex) {
                 :value="t('pin.unavailable')"
                 severity="contrast"
                 rounded
+              />
+              <ContainerStatsBadge
+                v-if="containerStats[row.container]"
+                :stats="containerStats[row.container]"
               />
             </div>
           </div>
