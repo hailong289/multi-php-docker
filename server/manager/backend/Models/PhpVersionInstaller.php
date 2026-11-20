@@ -200,6 +200,12 @@ services:
     working_dir: /var/www/{$source}
     environment:
       COMPOSER_PHP_SERVICE: {$service}
+    depends_on:
+      dns:
+        condition: service_started
+        required: false
+    dns:
+      - \${APP_DNS_IP:-10.213.53.53}
     networks:
       - app-network
 
@@ -217,6 +223,9 @@ services:
     working_dir: /var/www/{$source}
     command: ["/var/scripts/docker/supervisord.sh"]
     depends_on:
+      dns:
+        condition: service_started
+        required: false
       mysql:
         condition: service_started
         required: false
@@ -238,6 +247,8 @@ services:
       minio:
         condition: service_started
         required: false
+    dns:
+      - \${APP_DNS_IP:-10.213.53.53}
     networks:
       - app-network
 

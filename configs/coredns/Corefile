@@ -1,0 +1,9 @@
+# Inside containers, site domains would otherwise resolve to 127.0.0.1 via the host hosts file.
+# Answer every *.test / *.local name with nginx's address; everything else goes to Docker DNS.
+test local {
+    rewrite name regex (.+)\.(test|local)\.$ nginx_container. answer auto
+    forward . 127.0.0.11
+}
+. {
+    forward . 127.0.0.11
+}

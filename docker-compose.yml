@@ -95,6 +95,18 @@ services:
     networks:
       - app-network
 
+  dns:
+    image: coredns/coredns:1.11.3
+    container_name: dns_container
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - ./configs/coredns:/etc/coredns:ro
+    restart: unless-stopped
+    networks:
+      app-network:
+        # PHP services list this IP under `dns:`; Docker only accepts an IP there.
+        ipv4_address: ${APP_DNS_IP:-10.213.53.53}
+
   manager:
     image: multi-php-local:manager
     build:
@@ -129,3 +141,8 @@ services:
 networks:
   app-network:
     driver: bridge
+    # Fixed subnet so the dns service gets a known IP. Outside Docker's default pools (172.17-31, 192.168);
+    # if it clashes with a LAN/VPN, set APP_SUBNET and APP_DNS_IP in .env.
+    ipam:
+      config:
+        - subnet: ${APP_SUBNET:-10.213.53.0/24}
