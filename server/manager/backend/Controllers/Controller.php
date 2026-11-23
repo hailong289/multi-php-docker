@@ -59,6 +59,7 @@ abstract class Controller
             'hosts_status' => $hosts->status(),
             'hosts_extras' => $hosts->extras(),
             'hosts_write_enabled' => HostsSync::writeEnabled(),
+            'hosts_wildcard_tlds' => $hosts->wildcardTlds(),
             'pending_sync' => $hosts->pendingSync(),
         ];
     }

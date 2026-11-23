@@ -193,11 +193,13 @@ services:
     volumes:
       - ./server/{$source}:/var/www/{$source}
       - ./scripts:/var/scripts
+      - ./nginx/ssl:/var/nginx-ssl:ro
       - ./runtime/composer:/opt/composer:ro
       - ./scripts/composer/bin/composer:/usr/local/sbin/composer:ro
       - ./{$iniRel}:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf
     working_dir: /var/www/{$source}
+    command: ["sh", "-c", "/var/scripts/docker/trust-local-certs.sh; exec php-fpm"]
     environment:
       COMPOSER_PHP_SERVICE: {$service}
     depends_on:
@@ -216,6 +218,7 @@ services:
     volumes:
       - ./server/{$source}:/var/www/{$source}
       - ./scripts:/var/scripts
+      - ./nginx/ssl:/var/nginx-ssl:ro
       - ./{$iniRel}:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf:ro
       - ./{$supervisorDir}:/etc/supervisor/conf.d:ro

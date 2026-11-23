@@ -208,12 +208,16 @@ function onSubmit() {
   saveServer(editingKey.value ? {} : { framework: frameworkId.value })
 }
 
+// null = Docker unreachable or not checked yet: no DNS warning then.
+const dnsState = ref(null)
+
 async function loadHealth() {
   try {
     const payload = await apiGet('/api/health/sites')
     const next = {}
     for (const row of payload.sites || []) next[row.key] = row
     siteHealth.value = next
+    dnsState.value = payload.dns_state ?? null
   } catch {
     siteHealth.value = {}
   }
@@ -387,6 +391,15 @@ onUnmounted(() => window.clearInterval(healthTimer))
       >
         <strong>{{ t('reload.error') }}:</strong>
         {{ nginxStatusText() }}
+      </Message>
+      <Message
+        v-if="dnsState && dnsState !== 'running'"
+        severity="error"
+        :closable="false"
+        class="home-status-msg"
+      >
+        {{ t('dns.home_down') }}
+        <a href="#" @click.prevent="router.push({ name: 'domains' })">{{ t('dns.home_open') }}</a>
       </Message>
     </div>
 

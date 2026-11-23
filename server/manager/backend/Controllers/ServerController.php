@@ -14,6 +14,7 @@ use Manager\Models\SslCertificates;
 use Manager\Models\StackPreset;
 use Manager\Models\SupervisorConfigs;
 use Manager\Support\Config;
+use Manager\Support\LocalCertTrust;
 
 final class ServerController extends Controller
 {
@@ -33,6 +34,7 @@ final class ServerController extends Controller
             (string) ($validation['ssl_certificate'] ?? ''),
             (string) ($validation['ssl_private_key'] ?? '')
         );
+        LocalCertTrust::refresh();
 
         $key = $env->nextKey($servers);
         $servers[$key] = $validation['server'];
@@ -71,6 +73,7 @@ final class ServerController extends Controller
 
         $ssl = new SslCertificates(Config::projectPath());
         $ssl->persist([], $server, (string) ($validation['ssl_certificate'] ?? ''), (string) ($validation['ssl_private_key'] ?? ''));
+        LocalCertTrust::refresh();
         $key = $env->nextKey($servers);
         $servers[$key] = $server;
         $env->save($servers);
@@ -137,6 +140,7 @@ final class ServerController extends Controller
             (string) ($validation['ssl_certificate'] ?? ''),
             (string) ($validation['ssl_private_key'] ?? '')
         );
+        LocalCertTrust::refresh();
 
         $servers[$key] = $validation['server'];
         $env->save($servers);
@@ -163,6 +167,7 @@ final class ServerController extends Controller
         $env->save($servers);
         if ($appName !== '') {
             (new SslCertificates(Config::projectPath()))->deleteApp($appName);
+            LocalCertTrust::refresh();
         }
 
         return Response::json([

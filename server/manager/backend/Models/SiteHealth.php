@@ -97,19 +97,19 @@ final class SiteHealth
     /** @return array{status: int|null, ms: int|null, state: string} */
     public function probe(string $domain): array
     {
-        if ($domain === '' || preg_match('/[\s\/]/', $domain)) {
+        if (preg_match('/^[a-z0-9][a-z0-9.-]*$/i', $domain) !== 1) {
             return $this->classifyHttp(0, 0, 'unreachable');
         }
         $context = stream_context_create([
             'http' => [
                 'method' => 'GET',
-                'header' => "Host: {$domain}\r\n",
                 'timeout' => 3,
                 'ignore_errors' => true,
             ],
         ]);
         $start = hrtime(true);
-        $body = @file_get_contents('http://nginx_container/', false, $context);
+        // By domain, not nginx_container: goes through the same DNS (dns_container) PHP containers use.
+        $body = @file_get_contents('http://' . $domain . '/', false, $context);
         $ms = (int) ((hrtime(true) - $start) / 1_000_000);
         if ($body === false) {
             return $this->classifyHttp(0, $ms, 'unreachable');

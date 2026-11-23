@@ -10,6 +10,7 @@ use Manager\Models\ContainerStats;
 use Manager\Models\EnvConfig;
 use Manager\Models\SiteHealth;
 use Manager\Support\DockerEndpoint;
+use Manager\Support\DockerLiveState;
 
 final class HealthController extends Controller
 {
@@ -35,7 +36,11 @@ final class HealthController extends Controller
             ];
         }
 
-        return Response::json(['sites' => $sites]);
+        return Response::json([
+            'sites' => $sites,
+            // Without dns_container, PHP containers resolve nothing; Home warns on this.
+            'dns_state' => DockerLiveState::stateFor('dns_container'),
+        ]);
     }
 
     public function ports(Request $request, array $params = []): Response

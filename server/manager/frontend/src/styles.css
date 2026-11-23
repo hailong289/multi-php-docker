@@ -1665,6 +1665,45 @@ button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not(.wor
   margin-top: 10px;
 }
 
+.dns-panel {
+  margin-top: 20px;
+}
+
+.dns-panel .status-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.dns-panel .form-actions {
+  margin-top: 14px;
+}
+
+.dns-logs {
+  margin-top: 14px;
+}
+
+.dns-section-title {
+  margin: 22px 0 6px;
+  font-size: 1rem;
+}
+
+.dns-records {
+  margin-top: 10px;
+}
+
+.dns-logs summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.dns-logs .manual-lines {
+  max-height: 260px;
+  overflow: auto;
+}
+
 .home-status-msg {
   margin-top: 10px;
 }

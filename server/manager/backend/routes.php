@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Manager\Controllers\BootstrapController;
 use Manager\Controllers\DockerConnectionController;
 use Manager\Controllers\CronController;
+use Manager\Controllers\DnsController;
 use Manager\Controllers\DomainController;
 use Manager\Controllers\HealthController;
 use Manager\Controllers\SslTrustController;
@@ -44,6 +45,10 @@ return [
     ['POST', '/nginx/reload', [NginxController::class, 'reload']],
     ['GET', '/hosts/status', [HostsController::class, 'status']],
     ['POST', '/hosts/sync', [HostsController::class, 'sync']],
+    ['GET', '/dns', [DnsController::class, 'show']],
+    ['POST', '/dns/restart', [DnsController::class, 'restart']],
+    ['POST', '/dns/test', [DnsController::class, 'test']],
+    ['PUT', '/dns/records', [DnsController::class, 'records']],
     ['GET', '/domains', [DomainController::class, 'index']],
     ['POST', '/domains', [DomainController::class, 'store']],
     ['POST', '/domains/restore', [DomainController::class, 'restore']],

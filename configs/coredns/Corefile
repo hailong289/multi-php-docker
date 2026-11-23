@@ -1,9 +1,33 @@
 # Inside containers, site domains would otherwise resolve to 127.0.0.1 via the host hosts file.
-# Answer every *.test / *.local name with nginx's address; everything else goes to Docker DNS.
-test local {
-    rewrite name regex (.+)\.(test|local)\.$ nginx_container. answer auto
+# Answer every name under a local-only TLD with nginx's address; everything else goes to Docker DNS.
+# Public TLDs (.dev, .app, ...) are left alone on purpose; .localhost is skipped because curl maps it to loopback itself.
+# reload: edits to this file apply within ~30s without restarting the container.
+test local internal lan {
+    rewrite name regex (.+)\.(test|local|internal|lan)\.$ nginx_container. answer auto
     forward . 127.0.0.11
+    errors
+    reload
 }
 . {
+    # Custom records from Manager (runtime/coredns/records.conf); no file yet is fine.
+    import /etc/coredns-records/*.conf
     forward . 127.0.0.11
+    # Only cache here: the zone above must see a recreated nginx's new IP right away.
+    cache 30
+    errors
+    reload
+}
+
+# Host machine, opt-in via scripts/hosts/wildcard_dns.sh (macOS /etc/resolver, Linux systemd-resolved):
+# nginx is reachable there on 127.0.0.1, not on its container IP. No .local: it clashes with Bonjour/mDNS.
+test:10053 internal:10053 lan:10053 {
+    template IN A {
+        answer "{{ .Name }} 60 IN A 127.0.0.1"
+    }
+    # Empty AAAA answer so clients do not wait on IPv6 before falling back to A.
+    template IN AAAA {
+        rcode NOERROR
+    }
+    errors
+    reload
 }

@@ -6,6 +6,7 @@ namespace Manager\Models;
 
 use Manager\Http\HttpException;
 use Manager\Support\Config;
+use Manager\Support\JsonFile;
 
 final class HostsSync
 {
@@ -172,6 +173,27 @@ final class HostsSync
         return $list;
     }
 
+    /**
+     * TLDs the host resolves through the dns container (scripts/hosts/wildcard_dns.sh writes the marker);
+     * their domains need no hosts-file line.
+     *
+     * @return list<string>
+     */
+    public function wildcardTlds(): array
+    {
+        $marker = JsonFile::readObject($this->runtimePath . '/hosts.wildcard.json');
+        $tlds = is_array($marker['tlds'] ?? null) ? $marker['tlds'] : [];
+
+        return array_values(array_filter($tlds, static fn (mixed $tld): bool => is_string($tld) && $tld !== ''));
+    }
+
+    public function coveredByWildcard(string $domain): bool
+    {
+        $domain = $this->normalizeDomain($domain);
+
+        return str_contains($domain, '.') && in_array(substr($domain, strrpos($domain, '.') + 1), $this->wildcardTlds(), true);
+    }
+
     public function extraPath(): string
     {
         return $this->runtimePath . '/hosts.extra.json';
@@ -301,6 +323,7 @@ final class HostsSync
         $hostsStatus ??= $this->status();
         $states = is_array($hostsStatus['domains'] ?? null) ? $hostsStatus['domains'] : [];
         $hasStatus = $hostsStatus !== null;
+        $wildcard = $this->wildcardTlds();
         $domains = [];
         $seen = [];
 
@@ -315,7 +338,7 @@ final class HostsSync
                 'source' => 'server',
                 'app_name' => (string) ($server['APP_NAME'] ?? ''),
                 'domain_name' => $domainName,
-                'hosts_state' => self::resolveHostsState($domainName, $states, $hasStatus),
+                'hosts_state' => self::resolveHostsState($domainName, $states, $hasStatus, $wildcard),
             ];
         }
 
@@ -328,7 +351,7 @@ final class HostsSync
                 'source' => 'hosts',
                 'app_name' => '',
                 'domain_name' => $domainName,
-                'hosts_state' => self::resolveHostsState($domainName, $states, $hasStatus),
+                'hosts_state' => self::resolveHostsState($domainName, $states, $hasStatus, $wildcard),
             ];
         }
 
@@ -337,9 +360,13 @@ final class HostsSync
 
     /**
      * @param array<string, mixed> $states
+     * @param list<string> $wildcardTlds
      */
-    private static function resolveHostsState(string $domainName, array $states, bool $hasStatus): string
+    private static function resolveHostsState(string $domainName, array $states, bool $hasStatus, array $wildcardTlds = []): string
     {
+        if (in_array(substr($domainName, (int) strrpos($domainName, '.') + 1), $wildcardTlds, true)) {
+            return 'wildcard';
+        }
         if (!$hasStatus) {
             return 'unknown';
         }

@@ -7,6 +7,7 @@ import DataTable from 'primevue/datatable'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
+import DnsPanel from '../components/DnsPanel.vue'
 import LocalDomainInput from '../components/LocalDomainInput.vue'
 import { useManager } from '../composables/useManager'
 import { authState } from '../lib/authState'
@@ -47,7 +48,7 @@ const hostsWriteEnabled = computed(
 const hostsWriterHref = hostsProtocolUrl()
 
 function hostsSeverity(state) {
-  if (state === 'synced') return 'success'
+  if (state === 'synced' || state === 'wildcard') return 'success'
   if (state === 'missing' || state === 'stale') return 'warn'
   return 'secondary'
 }
@@ -165,7 +166,7 @@ async function copyManualLines() {
           <template #body="{ data: row }">
             <div class="actions">
               <Button
-                v-if="hostsWriteEnabled && row.hosts_state !== 'synced'"
+                v-if="hostsWriteEnabled && row.hosts_state !== 'synced' && row.hosts_state !== 'wildcard'"
                 type="button"
                 size="small"
                 :label="
@@ -206,6 +207,8 @@ async function copyManualLines() {
       </DataTable>
     </div>
   </section>
+
+  <DnsPanel :domains="domainEntries.map((d) => d.domain_name)" />
 
   <Dialog
     :visible="domainModalOpen"

@@ -25,6 +25,7 @@ use Manager\Models\HostsSync;
 use Manager\Models\ComposeFileParser;
 use Manager\Models\PhpXdebug;
 use Manager\Models\SiteCron;
+use Manager\Models\DnsRecords;
 use Manager\Models\SiteHealth;
 use Manager\Models\SslTrust;
 use Manager\Models\StackPreset;
@@ -1818,5 +1819,40 @@ $containers = [
 assert_true($health->conflicts($containers, 'mysql_container', [3306]) === [], 'own running container is not a conflict');
 $blocked = $health->conflicts($containers, 'postgres_container', [3306, 5432]);
 assert_true(count($blocked) === 1 && $blocked[0]['port'] === 3306 && $blocked[0]['holder'] === 'mysql_container', 'other running publisher conflicts');
+
+$dnsReject = static function (array $records): string {
+    try {
+        DnsRecords::validate($records, ['test', 'local']);
+    } catch (HttpException $e) {
+        return $e->errorKey();
+    }
+    return '';
+};
+$dnsOk = DnsRecords::validate([
+    ['name' => ' API.Partner.com ', 'target' => 'mock_container'],
+    ['name' => 'pay.partner.com', 'target' => '10.9.8.7'],
+], ['test', 'local']);
+assert_true($dnsOk[0] === ['name' => 'api.partner.com', 'target' => 'mock_container'], 'dns record normalized');
+$dnsConf = DnsRecords::render($dnsOk);
+assert_true(str_contains($dnsConf, "rewrite name exact api.partner.com. mock_container. answer auto\n"), 'dns container target renders rewrite');
+assert_true(str_contains($dnsConf, "hosts {\n    10.9.8.7 pay.partner.com\n    fallthrough\n}"), 'dns ip target renders hosts');
+assert_true(!str_contains(DnsRecords::render([]), 'hosts'), 'dns empty render has no hosts block');
+assert_true($dnsReject([['name' => 'a.com } evil {', 'target' => 'x']]) === 'dns.record.invalid_name', 'dns rejects corefile injection in name');
+assert_true($dnsReject([['name' => 'a.com', 'target' => "x\nhosts"]]) === 'dns.record.invalid_target', 'dns rejects corefile injection in target');
+assert_true($dnsReject([['name' => 'site.test', 'target' => 'x']]) === 'dns.record.site_tld', 'dns rejects site tld name');
+assert_true($dnsReject([['name' => 'a.com', 'target' => 'mock.test']]) === 'dns.record.invalid_target', 'dns rejects site domain target');
+assert_true($dnsReject([['name' => 'localhost', 'target' => 'x']]) === 'dns.record.invalid_name', 'dns rejects single label name');
+assert_true($dnsReject([['name' => 'a.com', 'target' => 'x'], ['name' => 'A.com', 'target' => 'y']]) === 'dns.record.duplicate', 'dns rejects duplicate');
+assert_true($dnsReject(array_fill(0, 201, ['name' => 'a.com', 'target' => 'x'])) === 'dns.record.too_many', 'dns caps record count');
+
+$wildDir = sys_get_temp_dir() . '/hosts-wildcard-' . bin2hex(random_bytes(4));
+mkdir($wildDir, 0775, true);
+$wildHosts = new HostsSync($wildDir);
+assert_true($wildHosts->wildcardTlds() === [] && !$wildHosts->coveredByWildcard('a.test'), 'no wildcard marker covers nothing');
+file_put_contents($wildDir . '/hosts.wildcard.json', '{"tlds":["test",""]}');
+assert_true($wildHosts->wildcardTlds() === ['test'], 'wildcard marker drops empty tlds');
+assert_true($wildHosts->coveredByWildcard('A.Test') && !$wildHosts->coveredByWildcard('a.local') && !$wildHosts->coveredByWildcard('test'), 'wildcard covers by last label only');
+$wildStates = array_column($wildHosts->listedDomains(['SERVER_NAME1' => ['DOMAIN_NAME' => 'a.test'], 'SERVER_NAME2' => ['DOMAIN_NAME' => 'b.local']], null), 'hosts_state', 'domain_name');
+assert_true($wildStates === ['a.test' => 'wildcard', 'b.local' => 'unknown'], 'wildcard domains listed as wildcard');
 
 echo "All checks passed\n";

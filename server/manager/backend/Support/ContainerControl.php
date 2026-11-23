@@ -10,12 +10,19 @@ namespace Manager\Support;
  */
 final class ContainerControl
 {
+    private const DNS_CONTAINER = 'dns_container';
+
     /** @return 'running'|'stopped'|'not_created'|null null when the engine call failed */
     public static function apply(string $container, string $action): ?string
     {
         $container = ltrim($container, '/');
         if ($container === '' || !in_array($action, ['start', 'stop', 'restart'], true)) {
             return null;
+        }
+
+        // PHP containers forward DNS to dns_container (docker-compose.yml); without it they lose all DNS.
+        if ($action !== 'stop' && $container !== self::DNS_CONTAINER) {
+            self::start(self::DNS_CONTAINER);
         }
 
         $ok = match ($action) {

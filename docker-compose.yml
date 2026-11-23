@@ -99,8 +99,13 @@ services:
     image: coredns/coredns:1.11.3
     container_name: dns_container
     command: ["-conf", "/etc/coredns/Corefile"]
+    # Host-side wildcard DNS (opt-in, scripts/hosts/wildcard_dns.sh); loopback only.
+    ports:
+      - "127.0.0.1:${DNS_HOST_PORT:-10053}:10053/udp"
+      - "127.0.0.1:${DNS_HOST_PORT:-10053}:10053/tcp"
     volumes:
       - ./configs/coredns:/etc/coredns:ro
+      - ./runtime/coredns:/etc/coredns-records:ro
     restart: unless-stopped
     networks:
       app-network:
@@ -135,6 +140,11 @@ services:
     depends_on:
       env-init:
         condition: service_completed_successfully
+      dns:
+        condition: service_started
+    # Site health probes resolve domains like PHP containers do (see SiteHealth::probe).
+    dns:
+      - ${APP_DNS_IP:-10.213.53.53}
     networks:
       - app-network
 

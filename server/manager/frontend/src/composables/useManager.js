@@ -51,6 +51,7 @@ const data = reactive({
   hosts_status: null,
   hosts_extras: [],
   hosts_write_enabled: true,
+  hosts_wildcard_tlds: [],
   pending_sync: false,
   php_controllers: { targets: {}, statuses: {} },
   infra_services: { targets: {}, statuses: {}, compose_files: [] },
@@ -322,6 +323,7 @@ export function useManager() {
         if (payload.hosts_write_enabled !== undefined) {
           data.hosts_write_enabled = payload.hosts_write_enabled !== false
         }
+        if (payload.hosts_wildcard_tlds !== undefined) data.hosts_wildcard_tlds = payload.hosts_wildcard_tlds || []
         if (payload.pending_sync !== undefined) data.pending_sync = !!payload.pending_sync
         if (hostsStatusMatchesRollback(payload.hosts_status)) {
           if (payload.hosts_status.status === 'success') {
@@ -751,7 +753,7 @@ export function useManager() {
     const domain = String(key).slice('hosts:'.length)
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
-    const write = beginHostsWrite()
+    const write = beginHostsWrite(domain)
     armDomainDeleteRollback(domain, '', write.token)
     try {
       const result = await apiSend('DELETE', `/api/domains/extra/${encodeURIComponent(domain)}`, {
@@ -760,7 +762,7 @@ export function useManager() {
       if (domainEditingKey.value === key) closeDomainModal()
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       else await loadBootstrap({ silent: true })
-      if (data.hosts_write_enabled) {
+      if (data.hosts_write_enabled && !write.skip) {
         const outcome = await finishHostsWrite(result, { ...write, quietDeny: true })
         if (!outcome?.denied && outcome?.status?.status === 'success') {
           releaseHeldDomain()
@@ -785,7 +787,7 @@ export function useManager() {
     const domainName = String(data.servers[key]?.DOMAIN_NAME || '').toLowerCase()
     busy.value = true
     pendingAction.value = { kind: 'delete', key }
-    const write = beginHostsWrite()
+    const write = beginHostsWrite(domainName)
     armDomainDeleteRollback(domainName, key, write.token)
     try {
       const result = await apiSend('DELETE', `/api/domains/${key}`, {
@@ -794,7 +796,7 @@ export function useManager() {
       if (domainEditingKey.value === key) closeDomainModal()
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       else await loadBootstrap({ silent: true })
-      if (data.hosts_write_enabled) {
+      if (data.hosts_write_enabled && !write.skip) {
         const outcome = await finishHostsWrite(result, { ...write, quietDeny: true })
         if (!outcome?.denied && outcome?.status?.status === 'success') {
           releaseHeldDomain()
@@ -1205,11 +1207,18 @@ export function useManager() {
     })
   }
 
-  function beginHostsWrite() {
+  // The host resolves these TLDs via the dns container (scripts/hosts/wildcard_dns.sh): no hosts line needed.
+  function coveredByWildcard(domain) {
+    const name = String(domain || '').toLowerCase()
+    return name.includes('.') && (data.hosts_wildcard_tlds || []).includes(name.split('.').pop())
+  }
+
+  function beginHostsWrite(domain = '') {
     const previousUpdatedAt = data.hosts_status?.updated_at || null
     const token = newHostsWriteToken()
-    const launched = data.hosts_write_enabled ? launchHostsWriteProtocol(window, token) : false
-    return { token, launched, previousUpdatedAt }
+    const skip = coveredByWildcard(domain)
+    const launched = data.hosts_write_enabled && !skip ? launchHostsWriteProtocol(window, token) : false
+    return { token, launched, previousUpdatedAt, skip }
   }
 
   async function finishHostsWrite(result, write = {}) {
@@ -1275,15 +1284,16 @@ export function useManager() {
     domainFieldErrors.value = {}
     const mode = domainModalMode.value
     const editingKeySnapshot = domainEditingKey.value
-    const write = beginHostsWrite()
+    const domainName = composeLocalDomain(
+      domainForm.domain_label,
+      domainForm.domain_tld,
+      domainForm.domain_custom,
+    )
+    const write = beginHostsWrite(domainName)
     try {
       let result
       const body = {
-        domain_name: composeLocalDomain(
-          domainForm.domain_label,
-          domainForm.domain_tld,
-          domainForm.domain_custom,
-        ),
+        domain_name: domainName,
         hosts_write_token: write.token,
       }
       if (mode === 'add') {
@@ -1299,7 +1309,7 @@ export function useManager() {
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       else await loadBootstrap({ silent: true })
       showToast('success', trKey(result.message_key || 'hosts.domain_added'))
-      if (data.hosts_write_enabled) {
+      if (data.hosts_write_enabled && !write.skip) {
         await finishHostsWrite(result, write)
       }
     } catch (error) {
@@ -1345,6 +1355,7 @@ export function useManager() {
   function hostsStateLabel(state) {
     const map = {
       synced: 'domains.state.synced',
+      wildcard: 'domains.state.wildcard',
       missing: 'domains.state.missing',
       stale: 'domains.state.stale',
       unknown: 'domains.state.unknown',

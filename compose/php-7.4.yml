@@ -9,10 +9,12 @@ services:
     volumes:
       - ./server/source:/var/www/source
       - ./scripts:/var/scripts
+      - ./nginx/ssl:/var/nginx-ssl:ro
       - ./runtime/composer:/opt/composer:ro
       - ./scripts/composer/bin/composer:/usr/local/sbin/composer:ro
       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
     working_dir: /var/www/source
+    command: ["sh", "-c", "/var/scripts/docker/trust-local-certs.sh; exec php-fpm"]
     environment:
       COMPOSER_PHP_SERVICE: php-7.4
     depends_on:
@@ -31,6 +33,7 @@ services:
     volumes:
       - ./server/source:/var/www/source
       - ./scripts:/var/scripts
+      - ./nginx/ssl:/var/nginx-ssl:ro
       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini
       - ./configs/supervisord.conf:/etc/supervisord.conf:ro
       - ./configs/supervisor.d/php7.4:/etc/supervisor/conf.d:ro
