@@ -1694,6 +1694,12 @@ button:not([class*='p-']):not(.appearance-swatch):not(.route-tab-close):not(.wor
   margin-top: 10px;
 }
 
+.dns-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .dns-logs summary {
   cursor: pointer;
   color: var(--muted);
@@ -4579,4 +4585,100 @@ select:focus:not([class*='p-']) {
   background: var(--warning-bg);
   color: var(--warning-text);
   font-size: 0.85rem;
+}
+
+.dns-panel .p-message .p-button {
+  margin-left: 8px;
+}
+
+.dns-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+  /* Some fields are <label> (global label margin/font), the button wrappers are <div>: reset both alike. */
+  margin: 0;
+}
+
+.dns-panel .dns-check {
+  margin: 0;
+}
+
+.dns-field:has(> .p-button) {
+  min-width: 0;
+}
+
+.dns-field > span {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.dns-field small {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+  max-width: 360px;
+}
+
+.dns-check > span {
+  font-weight: 600;
+}
+
+/* Each advanced block is separated by a rule so the long panel reads as distinct parts. */
+.dns-section {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.dns-empty {
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.dns-panel .form-actions {
+  align-items: flex-start;
+}
+
+.home-site-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 6px;
+}
+
+.home-site-target .p-selectbutton .p-togglebutton {
+  padding: 2px 10px;
+  font-size: 12px;
+}
+
+/* Loud on purpose: forgetting a site points at staging is the main risk of this feature. */
+.home-site-remote {
+  color: var(--warning-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.form-remote {
+  margin-top: 16px;
+}
+
+.form-remote summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.form-remote-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.form-remote-name {
+  flex: 0 0 140px;
+}
+
+.form-remote-url {
+  flex: 1;
+  min-width: 0;
 }

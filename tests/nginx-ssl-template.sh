@@ -108,3 +108,49 @@ grep -q 'listen 443 ssl' "$proj_out" || fail "project-layout ssl-app missing lis
 grep -q "$PROJ/nginx/ssl/proj-app/cert.pem" "$proj_out" || fail "project-layout cert path should match env.json sibling nginx/ssl"
 
 echo "OK: nginx ssl template uses certs beside env.json"
+
+# TARGET=staging proxies the site to REMOTES.staging; switching back to local restores PHP.
+cat > "$PROJ/env.json" <<'EOF'
+{
+  "SERVER_NAME1": {
+    "APP_NAME": "proj-app",
+    "DOMAIN_NAME": "proj-app.test",
+    "SERVER_PATH": "/var/www/source/proj-app/public",
+    "CONTAINER_PHP_VERSION": "php8.5_container",
+    "ENABLED": true,
+    "SSL_ENABLED": true,
+    "SSL_MODE": "generated",
+    "REMOTES": {"dev": "http://dev.example.com:8080", "staging": "https://staging.example.com"},
+    "TARGET": "staging"
+  }
+}
+EOF
+run_proj() {
+    ENV_JSON_FILE="$PROJ/env.json" \
+    NGINX_TEMPLATE_FILE="$PROJ/nginx/examples/server_example.txt" \
+    NGINX_SSL_TEMPLATE_FILE="$PROJ/nginx/examples/server_ssl_example.txt" \
+    NGINX_OUTPUT_DIR="$PROJ/nginx/templates" \
+    sh "$ROOT/scripts/nginx/auto-add-template.sh" > /dev/null
+}
+run_proj
+grep -q 'set $remote_upstream https://staging.example.com;' "$proj_out" || fail "staging proxy_pass missing"
+grep -q 'proxy_set_header Host staging.example.com;' "$proj_out" || fail "staging Host header missing"
+grep -q 'listen 443 ssl' "$proj_out" || fail "staging proxy should keep 443"
+[ "$(grep -c 'proxy_cookie_flags ~ nosecure' "$proj_out")" = "1" ] || fail "nosecure only on the http block"
+if grep -q 'fastcgi_pass' "$proj_out"; then fail "staging proxy should not pass to PHP"; fi
+
+sed -i.bak 's/"TARGET": "staging"/"TARGET": "dev"/' "$PROJ/env.json"
+run_proj
+grep -q 'set $remote_upstream http://dev.example.com:8080;' "$proj_out" || fail "dev proxy missing"
+grep -q 'proxy_set_header Host dev.example.com;' "$proj_out" || fail "dev Host header should drop the port"
+
+sed -i.bak 's/"TARGET": "dev"/"TARGET": "local"/' "$PROJ/env.json"
+run_proj
+grep -q 'fastcgi_pass' "$proj_out" || fail "local should be PHP again"
+if grep -q 'remote:' "$proj_out"; then fail "local should not keep the proxy"; fi
+
+sed -i.bak 's#"https://staging.example.com"#"https://x.com; evil"#; s/"TARGET": "local"/"TARGET": "staging"/' "$PROJ/env.json"
+run_proj 2>/dev/null
+if grep -q 'evil' "$proj_out"; then fail "unsafe remote URL written into nginx"; fi
+
+echo "OK: nginx remote proxy (dev/staging)"

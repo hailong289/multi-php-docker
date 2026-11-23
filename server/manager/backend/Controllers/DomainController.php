@@ -7,6 +7,7 @@ namespace Manager\Controllers;
 use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\DnsConfig;
 use Manager\Models\EnvConfig;
 use Manager\Models\HostsSync;
 use Manager\Models\PhpVersionCatalog;
@@ -58,6 +59,7 @@ final class DomainController extends Controller
 
         $extras[] = $domain;
         $hosts->saveExtras($extras);
+        DnsConfig::sync();
         // Force admin write so watch mode elevates immediately (Manager cannot write hosts itself).
         if (!$hosts->coveredByWildcard($domain)) {
             $hosts->request(true, $domain, (string) ($body['hosts_write_token'] ?? ''));
@@ -112,6 +114,7 @@ final class DomainController extends Controller
 
         $servers[$key] = $validation['server'];
         $env->save($servers);
+        DnsConfig::sync();
         if (!$hosts->coveredByWildcard((string) ($validation['server']['DOMAIN_NAME'] ?? ''))) {
             $hosts->request(true, (string) ($validation['server']['DOMAIN_NAME'] ?? ''), (string) ($body['hosts_write_token'] ?? ''));
         }
@@ -162,6 +165,7 @@ final class DomainController extends Controller
             $extras,
         ));
         $hosts->saveExtras($extras);
+        DnsConfig::sync();
         if (!$hosts->coveredByWildcard($next)) {
             $hosts->request(true, $next, (string) ($request->json()['hosts_write_token'] ?? ''));
         }
@@ -191,6 +195,7 @@ final class DomainController extends Controller
         if ($domain !== '') {
             $hosts->removeExtra($domain);
         }
+        DnsConfig::sync();
 
         if (!$hosts->coveredByWildcard($domain)) {
             $hosts->request(true, '', (string) ($request->json()['hosts_write_token'] ?? ''));
@@ -223,6 +228,7 @@ final class DomainController extends Controller
             static fn (string $item): bool => $item !== $domain,
         ));
         $hosts->saveExtras($extras);
+        DnsConfig::sync();
         if (!$hosts->coveredByWildcard($domain)) {
             $hosts->request(true, '', (string) ($request->json()['hosts_write_token'] ?? ''));
         }

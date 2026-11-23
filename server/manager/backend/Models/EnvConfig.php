@@ -9,6 +9,8 @@ use Manager\Support\Config;
 
 final class EnvConfig
 {
+    private const MAX_REMOTES = 10;
+
     private readonly string $path;
 
     public function __construct(?string $path = null)
@@ -244,6 +246,52 @@ final class EnvConfig
             $logPath = '';
         }
 
+        // Proxy the whole site to a remote server (dev, staging, ...) instead of local PHP (auto-add-template.sh).
+        // REMOTES is {name: url}; names are user-defined. Omitted input keeps the previous values.
+        $remotes = [];
+        $remotesProvided = array_key_exists('remotes', $input) || array_key_exists('REMOTES', $input);
+        $rawRemotes = $remotesProvided ? ($input['remotes'] ?? $input['REMOTES'] ?? []) : ($previous['REMOTES'] ?? []);
+        if (!is_array($rawRemotes) || count($rawRemotes) > self::MAX_REMOTES) {
+            $errors['remotes'] = ['key' => 'validation.remotes_count', 'parameters' => ['max' => self::MAX_REMOTES]];
+            $rawRemotes = [];
+        }
+        foreach ($rawRemotes as $name => $url) {
+            // Accept both [{name, url}] (form) and {name: url} (env.json).
+            if (is_array($url)) {
+                $name = $url['name'] ?? '';
+                $url = $url['url'] ?? '';
+            }
+            $name = strtolower(trim((string) $name));
+            $url = strtolower(rtrim(trim((string) $url), '/'));
+            if ($name === '' && $url === '') {
+                continue;
+            }
+            if (preg_match('/^[a-z0-9][a-z0-9_-]{0,19}$/', $name) !== 1 || $name === 'local') {
+                $errors['remotes'] = ['key' => 'validation.remote_name', 'parameters' => ['name' => $name]];
+                continue;
+            }
+            if (isset($remotes[$name])) {
+                $errors['remotes'] = ['key' => 'validation.remote_duplicate', 'parameters' => ['name' => $name]];
+                continue;
+            }
+            // Scheme + host[:port] only: written verbatim into nginx, and proxy_pass with a variable keeps the request URI.
+            if (preg_match('#^https?://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?$#', $url) !== 1) {
+                $errors['remotes'] = ['key' => 'validation.remote_url', 'parameters' => ['name' => $name]];
+                continue;
+            }
+            $remotes[$name] = $url;
+        }
+        $target = array_key_exists('target', $input) || array_key_exists('TARGET', $input)
+            ? strtolower(trim((string) ($input['target'] ?? $input['TARGET'] ?? '')))
+            : (string) ($previous['TARGET'] ?? '');
+        if ($target === 'local') {
+            $target = '';
+        }
+        if ($target !== '' && !isset($remotes[$target])) {
+            // The active environment was removed or renamed: fall back to local rather than fail the save.
+            $target = '';
+        }
+
         $server = [
             'APP_NAME' => $appName,
             'DOMAIN_NAME' => $domainName,
@@ -260,6 +308,12 @@ final class EnvConfig
         }
         if ($logPath !== '' && !isset($errors['log_path'])) {
             $server['LOG_PATH'] = $logPath;
+        }
+        if ($remotes !== [] && !isset($errors['remotes'])) {
+            $server['REMOTES'] = $remotes;
+        }
+        if ($target !== '') {
+            $server['TARGET'] = $target;
         }
 
         return [

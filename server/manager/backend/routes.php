@@ -49,6 +49,7 @@ return [
     ['POST', '/dns/restart', [DnsController::class, 'restart']],
     ['POST', '/dns/test', [DnsController::class, 'test']],
     ['PUT', '/dns/records', [DnsController::class, 'records']],
+    ['PUT', '/dns/settings', [DnsController::class, 'settings']],
     ['GET', '/domains', [DomainController::class, 'index']],
     ['POST', '/domains', [DomainController::class, 'store']],
     ['POST', '/domains/restore', [DomainController::class, 'restore']],

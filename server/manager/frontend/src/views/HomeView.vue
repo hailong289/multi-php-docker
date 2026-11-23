@@ -10,6 +10,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
+import SelectButton from 'primevue/selectbutton'
 import Tag from 'primevue/tag'
 import ActionMenu from '../components/ActionMenu.vue'
 import { useManager } from '../composables/useManager'
@@ -48,6 +49,7 @@ const {
   deleteServer,
   regenerateSsl,
   toggleServerEnabled,
+  setServerTarget,
   isServerEnabled,
   reloadNginx,
   nginxStatusText,
@@ -123,6 +125,20 @@ const phpOptions = computed(() =>
     value: id,
   })),
 )
+
+// Local plus each environment that has a URL; empty when none is set up (no switch shown).
+function targetOptions(server) {
+  const names = Object.keys(server.REMOTES || {})
+  return names.length ? [{ value: 'local', label: 'Local' }, ...names.map((name) => ({ value: name, label: name }))] : []
+}
+
+function remoteUrl(server) {
+  return (server.TARGET && server.REMOTES?.[server.TARGET]) || ''
+}
+
+function addRemote() {
+  form.remotes.push({ name: '', url: '' })
+}
 
 const frameworkOptions = computed(() =>
   FRAMEWORK_PRESETS.map((item) => ({
@@ -475,6 +491,23 @@ onUnmounted(() => window.clearInterval(healthTimer))
               rel="noreferrer"
             >{{ siteUrl(item.server.DOMAIN_NAME) }}</a>
             <span v-else class="home-site-muted">{{ t('servers.no_domain') }}</span>
+            <div v-if="item.server.DOMAIN_NAME && targetOptions(item.server).length" class="home-site-target">
+              <SelectButton
+                :model-value="item.server.TARGET || 'local'"
+                :options="targetOptions(item.server)"
+                option-label="label"
+                option-value="value"
+                :allow-empty="false"
+                :disabled="busy"
+                size="small"
+                :aria-label="t('form.target')"
+                @update:model-value="(value) => setServerTarget(item.key, value)"
+              />
+              <span v-if="remoteUrl(item.server)" class="home-site-remote">
+                <i class="pi pi-arrow-right" aria-hidden="true" />
+                {{ t('servers.remote_to', { url: remoteUrl(item.server) }) }}
+              </span>
+            </div>
             <div v-if="item.server.DOMAIN_NAME && isSslEnabled(item.server)" class="home-site-ssl">
               <a :href="siteUrl(item.server.DOMAIN_NAME, true)" target="_blank" rel="noreferrer">
                 {{ siteUrl(item.server.DOMAIN_NAME, true) }}
@@ -680,6 +713,38 @@ onUnmounted(() => window.clearInterval(healthTimer))
           />
           <small v-if="fieldErrors.ssl_private_key" class="p-error">{{ fieldErrors.ssl_private_key }}</small>
         </template>
+
+        <details class="form-remote" :open="form.remotes.length > 0">
+          <summary>{{ t('form.remote_title') }}</summary>
+          <p class="form-path-hint">{{ t('form.remote_intro') }}</p>
+          <div v-for="(remote, index) in form.remotes" :key="index" class="form-remote-row">
+            <InputText
+              v-model="remote.name"
+              :placeholder="t('form.remote_name_placeholder')"
+              :aria-label="t('form.remote_name')"
+              autocomplete="off"
+              class="form-remote-name"
+            />
+            <InputText
+              v-model="remote.url"
+              placeholder="https://staging-api.example.com"
+              :aria-label="t('form.remote_url')"
+              autocomplete="off"
+              class="form-remote-url"
+            />
+            <Button
+              type="button"
+              text
+              severity="danger"
+              icon="pi pi-trash"
+              :aria-label="t('action.delete')"
+              @click="form.remotes.splice(index, 1)"
+            />
+          </div>
+          <small v-if="fieldErrors.remotes" class="p-error">{{ fieldErrors.remotes }}</small>
+          <Button type="button" text size="small" icon="pi pi-plus" :label="t('form.remote_add')" @click="addRemote" />
+          <p class="form-path-hint">{{ t('form.remote_hint') }}</p>
+        </details>
       </fieldset>
 
       <div class="form-actions">

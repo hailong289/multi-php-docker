@@ -7,9 +7,10 @@ namespace Manager\Controllers;
 use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\DnsConfig;
 use Manager\Models\DnsRecords;
 use Manager\Models\SiteHealth;
-use Manager\Support\Config;
+use Manager\Support\ComposeEnv;
 use Manager\Support\ContainerControl;
 use Manager\Support\DockerExec;
 use Manager\Support\DockerLiveState;
@@ -21,12 +22,19 @@ final class DnsController extends Controller
 
     public function show(Request $request, array $params = []): Response
     {
-        $logs = DockerExec::containerLogs(self::CONTAINER, 40);
+        // Self-heal sites.conf when env.json was edited outside Manager.
+        $customSites = DnsConfig::sync();
+        $queryLog = (new DnsConfig())->queryLog();
+        // Query lines are short and many; show more of them while the log is on.
+        $logs = DockerExec::containerLogs(self::CONTAINER, $queryLog ? 200 : 40);
 
         return Response::json([
             'state' => DockerLiveState::stateFor(self::CONTAINER) ?? 'unknown',
-            'tlds' => self::tlds(),
+            'tlds' => DnsConfig::siteTlds(),
+            'custom_sites' => $customSites,
             'records' => (new DnsRecords())->all(),
+            'query_log' => $queryLog,
+            'upstream' => (string) (ComposeEnv::get('DNS_UPSTREAM') ?? ''),
             'logs' => $logs === null ? [] : array_values(array_filter(explode("\n", trim($logs)), 'strlen')),
         ]);
     }
@@ -42,13 +50,33 @@ final class DnsController extends Controller
 
     public function records(Request $request, array $params = []): Response
     {
-        $records = (new DnsRecords())->save($request->json()['records'] ?? null, self::tlds());
-        // The Corefile reload plugin does not watch imported files.
-        if (ContainerControl::apply(self::CONTAINER, 'restart') === null) {
-            throw new HttpException('dns.restart_failed', 502);
-        }
+        // CoreDNS's reload plugin picks the rendered file up within a few seconds; no restart needed.
+        $records = (new DnsRecords())->save($request->json()['records'] ?? null, DnsConfig::siteTlds());
 
         return Response::json(['records' => $records, 'message_key' => 'dns.record.saved']);
+    }
+
+    public function settings(Request $request, array $params = []): Response
+    {
+        $body = $request->json();
+        $upstream = trim((string) ($body['upstream'] ?? ''));
+        if ($upstream !== '' && filter_var($upstream, FILTER_VALIDATE_IP) === false) {
+            throw new HttpException('dns.upstream_invalid', 422, [], ['upstream' => $upstream]);
+        }
+        (new DnsConfig())->setQueryLog((bool) ($body['query_log'] ?? false));
+
+        // Upstream is the dns container's own `dns:` option (docker-compose.yml): Docker DNS keeps
+        // answering container names and forwards only the rest. Changing it recreates the container.
+        if ($upstream !== (string) (ComposeEnv::get('DNS_UPSTREAM') ?? '')) {
+            if (!ComposeEnv::set(['DNS_UPSTREAM' => $upstream])) {
+                throw new HttpException('dns.settings_failed', 500);
+            }
+            if (!DockerExec::composeUpService('dns')) {
+                throw new HttpException('dns.recreate_failed', 502);
+            }
+        }
+
+        return Response::json(['message_key' => 'dns.settings_saved']);
     }
 
     public function test(Request $request, array $params = []): Response
@@ -66,24 +94,10 @@ final class DnsController extends Controller
         return Response::json([
             'domain' => $domain,
             'ip' => $ip,
-            'supported_tld' => in_array($tld, self::tlds(), true),
+            'supported_tld' => in_array($tld, DnsConfig::siteTlds(), true)
+                || in_array($domain, (new DnsConfig())->customSiteDomains(), true),
             // 127.0.0.1 means the name fell through to the host hosts file: PHP would call itself.
             'http' => $ip === null || str_starts_with($ip, '127.') ? null : (new SiteHealth())->probe($domain),
         ]);
-    }
-
-    /**
-     * TLDs answered with nginx's address: the zones of the Corefile's first server block.
-     *
-     * @return list<string>
-     */
-    public static function tlds(): array
-    {
-        $corefile = @file_get_contents(rtrim(Config::projectPath(), '/') . '/configs/coredns/Corefile');
-        if (!is_string($corefile) || preg_match('/^([a-z0-9. ]+)\{/m', $corefile, $m) !== 1) {
-            return [];
-        }
-
-        return array_values(array_filter(explode(' ', trim($m[1])), static fn (string $zone): bool => $zone !== '.' && $zone !== ''));
     }
 }

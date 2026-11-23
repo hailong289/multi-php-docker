@@ -5,6 +5,7 @@
 # - Regenerate khi file chưa có hoặc một trong các giá trị trên đã đổi.
 # - Xóa template của app không còn trong env / đã ENABLED=false.
 # - Thêm listen 443 khi SSL_ENABLED và đủ cert/key trong $SSL_DIR.
+# - TARGET=<tên>: proxy cả site tới REMOTES[<tên>] (dev, staging, ...) thay vì PHP local.
 
 JSON_FILE="${ENV_JSON_FILE:-/var/environment/env.json}"
 
@@ -118,6 +119,82 @@ current_ssl_app_from_template() {
     sed -n 's#^[[:space:]]*ssl_certificate[[:space:]]\{1,\}.*/\([^/]\{1,\}\)/cert\.pem;.*#\1#p' "$1" | head -n 1
 }
 
+# TARGET → REMOTES[TARGET]; empty for local or an unsafe value (env.json may be hand-edited).
+remote_url_for() {
+    url=$(jq -r --arg key "$1" '
+        .[$key] as $s
+        | (($s.REMOTES // {}) | if type == "object" then . else {} end) as $r
+        | (($s.TARGET // "") | tostring) as $t
+        | if $t == "" then "" else (($r[$t] // "") | tostring) end
+    ' "$JSON_FILE")
+    if [ -n "$url" ] && ! printf '%s' "$url" | grep -Eq '^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$'; then
+        echo "Bỏ qua URL remote không hợp lệ cho $1: $url" >&2
+        url=""
+    fi
+    printf '%s' "$url"
+}
+
+# "    # remote: https://staging.example.com" → URL (empty for a local PHP template)
+current_remote_from_template() {
+    sed -n 's/^[[:space:]]*# remote:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$1" | head -n 1
+}
+
+# One server block proxying everything to $url. Variables keep nginx starting when the host does not resolve.
+proxy_server_block() {
+    hostname="$1"
+    url="$2"
+    listen="$3"
+    ssl_lines="$4"
+    log_suffix="$5"
+    remote_host=$(printf '%s' "$url" | sed -e 's#^[a-z]*://##' -e 's#:.*##')
+    # On plain HTTP the browser drops Secure cookies, so strip the flag there.
+    cookie_flags=""
+    [ -z "$log_suffix" ] && cookie_flags="        proxy_cookie_flags ~ nosecure;"
+    cat <<EOF
+server {
+    listen ${listen};
+    server_name ${hostname};
+    # remote: ${url}
+    client_max_body_size 500M;
+${ssl_lines}
+    access_log /var/log/nginx/${hostname}${log_suffix}_access.log;
+    error_log /var/log/nginx/${hostname}${log_suffix}_error.log;
+
+    location / {
+        resolver 127.0.0.11 valid=30s ipv6=off;
+        set \$remote_upstream ${url};
+        proxy_pass \$remote_upstream;
+        proxy_set_header Host ${remote_host};
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${remote_host};
+        # Keep the browser on this local domain: redirects and cookies from the remote host point back here.
+        proxy_redirect ~^https?://${remote_host}(:[0-9]+)?(.*)\$ \$scheme://\$host\$2;
+        proxy_cookie_domain ~.+ \$host;
+${cookie_flags}
+    }
+}
+EOF
+}
+
+render_proxy() {
+    hostname="$1"
+    app_name="$2"
+    url="$3"
+    output_file="$4"
+    with_ssl="$5"
+
+    proxy_server_block "$hostname" "$url" "80" "" "" > "$output_file"
+    if [ "$with_ssl" = "1" ]; then
+        printf '\n' >> "$output_file"
+        proxy_server_block "$hostname" "$url" "443 ssl" "    ssl_certificate ${SSL_DIR}/${app_name}/cert.pem;
+    ssl_certificate_key ${SSL_DIR}/${app_name}/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;" "_ssl" >> "$output_file"
+    fi
+}
+
 render_template() {
     hostname="$1"
     source_path="$2"
@@ -179,7 +256,10 @@ for key in $keys; do
         echo "SSL bật cho $DOCKER_APP_NAME nhưng thiếu cert/key trong $SSL_DIR/$DOCKER_APP_NAME; chỉ ghi HTTP" >&2
     fi
 
+    REMOTE_URL=$(remote_url_for "$key")
+
     if [ -f "$OUTPUT_FILE" ]; then
+        CURRENT_REMOTE=$(current_remote_from_template "$OUTPUT_FILE")
         CURRENT_DOMAIN=$(current_domain_from_template "$OUTPUT_FILE")
         CURRENT_ROOT=$(current_root_from_template "$OUTPUT_FILE")
         CURRENT_PHP=$(current_php_from_template "$OUTPUT_FILE")
@@ -193,13 +273,17 @@ for key in $keys; do
         if [ "$CURRENT_DOMAIN" != "$DOCKER_HOSTNAME" ]; then
             REASONS="${REASONS} domain($CURRENT_DOMAIN→$DOCKER_HOSTNAME)"
         fi
-        if [ "$CURRENT_ROOT" != "$DOCKER_SOURCE_PATH" ]; then
+        if [ "$CURRENT_REMOTE" != "$REMOTE_URL" ]; then
+            REASONS="${REASONS} remote($CURRENT_REMOTE→$REMOTE_URL)"
+        fi
+        # A proxy template has no root/PHP to compare.
+        if [ -z "$REMOTE_URL" ] && [ "$CURRENT_ROOT" != "$DOCKER_SOURCE_PATH" ]; then
             REASONS="${REASONS} root($CURRENT_ROOT→$DOCKER_SOURCE_PATH)"
         fi
-        if [ "$CURRENT_PHP" != "$DOCKER_PHP_VERSION" ]; then
+        if [ -z "$REMOTE_URL" ] && [ "$CURRENT_PHP" != "$DOCKER_PHP_VERSION" ]; then
             REASONS="${REASONS} php($CURRENT_PHP→$DOCKER_PHP_VERSION)"
         fi
-        if ! php_upstream_is_deferred "$OUTPUT_FILE"; then
+        if [ -z "$REMOTE_URL" ] && ! php_upstream_is_deferred "$OUTPUT_FILE"; then
             REASONS="${REASONS} php_resolve"
         fi
         if [ "$CURRENT_SSL" != "$WANT_SSL" ]; then
@@ -218,7 +302,11 @@ for key in $keys; do
         echo "Tạo mới: $OUTPUT_FILE"
     fi
 
-    render_template "$DOCKER_HOSTNAME" "$DOCKER_SOURCE_PATH" "$DOCKER_PHP_VERSION" "$DOCKER_APP_NAME" "$OUTPUT_FILE" "$WANT_SSL"
+    if [ -n "$REMOTE_URL" ]; then
+        render_proxy "$DOCKER_HOSTNAME" "$DOCKER_APP_NAME" "$REMOTE_URL" "$OUTPUT_FILE" "$WANT_SSL"
+    else
+        render_template "$DOCKER_HOSTNAME" "$DOCKER_SOURCE_PATH" "$DOCKER_PHP_VERSION" "$DOCKER_APP_NAME" "$OUTPUT_FILE" "$WANT_SSL"
+    fi
     echo "Tạo config nginx thành công: $OUTPUT_FILE"
 done
 

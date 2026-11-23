@@ -69,6 +69,8 @@ const form = reactive({
   ssl_enabled: false,
   ssl_certificate: '',
   ssl_private_key: '',
+  target: 'local',
+  remotes: [],
 })
 
 const domainForm = reactive({
@@ -449,6 +451,8 @@ export function useManager() {
     form.ssl_enabled = false
     form.ssl_certificate = ''
     form.ssl_private_key = ''
+    form.target = 'local'
+    form.remotes = []
   }
 
   function openAddModal() {
@@ -474,6 +478,8 @@ export function useManager() {
     form.ssl_enabled = server.ssl_enabled === true || server.SSL_ENABLED === true
     form.ssl_certificate = ''
     form.ssl_private_key = ''
+    form.target = server.TARGET || 'local'
+    form.remotes = Object.entries(server.REMOTES || {}).map(([name, url]) => ({ name, url }))
     modalOpen.value = true
   }
 
@@ -569,6 +575,8 @@ export function useManager() {
         php_version: form.php_version,
         enabled: form.enabled,
         ssl_enabled: !!form.ssl_enabled,
+        target: form.target,
+        remotes: form.remotes,
       }
       if (!editingKey.value && extra.framework) {
         body.framework = extra.framework
@@ -663,6 +671,32 @@ export function useManager() {
       const result = await apiSend('PUT', `/api/servers/${key}`, body)
       if (result.bootstrap) applyBootstrap(result.bootstrap)
       showToast('success', t('flash.ssl_regenerated'))
+    } catch (error) {
+      showToast('failure', translateApiError(error))
+    } finally {
+      busy.value = false
+      pendingAction.value = null
+    }
+  }
+
+  // Local/Dev/Staging switch from the site list; the server keeps the URLs and reloads nginx itself.
+  async function setServerTarget(key, target) {
+    const server = data.servers[key]
+    if (!server || (server.TARGET || 'local') === target) return
+    busy.value = true
+    pendingAction.value = { kind: 'target', key }
+    try {
+      const body = {
+        app_name: server.APP_NAME || '',
+        domain_name: server.DOMAIN_NAME || '',
+        server_path: server.SERVER_PATH || '',
+        php_version: versionFromContainer(server.CONTAINER_PHP_VERSION || ''),
+        enabled: isServerEnabled(server),
+        target,
+      }
+      const result = await apiSend('PUT', `/api/servers/${key}`, body)
+      if (result.bootstrap) applyBootstrap(result.bootstrap)
+      showToast('success', t('flash.target_switched', { target: target === 'local' ? 'Local' : target }))
     } catch (error) {
       showToast('failure', translateApiError(error))
     } finally {
@@ -1681,6 +1715,7 @@ export function useManager() {
     deleteServer,
     regenerateSsl,
     toggleServerEnabled,
+    setServerTarget,
     isServerEnabled,
     deleteDomain,
     removeDomainEntry,

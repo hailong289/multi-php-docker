@@ -7,8 +7,10 @@ namespace Manager\Controllers;
 use Manager\Http\HttpException;
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\DnsConfig;
 use Manager\Models\EnvConfig;
 use Manager\Models\InfraRuntime;
+use Manager\Models\NginxReload;
 use Manager\Models\PhpVersionId;
 use Manager\Models\SslCertificates;
 use Manager\Models\StackPreset;
@@ -39,6 +41,7 @@ final class ServerController extends Controller
         $key = $env->nextKey($servers);
         $servers[$key] = $validation['server'];
         $env->save($servers);
+        DnsConfig::sync();
 
         return Response::json([
             'key' => $key,
@@ -77,6 +80,7 @@ final class ServerController extends Controller
         $key = $env->nextKey($servers);
         $servers[$key] = $server;
         $env->save($servers);
+        DnsConfig::sync();
 
         $started = [];
         $infra = new InfraRuntime();
@@ -142,8 +146,14 @@ final class ServerController extends Controller
         );
         LocalCertTrust::refresh();
 
+        $remoteChanged = self::remoteSettings($servers[$key]) !== self::remoteSettings($validation['server']);
         $servers[$key] = $validation['server'];
         $env->save($servers);
+        DnsConfig::sync();
+        if ($remoteChanged) {
+            // Switching Local/Dev/Staging is expected to apply right away, unlike other edits.
+            (new NginxReload())->request();
+        }
 
         return Response::json([
             'key' => $key,
@@ -151,6 +161,12 @@ final class ServerController extends Controller
             'message_key' => 'flash.updated',
             'bootstrap' => $this->bootstrapPayload(),
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private static function remoteSettings(array $server): array
+    {
+        return array_intersect_key($server, array_flip(['TARGET', 'REMOTES']));
     }
 
     public function destroy(Request $request, array $params = []): Response
@@ -165,6 +181,7 @@ final class ServerController extends Controller
         $appName = (string) ($servers[$key]['APP_NAME'] ?? '');
         unset($servers[$key]);
         $env->save($servers);
+        DnsConfig::sync();
         if ($appName !== '') {
             (new SslCertificates(Config::projectPath()))->deleteApp($appName);
             LocalCertTrust::refresh();

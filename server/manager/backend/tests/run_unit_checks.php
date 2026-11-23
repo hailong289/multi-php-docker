@@ -25,6 +25,7 @@ use Manager\Models\HostsSync;
 use Manager\Models\ComposeFileParser;
 use Manager\Models\PhpXdebug;
 use Manager\Models\SiteCron;
+use Manager\Models\DnsConfig;
 use Manager\Models\DnsRecords;
 use Manager\Models\SiteHealth;
 use Manager\Models\SslTrust;
@@ -850,6 +851,42 @@ $vKeep = $envSsl->validate([
 ], $existing, 'SERVER_NAME1');
 assert_true($vKeep['server']['SSL_ENABLED'] === true, 'omitted ssl_enabled preserves previous');
 assert_true(($vKeep['server']['SSL_MODE'] ?? '') === 'generated', 'omitted mode preserves generated');
+
+// Remote environments (user-defined names): URL shape, names, target, omitted fields keep previous values.
+$remoteBase = [
+    'app_name' => 'app-one',
+    'domain_name' => 'app-one.test',
+    'server_path' => '/var/www/source/app-one/public',
+    'php_version' => 'php-8.5',
+];
+$vRemote = $envSsl->validate($remoteBase + [
+    'remotes' => [
+        ['name' => 'Staging', 'url' => 'HTTPS://Staging.Example.com/'],
+        ['name' => 'uat-2', 'url' => 'http://uat.example.com:8080'],
+        ['name' => '', 'url' => ''],
+    ],
+    'target' => 'staging',
+], []);
+assert_true($vRemote['errors'] === [], 'remotes valid');
+assert_true(($vRemote['server']['REMOTES'] ?? []) === ['staging' => 'https://staging.example.com', 'uat-2' => 'http://uat.example.com:8080'], 'remotes normalized, blank row dropped');
+assert_true(($vRemote['server']['TARGET'] ?? '') === 'staging', 'remote target saved');
+foreach (['https://x.com/api', 'ftp://x.com', 'https://x.com; evil', 'https://x.com:80{'] as $badUrl) {
+    $vBad = $envSsl->validate($remoteBase + ['remotes' => [['name' => 'dev', 'url' => $badUrl]]], []);
+    assert_true(isset($vBad['errors']['remotes']), 'remote url rejected: ' . $badUrl);
+}
+foreach (['local', 'a b', 'x;y', str_repeat('a', 21)] as $badName) {
+    $vBad = $envSsl->validate($remoteBase + ['remotes' => [['name' => $badName, 'url' => 'https://x.com']]], []);
+    assert_true(isset($vBad['errors']['remotes']), 'remote name rejected: ' . $badName);
+}
+$vDup = $envSsl->validate($remoteBase + ['remotes' => [['name' => 'dev', 'url' => 'https://a.com'], ['name' => 'DEV', 'url' => 'https://b.com']]], []);
+assert_true(isset($vDup['errors']['remotes']), 'duplicate remote name rejected');
+$vGone = $envSsl->validate($remoteBase + ['remotes' => [], 'target' => 'staging'], []);
+assert_true($vGone['errors'] === [] && !isset($vGone['server']['TARGET']), 'target of a removed remote falls back to local');
+$vKeepRemote = $envSsl->validate($remoteBase, ['SERVER_NAME1' => $vRemote['server']], 'SERVER_NAME1');
+assert_true(($vKeepRemote['server']['TARGET'] ?? '') === 'staging'
+    && ($vKeepRemote['server']['REMOTES']['uat-2'] ?? '') === 'http://uat.example.com:8080', 'omitted remote fields preserved');
+$vSwitch = $envSsl->validate($remoteBase + ['target' => 'uat-2'], ['SERVER_NAME1' => $vRemote['server']], 'SERVER_NAME1');
+assert_true(($vSwitch['server']['TARGET'] ?? '') === 'uat-2', 'switch target keeps stored remotes');
 
 $proj = sys_get_temp_dir() . '/mgr-ssl-ctrl-' . bin2hex(random_bytes(4));
 mkdir($proj, 0775, true);
@@ -1854,5 +1891,31 @@ assert_true($wildHosts->wildcardTlds() === ['test'], 'wildcard marker drops empt
 assert_true($wildHosts->coveredByWildcard('A.Test') && !$wildHosts->coveredByWildcard('a.local') && !$wildHosts->coveredByWildcard('test'), 'wildcard covers by last label only');
 $wildStates = array_column($wildHosts->listedDomains(['SERVER_NAME1' => ['DOMAIN_NAME' => 'a.test'], 'SERVER_NAME2' => ['DOMAIN_NAME' => 'b.local']], null), 'hosts_state', 'domain_name');
 assert_true($wildStates === ['a.test' => 'wildcard', 'b.local' => 'unknown'], 'wildcard domains listed as wildcard');
+
+$wildRecs = DnsRecords::validate([
+    ['name' => '*.partner.com', 'target' => 'mock_container'],
+    ['name' => '*.mock.org', 'target' => '10.9.8.7'],
+    ['name' => '*.v6.org', 'target' => 'fd00::7'],
+], ['test']);
+$wildConf = DnsRecords::render($wildRecs);
+assert_true(str_contains($wildConf, 'rewrite name regex ^(.+)\.partner\.com\.$ mock_container. answer auto'), 'dns wildcard container renders regex rewrite');
+assert_true(str_contains($wildConf, "template IN A mock.org {\n    match \"^(.+)\\.mock\\.org\\.$\"\n    answer \"{{ .Name }} 60 IN A 10.9.8.7\"\n    fallthrough\n}"), 'dns wildcard ipv4 renders A template');
+assert_true(str_contains($wildConf, "template IN AAAA mock.org {\n    match \"^(.+)\\.mock\\.org\\.$\"\n    rcode NOERROR"), 'dns wildcard ipv4 blanks AAAA');
+assert_true(str_contains($wildConf, 'IN AAAA fd00::7') && str_contains($wildConf, "template IN A v6.org {\n    match \"^(.+)\\.v6\\.org\\.$\"\n    rcode NOERROR"), 'dns wildcard ipv6 answers AAAA, blanks A');
+assert_true($dnsReject([['name' => '*.com', 'target' => 'x']]) === 'dns.record.invalid_name', 'dns rejects wildcard over a whole tld');
+assert_true($dnsReject([['name' => '*.site.test', 'target' => 'x']]) === 'dns.record.site_tld', 'dns rejects wildcard under site tld');
+assert_true($dnsReject([['name' => 'a.*.com', 'target' => 'x']]) === 'dns.record.invalid_name', 'dns rejects mid-name wildcard');
+
+$dnsCfgDir = sys_get_temp_dir() . '/dns-config-' . bin2hex(random_bytes(4));
+$dnsCfg = new DnsConfig($dnsCfgDir);
+$dnsCustom = $dnsCfg->syncSites(['a.test', 'shop.posapp', 'foo.com', 'bad domain', 'nodot'], ['test', 'local']);
+assert_true($dnsCustom === ['shop.posapp', 'foo.com'], 'dns sites: only valid custom-tld domains');
+assert_true($dnsCfg->customSiteDomains() === ['shop.posapp', 'foo.com'], 'dns sites: read back');
+assert_true(str_contains((string) file_get_contents($dnsCfgDir . '/coredns/sites.conf'), "rewrite name exact foo.com. nginx_container. answer auto\n"), 'dns sites: exact rule, not whole tld');
+assert_true(!$dnsCfg->queryLog(), 'dns query log off by default');
+$dnsCfg->setQueryLog(true);
+assert_true($dnsCfg->queryLog(), 'dns query log on');
+$dnsCfg->setQueryLog(false);
+assert_true(!$dnsCfg->queryLog(), 'dns query log off again');
 
 echo "All checks passed\n";

@@ -1,21 +1,27 @@
 # Inside containers, site domains would otherwise resolve to 127.0.0.1 via the host hosts file.
 # Answer every name under a local-only TLD with nginx's address; everything else goes to Docker DNS.
 # Public TLDs (.dev, .app, ...) are left alone on purpose; .localhost is skipped because curl maps it to loopback itself.
-# reload: edits to this file apply within ~30s without restarting the container.
+# reload: edits to this file and to the imported runtime files apply within a few seconds.
 test local internal lan {
+    import /etc/coredns-records/global*.conf
     rewrite name regex (.+)\.(test|local|internal|lan)\.$ nginx_container. answer auto
     forward . 127.0.0.11
     errors
-    reload
+    reload 3s 1s
 }
 . {
-    # Custom records from Manager (runtime/coredns/records.conf); no file yet is fine.
-    import /etc/coredns-records/*.conf
+    # Rendered by Manager into runtime/coredns/ (a missing file is fine): query log on/off,
+    # custom records, and exact rules for site domains whose TLD is not listed above.
+    import /etc/coredns-records/global*.conf
+    import /etc/coredns-records/records*.conf
+    import /etc/coredns-records/sites*.conf
+    # Upstream for external names is the container's own `dns:` (DNS_UPSTREAM in .env).
     forward . 127.0.0.11
-    # Only cache here: the zone above must see a recreated nginx's new IP right away.
+    # Not in the zone above, so .test sites see a recreated nginx's new IP right away
+    # (custom-TLD sites from sites.conf may lag up to 30s).
     cache 30
     errors
-    reload
+    reload 3s 1s
 }
 
 # Host machine, opt-in via scripts/hosts/wildcard_dns.sh (macOS /etc/resolver, Linux systemd-resolved):
@@ -29,5 +35,6 @@ test:10053 internal:10053 lan:10053 {
         rcode NOERROR
     }
     errors
-    reload
+    # Same interval in every block: reload is one Corefile-wide setting.
+    reload 3s 1s
 }
