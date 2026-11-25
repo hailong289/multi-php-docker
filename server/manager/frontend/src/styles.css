@@ -4647,8 +4647,18 @@ select:focus:not([class*='p-']) {
   margin-top: 6px;
 }
 
+/* Compact: the switch sits under the domain link, so keep it at text height. */
 .home-site-target .p-selectbutton .p-togglebutton {
+  padding: 2px;
+  font-size: 12px;
+}
+
+.home-site-target .p-selectbutton .p-togglebutton-content {
   padding: 2px 10px;
+}
+
+.home-site-target .p-button-link {
+  padding: 0;
   font-size: 12px;
 }
 
@@ -4659,26 +4669,128 @@ select:focus:not([class*='p-']) {
   font-weight: 600;
 }
 
-.form-remote {
-  margin-top: 16px;
+.env-box {
+  --env-accent: var(--primary);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  overflow: hidden;
 }
 
-.form-remote summary {
-  cursor: pointer;
+.env-box.is-remote {
+  --env-accent: var(--warning-line);
+}
+
+.env-route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--env-accent);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.env-route .pi {
+  color: var(--env-accent);
+  font-size: 12px;
+}
+
+.env-route-domain {
+  font-weight: 700;
+}
+
+.env-route-dest {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.env-box.is-remote .env-route-dest {
+  color: var(--warning-text);
   font-weight: 600;
 }
 
-.form-remote-row {
+/* Rows are <label>/<div>: undo the global label block styles. */
+.env-row {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin: 0;
+  padding: 8px 10px 8px 14px;
+  border-left: 3px solid transparent;
+  font-size: 14px;
+  font-weight: 400;
 }
 
-.form-remote-name {
-  flex: 0 0 140px;
+.env-row + .env-row {
+  border-top: 1px solid var(--line);
 }
 
-.form-remote-url {
+.env-row.is-active {
+  border-left-color: var(--env-accent);
+  background: var(--panel);
+}
+
+.env-row input[type='radio'] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--env-accent);
+}
+
+.env-row-name {
+  flex: 0 0 120px;
+  font-weight: 600;
+}
+
+.env-row-desc {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.env-row-name-input {
+  flex: 0 0 120px;
+  min-width: 0;
+}
+
+.env-row-url {
   flex: 1;
   min-width: 0;
+}
+
+.env-box .env-add.p-button {
+  justify-content: flex-start;
+  width: calc(100% - 20px);
+  margin: 6px 10px 10px;
+  border: 1px dashed var(--input-line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.env-box .env-add.p-button:hover {
+  border-color: var(--primary-line);
+  color: var(--text);
+}
+
+@media (max-width: 520px) {
+  .env-row:not(label) {
+    flex-wrap: wrap;
+  }
+
+  .env-row-url {
+    flex-basis: 100%;
+    order: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .env-route {
+    transition: none;
+  }
 }

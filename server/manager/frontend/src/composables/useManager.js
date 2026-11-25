@@ -69,8 +69,6 @@ const form = reactive({
   ssl_enabled: false,
   ssl_certificate: '',
   ssl_private_key: '',
-  target: 'local',
-  remotes: [],
 })
 
 const domainForm = reactive({
@@ -451,8 +449,6 @@ export function useManager() {
     form.ssl_enabled = false
     form.ssl_certificate = ''
     form.ssl_private_key = ''
-    form.target = 'local'
-    form.remotes = []
   }
 
   function openAddModal() {
@@ -478,8 +474,6 @@ export function useManager() {
     form.ssl_enabled = server.ssl_enabled === true || server.SSL_ENABLED === true
     form.ssl_certificate = ''
     form.ssl_private_key = ''
-    form.target = server.TARGET || 'local'
-    form.remotes = Object.entries(server.REMOTES || {}).map(([name, url]) => ({ name, url }))
     modalOpen.value = true
   }
 
@@ -575,8 +569,6 @@ export function useManager() {
         php_version: form.php_version,
         enabled: form.enabled,
         ssl_enabled: !!form.ssl_enabled,
-        target: form.target,
-        remotes: form.remotes,
       }
       if (!editingKey.value && extra.framework) {
         body.framework = extra.framework
@@ -679,12 +671,14 @@ export function useManager() {
     }
   }
 
-  // Local/Dev/Staging switch from the site list; the server keeps the URLs and reloads nginx itself.
-  async function setServerTarget(key, target) {
+  // Environment switch (site list) and environment dialog; omitted remotes are kept by the server,
+  // which also reloads nginx itself. Returns true on success.
+  async function setServerTarget(key, target, remotes) {
     const server = data.servers[key]
-    if (!server || (server.TARGET || 'local') === target) return
+    if (!server || (!remotes && (server.TARGET || 'local') === target)) return true
     busy.value = true
     pendingAction.value = { kind: 'target', key }
+    fieldErrors.value = {}
     try {
       const body = {
         app_name: server.APP_NAME || '',
@@ -694,11 +688,18 @@ export function useManager() {
         enabled: isServerEnabled(server),
         target,
       }
+      if (remotes) body.remotes = remotes
       const result = await apiSend('PUT', `/api/servers/${key}`, body)
       if (result.bootstrap) applyBootstrap(result.bootstrap)
-      showToast('success', t('flash.target_switched', { target: target === 'local' ? 'Local' : target }))
+      showToast('success', remotes ? t('flash.env_saved') : t('flash.target_switched', { target: target === 'local' ? 'Local' : target }))
+      return true
     } catch (error) {
+      const fields = error.payload?.error?.fields || {}
+      fieldErrors.value = Object.fromEntries(
+        Object.entries(fields).map(([k, v]) => [k, trKey(v.key, v.parameters || {})]),
+      )
       showToast('failure', translateApiError(error))
+      return false
     } finally {
       busy.value = false
       pendingAction.value = null

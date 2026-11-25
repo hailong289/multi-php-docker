@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
@@ -136,8 +136,45 @@ function remoteUrl(server) {
   return (server.TARGET && server.REMOTES?.[server.TARGET]) || ''
 }
 
+// Environment dialog: its own copy of the site's remotes, saved with setServerTarget.
+const envKey = ref(null)
+const envForm = reactive({ target: 'local', remotes: [] })
+const envServer = computed(() => (envKey.value ? data.servers[envKey.value] : null))
+
+function openEnv(key) {
+  const server = data.servers[key]
+  if (!server) return
+  fieldErrors.value = {}
+  envForm.target = server.TARGET || 'local'
+  envForm.remotes = Object.entries(server.REMOTES || {}).map(([name, url]) => ({ name, url }))
+  if (!envForm.remotes.length) envForm.remotes.push({ name: '', url: '' })
+  envKey.value = key
+}
+
+async function saveEnv() {
+  if (await setServerTarget(envKey.value, envForm.target, envForm.remotes)) envKey.value = null
+}
+
 function addRemote() {
-  form.remotes.push({ name: '', url: '' })
+  envForm.remotes.push({ name: '', url: '' })
+}
+
+// Same normalization as EnvConfig.
+const remoteName = (name) => name.trim().toLowerCase()
+
+const activeRemote = computed(() =>
+  envForm.target === 'local' ? null : envForm.remotes.find((r) => remoteName(r.name) === envForm.target) || null,
+)
+
+// Renaming or removing the selected environment keeps the selection on that row (or falls back to Local).
+function renameRemote(remote, name) {
+  if (remote === activeRemote.value) envForm.target = remoteName(name) || 'local'
+  remote.name = name
+}
+
+function removeRemote(index) {
+  if (envForm.remotes[index] === activeRemote.value) envForm.target = 'local'
+  envForm.remotes.splice(index, 1)
 }
 
 const frameworkOptions = computed(() =>
@@ -346,6 +383,11 @@ function serverMenuItems(item) {
       run: () => toggleServerEnabled(item.key),
     },
     {
+      label: t('env.menu'),
+      disabled: busy.value || !item.server.DOMAIN_NAME,
+      run: () => openEnv(item.key),
+    },
+    {
       label: t('action.delete'),
       danger: true,
       loading: isPending('delete', { key: item.key }),
@@ -503,6 +545,7 @@ onUnmounted(() => window.clearInterval(healthTimer))
                 :aria-label="t('form.target')"
                 @update:model-value="(value) => setServerTarget(item.key, value)"
               />
+              <Button type="button" link size="small" :label="t('env.edit')" :disabled="busy" @click="openEnv(item.key)" />
               <span v-if="remoteUrl(item.server)" class="home-site-remote">
                 <i class="pi pi-arrow-right" aria-hidden="true" />
                 {{ t('servers.remote_to', { url: remoteUrl(item.server) }) }}
@@ -714,37 +757,6 @@ onUnmounted(() => window.clearInterval(healthTimer))
           <small v-if="fieldErrors.ssl_private_key" class="p-error">{{ fieldErrors.ssl_private_key }}</small>
         </template>
 
-        <details class="form-remote" :open="form.remotes.length > 0">
-          <summary>{{ t('form.remote_title') }}</summary>
-          <p class="form-path-hint">{{ t('form.remote_intro') }}</p>
-          <div v-for="(remote, index) in form.remotes" :key="index" class="form-remote-row">
-            <InputText
-              v-model="remote.name"
-              :placeholder="t('form.remote_name_placeholder')"
-              :aria-label="t('form.remote_name')"
-              autocomplete="off"
-              class="form-remote-name"
-            />
-            <InputText
-              v-model="remote.url"
-              placeholder="https://staging-api.example.com"
-              :aria-label="t('form.remote_url')"
-              autocomplete="off"
-              class="form-remote-url"
-            />
-            <Button
-              type="button"
-              text
-              severity="danger"
-              icon="pi pi-trash"
-              :aria-label="t('action.delete')"
-              @click="form.remotes.splice(index, 1)"
-            />
-          </div>
-          <small v-if="fieldErrors.remotes" class="p-error">{{ fieldErrors.remotes }}</small>
-          <Button type="button" text size="small" icon="pi pi-plus" :label="t('form.remote_add')" @click="addRemote" />
-          <p class="form-path-hint">{{ t('form.remote_hint') }}</p>
-        </details>
       </fieldset>
 
       <div class="form-actions">
@@ -768,6 +780,84 @@ onUnmounted(() => window.clearInterval(healthTimer))
           :disabled="busy"
           @click="closeModal"
         />
+      </div>
+    </form>
+  </Dialog>
+
+  <Dialog
+    :visible="envKey !== null"
+    modal
+    :header="t('env.title', { name: envServer?.APP_NAME || '' })"
+    :closable="!busy"
+    :dismissable-mask="!busy"
+    :style="{ width: 'min(640px, 100%)' }"
+    @update:visible="(v) => { if (!v) envKey = null }"
+  >
+    <form @submit.prevent="saveEnv">
+      <fieldset :disabled="busy" class="modal-fieldset">
+        <div class="env-box" :class="{ 'is-remote': activeRemote }">
+          <p class="env-route" aria-live="polite">
+            <span class="env-route-domain">{{ envServer?.DOMAIN_NAME || t('form.remote_route_domain') }}</span>
+            <i class="pi pi-arrow-right" aria-hidden="true" />
+            <span class="env-route-dest">{{ activeRemote ? activeRemote.url || '…' : t('form.remote_route_local') }}</span>
+          </p>
+          <div role="radiogroup" :aria-label="t('form.target')">
+            <label class="env-row" :class="{ 'is-active': !activeRemote }">
+              <input v-model="envForm.target" type="radio" name="mgr-target" value="local" />
+              <span class="env-row-name">Local</span>
+              <span class="env-row-desc">{{ t('form.remote_local_desc') }}</span>
+            </label>
+            <div
+              v-for="(remote, index) in envForm.remotes"
+              :key="index"
+              class="env-row"
+              :class="{ 'is-active': remote === activeRemote }"
+            >
+              <input
+                type="radio"
+                name="mgr-target"
+                :checked="remote === activeRemote"
+                :disabled="!remoteName(remote.name)"
+                :aria-label="remoteName(remote.name) || t('form.remote_name')"
+                @change="envForm.target = remoteName(remote.name)"
+              />
+              <InputText
+                :model-value="remote.name"
+                :placeholder="t('form.remote_name_placeholder')"
+                :aria-label="t('form.remote_name')"
+                autocomplete="off"
+                size="small"
+                class="env-row-name-input"
+                @update:model-value="(value) => renameRemote(remote, value)"
+              />
+              <InputText
+                v-model="remote.url"
+                placeholder="https://staging.example.com"
+                :aria-label="t('form.remote_url')"
+                autocomplete="off"
+                size="small"
+                class="env-row-url"
+              />
+              <Button
+                type="button"
+                text
+                rounded
+                size="small"
+                severity="danger"
+                icon="pi pi-trash"
+                :aria-label="t('action.delete')"
+                @click="removeRemote(index)"
+              />
+            </div>
+            <Button type="button" text icon="pi pi-plus" :label="t('form.remote_add')" class="env-add" @click="addRemote" />
+          </div>
+        </div>
+        <small v-if="fieldErrors.remotes" class="p-error">{{ fieldErrors.remotes }}</small>
+        <p class="form-path-hint">{{ t('form.remote_hint') }}</p>
+      </fieldset>
+      <div class="form-actions">
+        <Button type="submit" :label="isPending('target') ? t('action.working') : t('form.save')" :loading="isPending('target')" />
+        <Button type="button" severity="secondary" outlined :label="t('action.cancel')" :disabled="busy" @click="envKey = null" />
       </div>
     </form>
   </Dialog>
