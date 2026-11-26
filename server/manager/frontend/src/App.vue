@@ -20,6 +20,7 @@ import { isSubPageRoute, resolveTab, routeTabs, splitTabs, tabLabel, tabWrapper,
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const brandIcon = `${import.meta.env.BASE_URL}favicon.svg`
 const {
   fatalError,
   loadForRoute,
@@ -195,9 +196,12 @@ watch(() => route.fullPath, updateTitle)
 <template>
   <main class="shell">
     <header v-if="showChrome" class="app-header" data-tour="app-header">
-      <div>
-        <h1>{{ t('header.title') }}</h1>
-        <p>{{ t('header.subtitle') }}</p>
+      <div class="app-brand">
+        <img :src="brandIcon" alt="" width="52" height="52" />
+        <div>
+          <h1>{{ t('header.title') }}</h1>
+          <p>{{ t('header.subtitle') }}</p>
+        </div>
       </div>
       <div class="header-actions">
         <Tag :value="accessBadge" severity="info" rounded />

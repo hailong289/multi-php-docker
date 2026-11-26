@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8892bf"/>
+      <stop offset="1" stop-color="#4f5b93"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#bg)"/>
+  <g stroke-linejoin="round" stroke-width="28">
+    <path d="M512 530 L800 676 L512 822 L224 676 Z" fill="#c5cbe8" stroke="#c5cbe8"/>
+    <path d="M512 406 L800 552 L512 698 L224 552 Z" fill="#e2e5f5" stroke="#4f5b93"/>
+    <path d="M512 262 L800 408 L512 554 L224 408 Z" fill="#ffffff" stroke="#4f5b93"/>
+  </g>
+  <text x="512" y="408" transform="translate(0 408) scale(1 0.62) translate(0 -408)" dominant-baseline="central" text-anchor="middle"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="172" font-weight="800" font-style="italic"
+        letter-spacing="-4" fill="#4f5b93">php</text>
+</svg>

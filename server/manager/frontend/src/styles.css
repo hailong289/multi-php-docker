@@ -112,6 +112,18 @@ header {
   margin-bottom: 24px;
 }
 
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.app-brand img {
+  flex: none;
+  width: clamp(40px, 5vw, 52px);
+  height: auto;
+}
+
 h1 {
   font-size: clamp(28px, 4vw, 44px);
   margin: 0 0 6px;

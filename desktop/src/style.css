@@ -1,0 +1,252 @@
+/* Same palette as the Manager (server/manager/frontend/src/styles.css). */
+:root {
+  color-scheme: dark;
+  --bg: #09111f;
+  --panel: #111c2e;
+  --line: #263752;
+  --input-line: #30425f;
+  --text: #e8eef8;
+  --muted: #9dafc8;
+  --primary: #1677d2;
+  --primary-line: #268bea;
+  --button-bg: #172842;
+  --button-line: #365273;
+  --ok: #3fb68b;
+  --bad: #e5626f;
+  --wait: #e0a43c;
+  --log-bg: #0b1220;
+  --log-fg: #e2e8f0;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f4f7fb;
+    --panel: #ffffff;
+    --line: #d5dfec;
+    --input-line: #b7c5d8;
+    --text: #172033;
+    --muted: #5d6e85;
+    --primary: #0969da;
+    --primary-line: #075fca;
+    --button-bg: #f2f6fc;
+    --button-line: #b7c5d8;
+    --ok: #1f8a5f;
+    --bad: #c23446;
+    --wait: #b7791f;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.launcher {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 56px 24px 32px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.lead,
+.card p,
+.dir {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+header {
+  margin-bottom: 28px;
+}
+
+code {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 18px;
+}
+
+#pick button {
+  margin-top: 14px;
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.checks li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 18px;
+}
+
+.checks li + li {
+  border-top: 1px solid var(--line);
+}
+
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--input-line);
+}
+
+.dot.ok {
+  background: var(--ok);
+}
+
+.dot.bad {
+  background: var(--bad);
+}
+
+.dot.wait {
+  background: var(--wait);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.name {
+  flex: 0 0 80px;
+  font-weight: 600;
+}
+
+.state {
+  flex: 1;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button,
+.button {
+  appearance: none;
+  border: 1px solid var(--button-line);
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--text);
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--primary-line);
+}
+
+button:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--primary-line);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  border-color: var(--primary-line);
+  background: var(--primary);
+  color: #fff;
+  padding: 9px 20px;
+}
+
+button.link {
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  color: var(--primary-line);
+  font-weight: 500;
+}
+
+.log-wrap {
+  margin-top: 16px;
+}
+
+.log {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--log-bg);
+  color: var(--log-fg);
+  padding: 12px 14px;
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-result {
+  min-height: 1.5em;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.log-result.ok {
+  color: var(--ok);
+}
+
+.error {
+  color: var(--bad);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.dir {
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot.wait {
+    animation: none;
+  }
+}

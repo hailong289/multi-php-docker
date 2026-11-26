@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi PHP</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="launcher">
+      <header>
+        <h1>Multi PHP</h1>
+        <p class="lead">Môi trường PHP chạy bằng Docker. Bật những gì cần rồi mở Manager.</p>
+      </header>
+
+      <section id="pick" class="card" hidden>
+        <h2>Chọn thư mục dự án</h2>
+        <p>Thư mục chứa <code>docker-compose.yml</code> của Multi PHP, ví dụ <code>~/web</code>.</p>
+        <p id="pick-error" class="error" hidden></p>
+        <button id="pick-btn" class="primary" type="button">Chọn thư mục…</button>
+      </section>
+
+      <section id="main" hidden>
+        <ul class="card checks">
+          <li>
+            <span id="docker-dot" class="dot"></span>
+            <span class="name">Docker</span>
+            <span id="docker-text" class="state"></span>
+            <span class="actions">
+              <a id="docker-download" class="button" href="https://www.docker.com/products/docker-desktop/" hidden>Tải Docker Desktop</a>
+              <button id="docker-open" type="button" hidden>Khởi động Docker</button>
+            </span>
+          </li>
+          <li>
+            <span id="manager-dot" class="dot"></span>
+            <span class="name">Manager</span>
+            <span id="manager-text" class="state"></span>
+            <span class="actions">
+              <button id="up-btn" type="button" hidden>Khởi động</button>
+              <button id="build-btn" type="button" hidden title="docker compose build, rồi khởi động">Build lại</button>
+            </span>
+          </li>
+        </ul>
+
+        <div id="log-wrap" class="log-wrap" hidden>
+          <pre id="log" class="log" aria-live="polite"></pre>
+          <p id="log-result" class="log-result"></p>
+        </div>
+
+        <div class="footer">
+          <p class="dir">
+            Thư mục: <code id="dir"></code>
+            <button id="change-dir" class="link" type="button">Đổi…</button>
+          </p>
+          <button id="open-btn" class="primary" type="button" disabled>Mở Manager</button>
+        </div>
+      </section>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>

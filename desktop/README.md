@@ -1,6 +1,6 @@
 # Multi PHP Desktop (Tauri)
 
-> Trạng thái: **thiết kế**, chưa có code. Tài liệu này chốt phạm vi và cách làm trước khi bắt đầu.
+> Trạng thái: **bản đầu (macOS)** đã build được. Windows dùng cùng code, chưa build thử.
 
 App desktop mở Server Manager trong cửa sổ riêng, có icon trên Dock/taskbar và thanh menu. App **không tự chạy Docker**: mọi thao tác (bật Docker, khởi động, dừng stack) đều do người dùng bấm nút.
 
@@ -47,7 +47,7 @@ Manager vẫn là backend PHP trong `manager_container` (`http://127.0.0.1:8080/
 ┌──────────────────────────────────────────────┐
 │ Multi PHP                                     │
 │                                               │
-│ ● Docker        Đang tắt     [Mở Docker]      │
+│ ● Docker   Đang tắt   [Khởi động Docker]      │
 │ ○ Manager       Chưa chạy    [Khởi động]      │
 │                                               │
 │ ┌──────────────────────────────────────────┐ │
@@ -61,7 +61,7 @@ Manager vẫn là backend PHP trong `manager_container` (`http://127.0.0.1:8080/
 
 | Nút | Hiện khi | Lệnh |
 | --- | --- | --- |
-| **Mở Docker** | Docker chưa chạy | macOS: `open -a Docker`; Windows: chạy `Docker Desktop.exe` |
+| **Khởi động Docker** | Docker chưa chạy | Chạy ngầm, không bật cửa sổ. macOS: dò app chứa lệnh `docker` theo symlink; OrbStack → `orbctl start`, Docker Desktop → `docker desktop start --detach`; lệnh đó lỗi hoặc engine khác → `open -g -j <app>` (mở ẩn). Windows: chạy `Docker Desktop.exe` |
 | **Khởi động** | Docker chạy, Manager chưa chạy | `docker compose up -d` (đúng bước trong README: Manager + PHP Controller + `env-init`) |
 | **Build lại** | Lần đầu, hoặc `up` báo thiếu image | `docker compose build` rồi `docker compose up -d` |
 | **Thử lại** | Lệnh lỗi | Kiểm tra lại trạng thái |
@@ -102,7 +102,8 @@ Multi PHP
 ```
 desktop/
 ├─ README.md                 tài liệu này
-├─ package.json              script: tauri dev / tauri build
+├─ package.json              @tauri-apps/cli
+├─ app-icon.svg              nguồn icon (`npx tauri icon app-icon.svg`)
 ├─ src/                      màn hình khởi động (HTML/JS tĩnh, không framework)
 │  ├─ index.html
 │  ├─ main.js
@@ -112,21 +113,22 @@ desktop/
    ├─ capabilities/          quyền IPC theo cửa sổ
    ├─ icons/
    └─ src/
-      ├─ main.rs
+      ├─ main.rs           cửa sổ, lệnh IPC, điều hướng
       ├─ docker.rs           kiểm tra Docker, chạy lệnh compose
       └─ tray.rs             menu thanh menu / khay
 ```
 
-- **Tauri v2.** Plugin: `dialog` (chọn thư mục, hỏi xác nhận), `store` (lưu thư mục dự án), `opener` (mở link ngoài và `multi-php-hosts:`).
+- **Tauri v2.** Plugin: `dialog` (chọn thư mục, hỏi xác nhận), `opener` (mở link ngoài và `multi-php-hosts:`). Thư mục dự án lưu ở `config.json` trong thư mục cấu hình của app (macOS: `~/Library/Application Support/vn.posapp.multiphp/`).
 - **Màn hình khởi động** là trang tĩnh đóng gói trong app, gọi Rust qua `invoke`. Không dùng Vue/PrimeVue để app nhẹ và không phụ thuộc frontend Manager.
 - **Lệnh Rust** (danh sách cố định):
 
 | Lệnh | Việc |
 | --- | --- |
-| `get_project_dir` / `set_project_dir(path)` | Đọc/ghi thư mục dự án (kiểm tra có `docker-compose.yml`) |
-| `status()` | `{ docker: bool, manager: bool }` (`docker info` + kết nối HTTP tới `127.0.0.1:8080`) |
-| `open_docker()` | Mở Docker Desktop |
-| `compose(action)` | `action` ∈ `up` \| `build` \| `stop`; chạy trong thư mục dự án, đẩy từng dòng output qua event `compose-log`, trả về mã thoát |
+| `pick_project_dir()` | Hộp thoại chọn thư mục, kiểm tra có `docker-compose.yml` của Multi PHP rồi lưu |
+| `status()` | Thư mục dự án, Docker có cài / đang chạy, cổng 8080 là `closed` \| `manager` \| `other` (gọi `GET /api/session`) |
+| `open_docker()` | Khởi động Docker engine chạy ngầm |
+| `compose(action)` | `action` ∈ `up` \| `build` \| `stop`; chạy trong thư mục dự án, đẩy từng dòng output qua event `compose-log`, trả về mã thoát. Mỗi lúc chỉ một lệnh |
+| `open_manager()` | Chuyển cửa sổ sang Manager |
 
 ## An toàn
 
@@ -152,19 +154,42 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 cd desktop
 npm install
-npm run tauri dev      # chạy thử
-npm run tauri build    # ra .app và .dmg trong src-tauri/target/release/bundle/
+npx tauri dev                          # chạy thử
+npx tauri build --bundles app,dmg      # ra .app và .dmg trong src-tauri/target/release/bundle/
 ```
 
 Windows: build trên máy Windows (cần Rust + Visual Studio Build Tools + WebView2), ra `.msi`/`.exe`.
 
+## CI/CD và phát hành
+
+Workflow: [`.github/workflows/build-desktop.yml`](../.github/workflows/build-desktop.yml).
+
+| Khi nào | Làm gì |
+| --- | --- |
+| Push thay đổi trong `desktop/` lên `master`/`main`, hoặc chạy tay (Actions → Build Desktop App → Run workflow) | Chạy test Rust, build macOS (Apple Silicon + Intel) và Windows; file để ở mục **Artifacts** của lần chạy (giữ 14 ngày) |
+| Push tag `desktop-vX.Y.Z` | Build như trên rồi tạo **GitHub Release** kèm file tải: `.dmg` (aarch64, x64), `-setup.exe`, `.msi` |
+
+Phát hành bản mới:
+
+1. Tăng `version` trong `src-tauri/tauri.conf.json` (và `package.json`, `src-tauri/Cargo.toml` cho khớp), commit.
+2. Tạo và đẩy tag đúng phiên bản; tag lệch phiên bản thì workflow dừng:
+
+   ```bash
+   git tag desktop-v0.1.0
+   git push origin desktop-v0.1.0
+   ```
+
+3. File tải ở trang **Releases** của repo.
+
+App chưa ký số Apple/Windows (macOS chỉ ký ad-hoc), nên lần đầu mở sẽ bị chặn. Cách mở có trong mô tả mỗi Release. Ký số và notarize thật cần Apple Developer ID / chứng chỉ Windows: thêm secret rồi cấu hình `tauri-action` sau.
+
 ## Kiểm tra trước khi coi là xong
 
-- [ ] Docker tắt → nút **Mở Docker** mở được Docker Desktop, trạng thái tự chuyển khi Docker sẵn sàng.
+- [ ] Docker tắt → nút **Khởi động Docker** bật được engine (không hiện cửa sổ), trạng thái tự chuyển khi Docker sẵn sàng.
 - [ ] Manager dừng → **Khởi động** chạy `docker compose up -d`, log hiện đúng, xong thì **Mở Manager** sáng.
-- [ ] Manager đang chạy sẵn khi mở app → vào thẳng Manager.
+- [x] Manager đang chạy sẵn khi mở app → vào thẳng Manager.
 - [ ] Dừng stack từ menu (có xác nhận) → app quay về màn hình khởi động.
 - [ ] Link domain site mở trong trình duyệt; **Ghi hosts** gọi được helper.
-- [ ] Mở app từ Finder (không qua terminal) vẫn tìm thấy `docker`.
-- [ ] Trang Manager gọi `window.__TAURI__` / `invoke` → bị từ chối.
+- [x] Mở app với PATH tối thiểu (như khi mở từ Finder) vẫn tìm thấy `docker`.
+- [x] Trang Manager gọi `invoke` → bị từ chối (`not allowed`).
 - [ ] Đóng cửa sổ → app còn trên thanh menu; **Thoát** → container vẫn chạy.
