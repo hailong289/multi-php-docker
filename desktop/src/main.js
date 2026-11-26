@@ -12,7 +12,7 @@ let firstStatus = true
 const ACTION_LABEL = { up: 'Khởi động', build: 'Build', stop: 'Dừng stack' }
 
 function setRow(prefix, tone, text) {
-  $(`${prefix}-dot`).className = `dot ${tone}`
+  $(`${prefix}-step`).dataset.state = tone
   $(`${prefix}-text`).textContent = text
 }
 
@@ -26,15 +26,15 @@ function render() {
   const busy = !!running || s.busy
   if (!s.docker_found) setRow('docker', 'bad', 'Chưa cài Docker')
   else if (s.docker_running) setRow('docker', 'ok', 'Đang chạy')
-  else setRow('docker', dockerStarting ? 'wait' : 'bad', dockerStarting ? 'Đang khởi động… (có thể mất ~30 giây)' : 'Đang tắt')
+  else setRow('docker', dockerStarting ? 'wait' : 'off', dockerStarting ? 'Đang khởi động… (có thể mất ~30 giây)' : 'Đang tắt')
   $('docker-download').hidden = s.docker_found
   $('docker-open').hidden = !s.docker_found || s.docker_running
   $('docker-open').disabled = dockerStarting
 
   if (s.manager === 'manager') setRow('manager', 'ok', 'Sẵn sàng')
   else if (s.manager === 'other') setRow('manager', 'bad', 'Cổng 8080 đang bị chương trình khác dùng')
-  else if (running === 'up' || running === 'build') setRow('manager', 'wait', 'Đang khởi động…')
-  else setRow('manager', 'off', 'Chưa chạy')
+  else if (running === 'up' || running === 'build') setRow('manager', 'wait', running === 'build' ? 'Đang build image…' : 'Đang khởi động…')
+  else setRow('manager', 'off', s.docker_running ? 'Chưa chạy' : 'Chưa chạy · cần Docker trước')
   const canStart = s.docker_running && s.manager === 'closed'
   $('up-btn').hidden = !canStart
   $('build-btn').hidden = !canStart
@@ -42,6 +42,8 @@ function render() {
   $('build-btn').disabled = busy
   $('change-dir').disabled = busy
   $('open-btn').disabled = s.manager !== 'manager'
+  $('open-hint').textContent =
+    s.manager === 'manager' ? '' : s.docker_running ? 'Khởi động Manager để mở.' : 'Bật Docker, rồi khởi động Manager.'
 }
 
 async function refresh() {

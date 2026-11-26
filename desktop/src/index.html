@@ -8,12 +8,15 @@
   </head>
   <body>
     <main class="launcher">
-      <header>
-        <h1>Multi PHP</h1>
-        <p class="lead">Môi trường PHP chạy bằng Docker. Bật những gì cần rồi mở Manager.</p>
+      <header class="brand">
+        <img src="icon.svg" alt="" width="56" height="56" />
+        <div>
+          <h1>Multi PHP</h1>
+          <p>Môi trường PHP chạy bằng Docker</p>
+        </div>
       </header>
 
-      <section id="pick" class="card" hidden>
+      <section id="pick" class="pick" hidden>
         <h2>Chọn thư mục dự án</h2>
         <p>Thư mục chứa <code>docker-compose.yml</code> của Multi PHP, ví dụ <code>~/web</code>.</p>
         <p id="pick-error" class="error" hidden></p>
@@ -21,39 +24,44 @@
       </section>
 
       <section id="main" hidden>
-        <ul class="card checks">
-          <li>
-            <span id="docker-dot" class="dot"></span>
-            <span class="name">Docker</span>
-            <span id="docker-text" class="state"></span>
-            <span class="actions">
-              <a id="docker-download" class="button" href="https://www.docker.com/products/docker-desktop/" hidden>Tải Docker Desktop</a>
-              <button id="docker-open" type="button" hidden>Khởi động Docker</button>
+        <ol class="steps">
+          <li id="docker-step" class="step" data-state="off">
+            <span class="node" aria-hidden="true"><span class="num">1</span></span>
+            <div class="step-body">
+              <span class="step-name">Docker</span>
+              <span id="docker-text" class="step-state"></span>
+            </div>
+            <span class="step-actions">
+              <a id="docker-download" class="btn" href="https://www.docker.com/products/docker-desktop/" hidden>Tải Docker Desktop</a>
+              <button id="docker-open" class="btn" type="button" hidden>Khởi động Docker</button>
             </span>
           </li>
-          <li>
-            <span id="manager-dot" class="dot"></span>
-            <span class="name">Manager</span>
-            <span id="manager-text" class="state"></span>
-            <span class="actions">
-              <button id="up-btn" type="button" hidden>Khởi động</button>
-              <button id="build-btn" type="button" hidden title="docker compose build, rồi khởi động">Build lại</button>
+          <li id="manager-step" class="step" data-state="off">
+            <span class="node" aria-hidden="true"><span class="num">2</span></span>
+            <div class="step-body">
+              <span class="step-name">Manager</span>
+              <span id="manager-text" class="step-state"></span>
+            </div>
+            <span class="step-actions">
+              <button id="build-btn" class="btn ghost" type="button" hidden title="docker compose build, rồi khởi động">Build lại</button>
+              <button id="up-btn" class="btn" type="button" hidden>Khởi động</button>
             </span>
           </li>
-        </ul>
+        </ol>
+
+        <button id="open-btn" class="primary open" type="button" disabled>Mở Manager</button>
+        <p id="open-hint" class="open-hint"></p>
 
         <div id="log-wrap" class="log-wrap" hidden>
           <pre id="log" class="log" aria-live="polite"></pre>
           <p id="log-result" class="log-result"></p>
         </div>
 
-        <div class="footer">
-          <p class="dir">
-            Thư mục: <code id="dir"></code>
-            <button id="change-dir" class="link" type="button">Đổi…</button>
-          </p>
-          <button id="open-btn" class="primary" type="button" disabled>Mở Manager</button>
-        </div>
+        <footer class="dir">
+          <span>Thư mục</span>
+          <code id="dir"></code>
+          <button id="change-dir" class="link" type="button">Đổi</button>
+        </footer>
       </section>
     </main>
     <script src="main.js"></script>

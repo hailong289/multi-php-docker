@@ -155,6 +155,15 @@ fn open_manager(app: AppHandle) {
 
 // ---------- app ----------
 
+const OPEN_BLANK_LINKS: &str = r#"
+document.addEventListener('click', (event) => {
+  const link = event.target instanceof Element && event.target.closest('a[href][target]');
+  if (!link || event.defaultPrevented || ['', '_self', '_parent', '_top'].includes(link.target)) return;
+  event.preventDefault();
+  window.open(link.href, '_blank');
+}, true);
+"#;
+
 fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let opener = app.clone();
     let opener_new = app.clone();
@@ -171,6 +180,9 @@ fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
             let _ = opener.opener().open_url(url.as_str(), None::<&str>);
             false
         })
+        // WKWebView drops clicks on links that open another window (site links, multi-php-hosts:); route them
+        // through window.open, which reaches on_new_window below.
+        .initialization_script(OPEN_BLANK_LINKS)
         .on_new_window(move |url, _features| {
             let _ = opener_new.opener().open_url(url.as_str(), None::<&str>);
             tauri::webview::NewWindowResponse::Deny

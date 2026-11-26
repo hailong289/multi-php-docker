@@ -1,39 +1,44 @@
-/* Same palette as the Manager (server/manager/frontend/src/styles.css). */
+/* Brand: the PHP purple of the app icon. */
 :root {
-  color-scheme: dark;
-  --bg: #09111f;
-  --panel: #111c2e;
-  --line: #263752;
-  --input-line: #30425f;
-  --text: #e8eef8;
-  --muted: #9dafc8;
-  --primary: #1677d2;
-  --primary-line: #268bea;
-  --button-bg: #172842;
-  --button-line: #365273;
-  --ok: #3fb68b;
-  --bad: #e5626f;
-  --wait: #e0a43c;
-  --log-bg: #0b1220;
-  --log-fg: #e2e8f0;
+  color-scheme: light;
+  --bg: #f5f5fa;
+  --glow: rgba(136, 146, 191, 0.28);
+  --surface: #ffffff;
+  --line: #dcdfee;
+  --text: #1c1f33;
+  --muted: #646a86;
+  --brand: #4f5b93;
+  --brand-strong: #3e4877;
+  --brand-soft: #e6e8f5;
+  --ok: #1f8a5f;
+  --ok-soft: #dcf3e8;
+  --bad: #c23446;
+  --bad-soft: #fbe3e6;
+  --wait: #b7791f;
+  --wait-soft: #fbefd9;
+  --log-bg: #1c1f33;
+  --log-fg: #e4e6f2;
 }
 
-@media (prefers-color-scheme: light) {
+@media (prefers-color-scheme: dark) {
   :root {
-    color-scheme: light;
-    --bg: #f4f7fb;
-    --panel: #ffffff;
-    --line: #d5dfec;
-    --input-line: #b7c5d8;
-    --text: #172033;
-    --muted: #5d6e85;
-    --primary: #0969da;
-    --primary-line: #075fca;
-    --button-bg: #f2f6fc;
-    --button-line: #b7c5d8;
-    --ok: #1f8a5f;
-    --bad: #c23446;
-    --wait: #b7791f;
+    color-scheme: dark;
+    --bg: #12131c;
+    --glow: rgba(136, 146, 191, 0.2);
+    --surface: #1b1d2a;
+    --line: #2d3044;
+    --text: #eceef7;
+    --muted: #9a9fba;
+    --brand: #8892bf;
+    --brand-strong: #a3abd3;
+    --brand-soft: #262a40;
+    --ok: #4cc08f;
+    --ok-soft: #173327;
+    --bad: #ef6b7b;
+    --bad-soft: #3a1d24;
+    --wait: #e7b25a;
+    --wait-soft: #3a2e17;
+    --log-bg: #0c0d14;
   }
 }
 
@@ -41,178 +46,265 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
-  background: var(--bg);
+  background: radial-gradient(900px 520px at 0% 0%, var(--glow), transparent 70%), var(--bg);
   color: var(--text);
   font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .launcher {
-  max-width: 640px;
+  max-width: 560px;
   margin: 0 auto;
-  padding: 56px 24px 32px;
+  padding: 72px 24px 40px;
+}
+
+/* ---------- brand ---------- */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 48px;
+}
+
+.brand img {
+  filter: drop-shadow(0 6px 14px rgba(79, 91, 147, 0.35));
 }
 
 h1 {
   margin: 0;
-  font-size: 28px;
-  letter-spacing: -0.01em;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
-h2 {
-  margin: 0 0 6px;
-  font-size: 17px;
-}
-
-.lead,
-.card p,
-.dir {
+.brand p {
   margin: 4px 0 0;
   color: var(--muted);
 }
 
-header {
-  margin-bottom: 28px;
-}
-
 code {
-  font-size: 13px;
-  color: var(--text);
+  font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.card {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  padding: 18px;
-}
+/* ---------- steps: 1 Docker → 2 Manager ---------- */
 
-#pick button {
-  margin-top: 14px;
-}
-
-.checks {
+.steps {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.checks li {
+.step {
+  --tone: var(--muted);
+  --tone-soft: var(--brand-soft);
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 60px;
-  padding: 10px 18px;
+  gap: 16px;
+  padding: 14px 0;
 }
 
-.checks li + li {
-  border-top: 1px solid var(--line);
+.step[data-state='ok'] {
+  --tone: var(--ok);
+  --tone-soft: var(--ok-soft);
 }
 
-.dot {
+.step[data-state='bad'] {
+  --tone: var(--bad);
+  --tone-soft: var(--bad-soft);
+}
+
+.step[data-state='wait'] {
+  --tone: var(--wait);
+  --tone-soft: var(--wait-soft);
+}
+
+/* The connector between the two nodes turns green once Docker is up. */
+.step + .step::before {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: -14px;
+  height: 28px;
+  border-left: 2px dashed var(--line);
+}
+
+.step[data-state='ok'] + .step::before {
+  border-left: 2px solid var(--ok);
+}
+
+.node {
+  position: relative;
+  z-index: 1;
+  display: grid;
   flex: none;
-  width: 10px;
-  height: 10px;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--tone);
   border-radius: 50%;
-  background: var(--input-line);
+  background: var(--tone-soft);
+  color: var(--tone);
+  font-weight: 700;
+  transition: border-color 0.25s, background-color 0.25s, color 0.25s;
 }
 
-.dot.ok {
-  background: var(--ok);
+.step[data-state='ok'] .num {
+  font-size: 0;
 }
 
-.dot.bad {
-  background: var(--bad);
+.step[data-state='ok'] .num::after {
+  content: '✓';
+  font-size: 18px;
 }
 
-.dot.wait {
-  background: var(--wait);
-  animation: pulse 1.2s ease-in-out infinite;
+.step[data-state='wait'] .node {
+  animation: pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes pulse {
   50% {
-    opacity: 0.35;
+    box-shadow: 0 0 0 7px var(--tone-soft);
   }
 }
 
-.name {
-  flex: 0 0 80px;
-  font-weight: 600;
+.step-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.state {
-  flex: 1;
+.step-name {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.step-state {
   color: var(--muted);
   font-size: 14px;
 }
 
-.actions {
+.step[data-state='bad'] .step-state {
+  color: var(--bad);
+}
+
+.step-actions {
   display: flex;
   gap: 8px;
 }
 
+/* ---------- buttons ---------- */
+
 button,
-.button {
+.btn {
   appearance: none;
-  border: 1px solid var(--button-line);
-  border-radius: 8px;
-  background: var(--button-bg);
-  color: var(--text);
-  padding: 7px 14px;
   font: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  border: 1px solid var(--brand);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--brand-strong);
+  padding: 7px 16px;
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
-  cursor: pointer;
   white-space: nowrap;
+  transition: background-color 0.15s;
 }
 
-button:hover:not(:disabled),
-.button:hover {
-  border-color: var(--primary-line);
+.btn:hover:not(:disabled) {
+  background: var(--brand-soft);
 }
 
-button:focus-visible,
-.button:focus-visible {
-  outline: 2px solid var(--primary-line);
-  outline-offset: 2px;
+.btn.ghost {
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.primary {
+  border: 0;
+  border-radius: 12px;
+  background: var(--brand);
+  color: #fff;
+  padding: 11px 22px;
+  font-size: 15px;
+  font-weight: 650;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+@media (prefers-color-scheme: dark) {
+  .primary {
+    color: #12131c;
+  }
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+
+.open {
+  display: block;
+  width: 100%;
+  margin-top: 32px;
+  padding: 14px 22px;
+  font-size: 16px;
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
 }
 
-button.primary {
-  border-color: var(--primary-line);
-  background: var(--primary);
-  color: #fff;
-  padding: 9px 20px;
+button:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
 }
 
 button.link {
   border: 0;
   background: none;
-  padding: 0 4px;
-  color: var(--primary-line);
-  font-weight: 500;
+  padding: 0;
+  color: var(--brand-strong);
+  font-size: 13px;
+  font-weight: 600;
 }
 
+.open-hint {
+  min-height: 1.5em;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- log ---------- */
+
 .log-wrap {
-  margin-top: 16px;
+  margin-top: 24px;
 }
 
 .log {
   margin: 0;
-  max-height: 260px;
+  max-height: 240px;
   overflow: auto;
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--log-bg);
   color: var(--log-fg);
-  padding: 12px 14px;
-  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 14px 16px;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -231,22 +323,66 @@ button.link {
   color: var(--bad);
 }
 
-.footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 24px;
-}
+/* ---------- footer / first run ---------- */
 
 .dir {
-  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
   font-size: 13px;
+}
+
+.dir code {
+  min-width: 0;
   overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.pick {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.pick h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.pick p {
+  margin: 0 0 4px;
+  color: var(--muted);
+}
+
+.pick .primary {
+  margin-top: 16px;
+}
+
+@media (max-width: 520px) {
+  .step {
+    flex-wrap: wrap;
+  }
+
+  .step-actions {
+    width: 100%;
+    padding-left: 56px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot.wait {
+  .step[data-state='wait'] .node {
     animation: none;
+  }
+
+  .node,
+  .btn,
+  .primary {
+    transition: none;
   }
 }
