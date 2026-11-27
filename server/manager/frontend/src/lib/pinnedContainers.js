@@ -1,5 +1,5 @@
 export const PIN_STORAGE_KEY = 'manager-pinned-containers'
-export const PIN_KINDS = ['nginx', 'infra', 'php', 'compose']
+export const PIN_KINDS = ['nginx', 'infra', 'php', 'compose', 'supervisor']
 
 export function pinKey(kind, id) {
   return `${kind}:${id}`

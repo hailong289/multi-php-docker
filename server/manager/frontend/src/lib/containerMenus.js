@@ -249,6 +249,27 @@ export function buildPhpMenuItems(service, { t, router, mgr }) {
   ]
 }
 
+export function buildSupervisorMenuItems(service, { t, router, mgr }) {
+  const { supervisorActionEnabled, supervisorAction, isPending, data } = mgr
+  const phpService = data.supervisor_services?.targets?.[service]?.php_service
+  return [
+    ...['create', 'start', 'stop', 'restart'].map((action) => ({
+      id: action,
+      label: t(`supervisor.${action}`),
+      primary: action === 'create',
+      disabled: !supervisorActionEnabled(service, action),
+      loading: isPending('supervisor', { service, action }),
+      run: () => supervisorAction(service, action),
+    })),
+    {
+      id: 'open',
+      label: t('php_controller.supervisor'),
+      hidden: !phpService,
+      run: () => router.push({ name: 'php-version-supervisor', params: { service: phpService } }),
+    },
+  ]
+}
+
 export function buildNginxMenuItems({ t, nginx }) {
   const { enabled, pending, run } = nginx
   return [

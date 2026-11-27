@@ -77,10 +77,10 @@ const navItems = computed(() => [
     active: route.name === 'domains',
   },
   {
-    label: t('nav.nginx'),
+    label: t('nav.web_server'),
     route: '/nginx',
     tour: 'nav-nginx',
-    active: route.name === 'nginx',
+    active: route.name === 'nginx' || route.name === 'apache',
   },
   {
     label: t('nav.php_controller'),

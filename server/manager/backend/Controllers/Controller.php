@@ -16,6 +16,7 @@ use Manager\Models\PhpRuntime;
 use Manager\Models\PhpVersionCatalog;
 use Manager\Models\SslCertificates;
 use Manager\Models\SupervisorRuntime;
+use Manager\Support\HostPorts;
 use Manager\Support\Config;
 use Manager\Support\Csrf;
 
@@ -37,6 +38,11 @@ abstract class Controller
             'php_versions' => PhpVersionCatalog::forApi(),
             'profiles' => $env->requiredProfiles($servers),
             'apply_command' => $env->applyCommand($servers),
+            // Sites with WEB_SERVER=apache are served on these host ports instead of Nginx's.
+            'apache_ports' => [
+                'http_port' => HostPorts::read('apache')['http'],
+                'https_port' => HostPorts::read('apache')['https'],
+            ],
         ];
     }
 

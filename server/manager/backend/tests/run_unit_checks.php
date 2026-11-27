@@ -852,6 +852,22 @@ $vKeep = $envSsl->validate([
 assert_true($vKeep['server']['SSL_ENABLED'] === true, 'omitted ssl_enabled preserves previous');
 assert_true(($vKeep['server']['SSL_MODE'] ?? '') === 'generated', 'omitted mode preserves generated');
 
+// WEB_SERVER: nginx is the default and not stored; apache is kept when omitted; anything else is rejected.
+$webBase = [
+    'app_name' => 'app-one',
+    'domain_name' => 'app-one.test',
+    'server_path' => '/var/www/source/app-one/public',
+    'php_version' => 'php-8.5',
+];
+assert_true(!isset($envSsl->validate($webBase, [])['server']['WEB_SERVER']), 'web server defaults to nginx');
+$vApache = $envSsl->validate($webBase + ['web_server' => 'Apache'], []);
+assert_true($vApache['errors'] === [] && ($vApache['server']['WEB_SERVER'] ?? '') === 'apache', 'web server apache');
+$vApacheKeep = $envSsl->validate($webBase, ['SERVER_NAME1' => $vApache['server']], 'SERVER_NAME1');
+assert_true(($vApacheKeep['server']['WEB_SERVER'] ?? '') === 'apache', 'omitted web_server keeps apache');
+assert_true(!isset($envSsl->validate($webBase + ['web_server' => 'nginx'], ['SERVER_NAME1' => $vApache['server']], 'SERVER_NAME1')['server']['WEB_SERVER']), 'web_server nginx clears apache');
+assert_true(isset($envSsl->validate($webBase + ['web_server' => 'iis'], [])['errors']['web_server']), 'unknown web server rejected');
+assert_true(in_array('apache', $envSsl->requiredProfiles([$vApache['server']]), true), 'apache site needs apache profile');
+
 // Remote environments (user-defined names): URL shape, names, target, omitted fields keep previous values.
 $remoteBase = [
     'app_name' => 'app-one',
@@ -1280,6 +1296,16 @@ try {
     assert_true(false, 'host ports require every key');
 } catch (HttpException $e) {
     assert_true($e->errorKey() === 'ports.invalid', 'host ports require every key');
+}
+// Nginx and Apache may share 80/443 (only one runs then); other services still conflict with them.
+HostPorts::save('nginx', ['http' => 80, 'https' => 443], $envFile);
+HostPorts::save('apache', ['http' => 80, 'https' => 443], $envFile);
+assert_true(HostPorts::read('apache', $envFile) === ['http' => 80, 'https' => 443], 'apache may share ports with nginx');
+try {
+    HostPorts::save('mailpit', ['smtp' => 1025, 'web' => 80], $envFile);
+    assert_true(false, 'web server port conflicts with other services');
+} catch (HttpException $e) {
+    assert_true($e->errorKey() === 'ports.conflict', 'web server port conflicts with other services');
 }
 $repoComposeDir = $repoRoot . '/compose';
 foreach (array_keys(HostPorts::MAP) as $portService) {

@@ -56,6 +56,7 @@ const data = reactive({
   php_controllers: { targets: {}, statuses: {} },
   infra_services: { targets: {}, statuses: {}, compose_files: [] },
   supervisor_services: { targets: {}, statuses: {} },
+  apache_ports: { http_port: 8081, https_port: 8443 },
 })
 
 watch(() => data.infra_services?.targets, setInfraHostPorts, { immediate: true })
@@ -65,6 +66,7 @@ const form = reactive({
   domain_name: '',
   server_path: `${SOURCE_PREFIX}/`,
   php_version: 'php-8.5',
+  web_server: 'nginx',
   enabled: true,
   ssl_enabled: false,
   ssl_certificate: '',
@@ -185,6 +187,7 @@ export function useManager() {
         source: 'server',
         app_name: server.APP_NAME || '',
         domain_name: domainName,
+        server,
         hosts_state: data.hosts_status
           ? states[domainName] || 'missing'
           : 'unknown',
@@ -235,9 +238,10 @@ export function useManager() {
     return t(key, params)
   }
 
-  /** Site URL including the nginx host port when it is not the scheme default. */
-  function siteUrl(domain, secure = false) {
-    const port = Number(secure ? data.nginx_management?.https_port : data.nginx_management?.http_port)
+  /** Site URL including the host port of the site's web server (Nginx or Apache) when it is not the scheme default. */
+  function siteUrl(domain, secure = false, server = null) {
+    const ports = server?.WEB_SERVER === 'apache' ? data.apache_ports : data.nginx_management
+    const port = Number(secure ? ports?.https_port : ports?.http_port)
     const fallback = secure ? 443 : 80
     const suffix = port && port !== fallback ? `:${port}` : ''
     return `${secure ? 'https' : 'http'}://${domain}${suffix}`
@@ -300,6 +304,7 @@ export function useManager() {
         if (payload.php_versions) data.php_versions = payload.php_versions
         if (payload.profiles !== undefined) data.profiles = payload.profiles
         if (payload.apply_command !== undefined) data.apply_command = payload.apply_command || ''
+        if (payload.apache_ports) data.apache_ports = payload.apache_ports
         break
       case 'nginx':
         if (payload.nginx_status !== undefined) data.nginx_status = payload.nginx_status
@@ -445,6 +450,7 @@ export function useManager() {
     form.domain_name = ''
     form.server_path = `${SOURCE_PREFIX}/`
     form.php_version = 'php-8.5'
+    form.web_server = 'nginx'
     form.enabled = true
     form.ssl_enabled = false
     form.ssl_certificate = ''
@@ -470,6 +476,7 @@ export function useManager() {
     form.domain_name = server.DOMAIN_NAME || ''
     form.server_path = server.SERVER_PATH || ''
     form.php_version = versionFromContainer(server.CONTAINER_PHP_VERSION || '')
+    form.web_server = server.WEB_SERVER === 'apache' ? 'apache' : 'nginx'
     form.enabled = isServerEnabled(server)
     form.ssl_enabled = server.ssl_enabled === true || server.SSL_ENABLED === true
     form.ssl_certificate = ''
@@ -567,6 +574,7 @@ export function useManager() {
         domain_name: form.domain_name,
         server_path: form.server_path,
         php_version: form.php_version,
+        web_server: form.web_server,
         enabled: form.enabled,
         ssl_enabled: !!form.ssl_enabled,
       }
@@ -603,6 +611,7 @@ export function useManager() {
         domain_name: form.domain_name,
         server_path: form.server_path,
         php_version: form.php_version,
+        web_server: form.web_server,
         enabled: form.enabled,
         ssl_enabled: !!form.ssl_enabled,
         framework: preset,

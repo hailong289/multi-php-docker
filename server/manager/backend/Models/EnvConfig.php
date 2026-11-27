@@ -240,6 +240,18 @@ final class EnvConfig
         } else {
             $rawLogPath = (string) ($previous['LOG_PATH'] ?? '');
         }
+        // nginx serves PHP itself; apache: nginx proxies the site to apache_container (.htaccess). Omitted input keeps the previous value.
+        $webServerProvided = array_key_exists('web_server', $input) || array_key_exists('WEB_SERVER', $input);
+        $webServer = strtolower(trim((string) ($webServerProvided
+            ? ($input['web_server'] ?? $input['WEB_SERVER'] ?? '')
+            : ($previous['WEB_SERVER'] ?? ''))));
+        if ($webServer === '') {
+            $webServer = 'nginx';
+        }
+        if (!in_array($webServer, ['nginx', 'apache'], true)) {
+            $errors['web_server'] = ['key' => 'validation.web_server'];
+        }
+
         $logPath = SourceLogs::normalizeRelative($rawLogPath);
         if ($logPath === null) {
             $errors['log_path'] = ['key' => 'validation.log_path'];
@@ -315,6 +327,9 @@ final class EnvConfig
         if ($target !== '') {
             $server['TARGET'] = $target;
         }
+        if ($webServer === 'apache') {
+            $server['WEB_SERVER'] = 'apache';
+        }
 
         return [
             'errors' => $errors,
@@ -341,6 +356,9 @@ final class EnvConfig
             $profile = PhpVersionCatalog::versions()[$version]['profile'] ?? null;
             if ($profile !== null) {
                 $profiles[$profile] = true;
+            }
+            if (($server['WEB_SERVER'] ?? '') === 'apache') {
+                $profiles['apache'] = true;
             }
         }
         $result = array_keys($profiles);

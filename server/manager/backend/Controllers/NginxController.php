@@ -6,6 +6,7 @@ namespace Manager\Controllers;
 
 use Manager\Http\Request;
 use Manager\Http\Response;
+use Manager\Models\ApacheConfig;
 use Manager\Models\NginxReload;
 use Manager\Models\NginxManagement;
 use Manager\Models\NginxTemplates;
@@ -140,6 +141,8 @@ final class NginxController extends Controller
     public function reload(Request $request, array $params = []): Response
     {
         (new NginxReload())->request();
+        // Site edits may move a site to Apache; it regenerates its vhosts from env.json on this trigger.
+        (new ApacheConfig())->requestReload();
 
         return Response::json([
             'message_key' => 'reload.requested',

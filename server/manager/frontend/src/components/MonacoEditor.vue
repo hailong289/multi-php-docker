@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ensureMonacoEnvironment, monacoThemeFromDocument, registerManagerMonacoThemes } from '../lib/monaco'
 
 const props = defineProps({
@@ -12,7 +13,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'ready'])
 
+const { t } = useI18n()
 const host = ref(null)
+const expanded = ref(false)
 let editor = null
 let monaco = null
 let themeObserver = null
@@ -97,9 +100,23 @@ watch(
   { deep: true },
 )
 
+function onExpandedKey(event) {
+  if (event.key === 'Escape') expanded.value = false
+}
+
+watch(expanded, (value) => {
+  document.body.style.overflow = value ? 'hidden' : ''
+  if (value) window.addEventListener('keydown', onExpandedKey)
+  else window.removeEventListener('keydown', onExpandedKey)
+  editor?.focus()
+})
+
 onMounted(mountEditor)
 
 onBeforeUnmount(() => {
+  if (expanded.value) expanded.value = false
+  window.removeEventListener('keydown', onExpandedKey)
+  document.body.style.overflow = ''
   themeObserver?.disconnect()
   themeObserver = null
   editor?.dispose()
@@ -114,10 +131,21 @@ defineExpose({
 </script>
 
 <template>
-  <div
-    ref="host"
-    class="monaco-editor-host"
-    :style="{ minHeight }"
-    :aria-readonly="readOnly ? 'true' : undefined"
-  ></div>
+  <div class="monaco-editor-wrap" :class="{ 'is-expanded': expanded }">
+    <div
+      ref="host"
+      class="monaco-editor-host"
+      :style="expanded ? null : { minHeight }"
+      :aria-readonly="readOnly ? 'true' : undefined"
+    ></div>
+    <button
+      type="button"
+      class="monaco-editor-expand"
+      :aria-label="expanded ? t('editor.collapse') : t('editor.expand')"
+      :title="expanded ? t('editor.collapse') : t('editor.expand')"
+      @click="expanded = !expanded"
+    >
+      <i :class="expanded ? 'pi pi-window-minimize' : 'pi pi-window-maximize'" aria-hidden="true"></i>
+    </button>
+  </div>
 </template>

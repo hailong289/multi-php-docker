@@ -2589,6 +2589,51 @@ select:focus:not([class*='p-']) {
   box-shadow: var(--p-card-shadow, none);
 }
 
+.monaco-editor-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.monaco-editor-expand {
+  position: absolute;
+  top: 6px;
+  right: 20px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--p-content-border-color, var(--line, rgba(148, 163, 184, 0.28)));
+  border-radius: 8px;
+  background: var(--p-content-background, var(--panel-strong));
+  color: var(--p-text-muted-color, inherit);
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.monaco-editor-expand:hover,
+.monaco-editor-expand:focus-visible {
+  opacity: 1;
+}
+
+.monaco-editor-wrap.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  padding: 12px 16px 16px;
+  background: var(--panel);
+}
+
+.monaco-editor-wrap.is-expanded .monaco-editor-host {
+  height: 100%;
+  min-height: 0;
+}
+
+.monaco-editor-wrap.is-expanded .monaco-editor-expand {
+  top: 18px;
+  right: 36px;
+}
+
 .monaco-editor-host .monaco-editor,
 .monaco-editor-host .monaco-editor-background,
 .monaco-editor-host .margin {
@@ -4805,4 +4850,74 @@ select:focus:not([class*='p-']) {
   .env-route {
     transition: none;
   }
+}
+
+/* Web server: Nginx / Apache switch shared by both pages. */
+.web-server-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: 0.6rem;
+  padding: 3px;
+  border: 1px solid var(--p-content-border-color, var(--line, rgba(148, 163, 184, 0.28)));
+  border-radius: 999px;
+}
+
+.web-server-switch-item {
+  padding: 0.2rem 0.85rem;
+  border-radius: 999px;
+  color: var(--p-text-muted-color, inherit);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.web-server-switch-item.is-active {
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color, #fff);
+}
+
+.web-server-switch-item:focus-visible {
+  outline: 2px solid var(--p-primary-color);
+  outline-offset: 2px;
+}
+
+.apache-page h3 {
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+}
+
+.apache-site-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.apache-site-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.apache-vhost + .apache-vhost {
+  margin-top: 1rem;
+}
+
+.apache-ports {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.apache-ports label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.apache-port-input {
+  width: 7rem;
 }

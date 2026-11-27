@@ -18,6 +18,7 @@ import { confirmDialog } from '../lib/confirm'
 import { confirmPublishedPorts } from '../lib/healthPorts'
 import { useTabActive } from '../lib/routeTabs'
 import PinButton from '../components/PinButton.vue'
+import WebServerSwitch from '../components/WebServerSwitch.vue'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
@@ -484,6 +485,7 @@ onUnmounted(() => {
   <section class="panel nginx-page" data-tour="nginx-panel">
     <div class="panel-heading nginx-heading">
       <div>
+        <WebServerSwitch />
         <h2>{{ t('nginx.title') }}</h2>
         <p>{{ t('nginx.subtitle') }}</p>
       </div>

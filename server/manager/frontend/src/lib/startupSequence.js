@@ -1,6 +1,6 @@
 export const STARTUP_SEQUENCE_KEY = 'manager-startup-sequence'
 
-const KINDS = new Set(['nginx', 'php', 'infra', 'compose'])
+const KINDS = new Set(['nginx', 'php', 'infra', 'compose', 'supervisor'])
 
 export function sequenceKey(kind, id) {
   return `${kind}:${kind === 'nginx' ? 'nginx' : id}`

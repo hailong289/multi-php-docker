@@ -15,6 +15,7 @@ final class HostPorts
     /** service => [key => [env var, default port]] */
     public const MAP = [
         'nginx' => ['http' => ['NGINX_HTTP_PORT', 80], 'https' => ['NGINX_HTTPS_PORT', 443]],
+        'apache' => ['http' => ['APACHE_HTTP_PORT', 8081], 'https' => ['APACHE_HTTPS_PORT', 8443]],
         'mysql' => ['main' => ['MYSQL_HOST_PORT', 3306]],
         'postgres' => ['main' => ['POSTGRES_HOST_PORT', 5432]],
         'redis' => ['main' => ['REDIS_HOST_PORT', 6379]],
@@ -26,6 +27,9 @@ final class HostPorts
 
     /** Published by manager_container (docker-compose.yml). */
     private const RESERVED = [8080 => 'manager'];
+
+    /** Either web server may be used alone on 80/443, so these two may share ports (only one can run then). */
+    private const MAY_SHARE = ['nginx' => 'apache', 'apache' => 'nginx'];
 
     /** @return array<string, int> key => port */
     public static function read(string $service, ?string $envPath = null): array
@@ -69,7 +73,7 @@ final class HostPorts
         }
         $taken = self::RESERVED;
         foreach (array_keys(self::MAP) as $other) {
-            if ($other === $service) {
+            if ($other === $service || (self::MAY_SHARE[$service] ?? null) === $other) {
                 continue;
             }
             foreach (self::read($other, $envPath) as $port) {

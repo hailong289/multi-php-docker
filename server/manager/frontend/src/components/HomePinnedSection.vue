@@ -19,6 +19,7 @@ import {
   buildInfraMenuItems,
   buildNginxMenuItems,
   buildPhpMenuItems,
+  buildSupervisorMenuItems,
 } from '../lib/containerMenus'
 
 const { t } = useI18n()
@@ -30,6 +31,7 @@ const {
   infraServiceState,
   phpServiceState,
   composeFileState,
+  supervisorServiceState,
   showToast,
   translateApiError,
 } = mgr
@@ -251,6 +253,18 @@ const rows = computed(() =>
         container: target?.container,
       }
     }
+    if (pin.kind === 'supervisor') {
+      const target = data.supervisor_services?.targets?.[pin.id]
+      return {
+        key,
+        kind: 'supervisor',
+        id: pin.id,
+        available: !!target,
+        label: target?.label || pin.id,
+        state: target ? supervisorServiceState(pin.id) : 'not_created',
+        container: target?.container,
+      }
+    }
     const item = (data.infra_services?.compose_files || []).find((file) => file.name === pin.id)
     const svc = item?.compose_services?.[0]
     return {
@@ -281,6 +295,7 @@ function menuItems(row) {
   }
   if (row.kind === 'infra') return buildInfraMenuItems(row.id, menuCtx.value)
   if (row.kind === 'php') return buildPhpMenuItems(row.id, menuCtx.value)
+  if (row.kind === 'supervisor') return buildSupervisorMenuItems(row.id, menuCtx.value)
   return buildComposeMenuItems(row.item, menuCtx.value)
 }
 

@@ -21,6 +21,9 @@ const {
   composeFileState,
   composeYamlActionEnabled,
   composeYamlAction,
+  supervisorServiceState,
+  supervisorActionEnabled,
+  supervisorAction,
   showToast,
   translateApiError,
 } = useManager()
@@ -74,6 +77,17 @@ function catalogEntry(kind, id) {
       available: !!target,
       label: target?.label || id,
       state: target ? infraServiceState(id) : 'not_created',
+    }
+  }
+  if (kind === 'supervisor') {
+    const target = data.supervisor_services?.targets?.[id]
+    return {
+      key: sequenceKey('supervisor', id),
+      kind: 'supervisor',
+      id,
+      available: !!target,
+      label: target?.label || id,
+      state: target ? supervisorServiceState(id) : 'not_created',
     }
   }
   const item = composeItem(id)
@@ -170,6 +184,7 @@ function canRun(entry, mode) {
   if (entry.kind === 'nginx') return nginxEnabled(mode)
   if (entry.kind === 'php') return phpActionEnabled(entry.id, mode)
   if (entry.kind === 'infra') return infraActionEnabled(entry.id, mode)
+  if (entry.kind === 'supervisor') return supervisorActionEnabled(entry.id, mode)
   const item = composeItem(entry.id)
   return !!(item && composeYamlActionEnabled(item, mode))
 }
@@ -208,6 +223,10 @@ async function runOne(entry, mode) {
   }
   if (entry.kind === 'infra') {
     await infraAction(entry.id, mode)
+    return
+  }
+  if (entry.kind === 'supervisor') {
+    await supervisorAction(entry.id, mode)
     return
   }
   const item = composeItem(entry.id)

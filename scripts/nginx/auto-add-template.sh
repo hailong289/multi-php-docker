@@ -6,6 +6,7 @@
 # - Xóa template của app không còn trong env / đã ENABLED=false.
 # - Thêm listen 443 khi SSL_ENABLED và đủ cert/key trong $SSL_DIR.
 # - TARGET=<tên>: proxy cả site tới REMOTES[<tên>] (dev, staging, ...) thay vì PHP local.
+# - WEB_SERVER=apache: site do container Apache phục vụ (scripts/apache), nginx bỏ qua.
 
 JSON_FILE="${ENV_JSON_FILE:-/var/environment/env.json}"
 
@@ -228,6 +229,10 @@ render_template() {
 for key in $keys; do
     if ! is_enabled "$key"; then
         echo "Bỏ qua $key (ENABLED=false)"
+        continue
+    fi
+    if [ "$(jq -r --arg key "$key" '(.[$key].WEB_SERVER // "") | tostring | ascii_downcase' "$JSON_FILE")" = "apache" ]; then
+        echo "Bỏ qua $key (WEB_SERVER=apache, do Apache phục vụ)"
         continue
     fi
 

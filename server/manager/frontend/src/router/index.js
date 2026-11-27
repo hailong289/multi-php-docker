@@ -8,6 +8,7 @@ import PhpVersionCatalogView from '../views/PhpVersionCatalogView.vue'
 import PhpVersionDetailView from '../views/PhpVersionDetailView.vue'
 import PhpRunView from '../views/PhpRunView.vue'
 import NginxView from '../views/NginxView.vue'
+import ApacheView from '../views/ApacheView.vue'
 import ServicesView from '../views/ServicesView.vue'
 import ComposeYamlView from '../views/ComposeYamlView.vue'
 import PhpComposeYamlView from '../views/PhpComposeYamlView.vue'
@@ -59,6 +60,12 @@ const router = createRouter({
       name: 'nginx',
       component: NginxView,
       meta: { titleKey: 'nav.nginx', manager: true },
+    },
+    {
+      path: '/apache',
+      name: 'apache',
+      component: ApacheView,
+      meta: { titleKey: 'apache.title', manager: true },
     },
     {
       path: '/php-controller',

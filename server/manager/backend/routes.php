@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Manager\Controllers\ApacheController;
 use Manager\Controllers\BootstrapController;
 use Manager\Controllers\DockerConnectionController;
 use Manager\Controllers\CronController;
@@ -43,6 +44,10 @@ return [
     ['POST', '/nginx/actions/(?P<action>start|stop|restart|create)', [NginxController::class, 'action']],
     ['PUT', '/nginx/ports', [NginxController::class, 'ports']],
     ['POST', '/nginx/reload', [NginxController::class, 'reload']],
+    ['GET', '/apache', [ApacheController::class, 'show']],
+    ['PUT', '/apache/config', [ApacheController::class, 'saveConfig']],
+    ['POST', '/apache/reload', [ApacheController::class, 'reload']],
+    ['PUT', '/apache/ports', [ApacheController::class, 'ports']],
     ['GET', '/hosts/status', [HostsController::class, 'status']],
     ['POST', '/hosts/sync', [HostsController::class, 'sync']],
     ['GET', '/dns', [DnsController::class, 'show']],

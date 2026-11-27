@@ -30,6 +30,7 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import { apiGet, apiRelativeUrl, apiSend } from '../api'
 import { useManager } from '../composables/useManager'
 import { confirmDialog } from '../lib/confirm'
+import PinButton from '../components/PinButton.vue'
 
 const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'))
 
@@ -526,6 +527,7 @@ onUnmounted(stopFollow)
                   <div v-if="showCreate()" class="create-hint">{{ t('supervisor.create_hint') }}</div>
                 </div>
                 <div class="controller-actions" data-tour="supervisor-actions">
+                  <PinButton v-if="supervisorService" kind="supervisor" :id="supervisorService" />
                   <Button
                     v-if="showCreate()"
                     type="button"

@@ -119,6 +119,11 @@ const hostExample = computed(() => {
   return String(container).replace(/^\/var\/www\//, '') || '—'
 })
 
+const webServerOptions = [
+  { label: 'Nginx', value: 'nginx' },
+  { label: 'Apache', value: 'apache' },
+]
+
 const phpOptions = computed(() =>
   Object.entries(data.php_versions || {}).map(([id, cfg]) => ({
     label: versionLabel(cfg),
@@ -528,10 +533,10 @@ onUnmounted(() => window.clearInterval(healthTimer))
             </div>
             <a
               v-if="item.server.DOMAIN_NAME"
-              :href="siteUrl(item.server.DOMAIN_NAME)"
+              :href="siteUrl(item.server.DOMAIN_NAME, false, item.server)"
               target="_blank"
               rel="noreferrer"
-            >{{ siteUrl(item.server.DOMAIN_NAME) }}</a>
+            >{{ siteUrl(item.server.DOMAIN_NAME, false, item.server) }}</a>
             <span v-else class="home-site-muted">{{ t('servers.no_domain') }}</span>
             <div v-if="item.server.DOMAIN_NAME && targetOptions(item.server).length" class="home-site-target">
               <SelectButton
@@ -552,8 +557,8 @@ onUnmounted(() => window.clearInterval(healthTimer))
               </span>
             </div>
             <div v-if="item.server.DOMAIN_NAME && isSslEnabled(item.server)" class="home-site-ssl">
-              <a :href="siteUrl(item.server.DOMAIN_NAME, true)" target="_blank" rel="noreferrer">
-                {{ siteUrl(item.server.DOMAIN_NAME, true) }}
+              <a :href="siteUrl(item.server.DOMAIN_NAME, true, item.server)" target="_blank" rel="noreferrer">
+                {{ siteUrl(item.server.DOMAIN_NAME, true, item.server) }}
               </a>
               <Button
                 type="button"
@@ -684,6 +689,17 @@ onUnmounted(() => window.clearInterval(healthTimer))
           fluid
         />
         <small v-if="fieldErrors.php_version" class="p-error">{{ fieldErrors.php_version }}</small>
+
+        <label>{{ t('form.web_server') }}</label>
+        <Select
+          v-model="form.web_server"
+          :options="webServerOptions"
+          option-label="label"
+          option-value="value"
+          fluid
+        />
+        <p class="form-path-hint">{{ t(form.web_server === 'apache' ? 'form.web_server_apache_hint' : 'form.web_server_nginx_hint') }}</p>
+        <small v-if="fieldErrors.web_server" class="p-error">{{ fieldErrors.web_server }}</small>
 
         <label>{{ t('form.framework') }}</label>
         <Select
