@@ -128,7 +128,7 @@ final class SupervisorController extends Controller
         $content = (string) ($body['content'] ?? '');
         $configs = new SupervisorConfigs();
         $saved = $configs->write($service, $name, $content, true);
-        $reload = $this->maybeRestart($service);
+        $reload = $this->maybeRestart($service, ($body['restart'] ?? true) !== false);
 
         return Response::json([
             'config' => $saved,
@@ -148,7 +148,7 @@ final class SupervisorController extends Controller
         $content = (string) ($body['content'] ?? '');
         $configs = new SupervisorConfigs();
         $saved = $configs->write($service, $name, $content, false);
-        $reload = $this->maybeRestart($service);
+        $reload = $this->maybeRestart($service, ($body['restart'] ?? true) !== false);
 
         return Response::json([
             'config' => $saved,
@@ -179,13 +179,13 @@ final class SupervisorController extends Controller
     /**
      * @return array{request_id: ?string, supervisor_services: array{targets: array, statuses: array}}
      */
-    private function maybeRestart(string $service): array
+    private function maybeRestart(string $service, bool $restart = true): array
     {
         $runtime = new SupervisorRuntime();
         $statuses = $runtime->statuses();
         $state = $statuses[$service]['state'] ?? 'not_created';
         $requestId = null;
-        if (in_array($state, ['running', 'stopped'], true)) {
+        if ($restart && in_array($state, ['running', 'stopped'], true)) {
             // Saving the config remains successful when the controller daemon is unavailable.
             try {
                 $requestId = $runtime->request($service, 'restart');

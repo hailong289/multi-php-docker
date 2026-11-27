@@ -78,6 +78,8 @@ services:
       - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
       - ./server:/var/www
+      # Source can live outside the project (desktop app sets SOURCE_DIR in .env).
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
       - ./scripts:/var/scripts
       - ./nginx/examples:/etc/nginx/examples
       - ./nginx/welcome:/usr/share/nginx/welcome:ro
@@ -128,6 +130,8 @@ services:
       - ./php-controller-runtime:/runtime/php-controller
       - ./nginx/logs:/nginx-logs
       - .:/var/host-project
+      # Manager reads sources under the project path; keep that view when SOURCE_DIR points elsewhere.
+      - ${SOURCE_DIR:-./server/source}:/var/host-project/server/source
       - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
     environment:

@@ -240,12 +240,13 @@ async function saveConf() {
       result = await apiSend('POST', `/api/supervisor/${supervisorService.value}/configs`, {
         name,
         content: confDraft.value,
+        restart: false,
       })
     } else {
       result = await apiSend(
         'PUT',
         `/api/supervisor/${supervisorService.value}/configs/${encodeURIComponent(name)}`,
-        { content: confDraft.value },
+        { content: confDraft.value, restart: false },
       )
     }
     if (result.supervisor_services) data.supervisor_services = result.supervisor_services
@@ -643,6 +644,15 @@ onUnmounted(stopFollow)
                           :loading="pending === 'conf-save'"
                           :disabled="!!pending || confLoading || (!creating && !confDirty)"
                           @click="saveConf"
+                        />
+                        <Button
+                          type="button"
+                          severity="secondary"
+                          outlined
+                          :label="pending === 'restart' ? t('action.working') : t('supervisor.restart')"
+                          :loading="pending === 'restart'"
+                          :disabled="!enabled('restart')"
+                          @click="runAction('restart')"
                         />
                         <Button
                           v-if="!creating && selectedConf"

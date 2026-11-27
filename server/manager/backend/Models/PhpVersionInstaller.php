@@ -191,7 +191,7 @@ services:
     image: {$image}
     container_name: {$container}
     volumes:
-      - ./server/{$source}:/var/www/{$source}
+      - \${SOURCE_DIR:-./server/{$source}}:/var/www/{$source}
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./runtime/composer:/opt/composer:ro
@@ -216,7 +216,7 @@ services:
     image: {$image}
     container_name: {$supervisorContainer}
     volumes:
-      - ./server/{$source}:/var/www/{$source}
+      - \${SOURCE_DIR:-./server/{$source}}:/var/www/{$source}
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./{$iniRel}:/usr/local/etc/php/php.ini
@@ -281,6 +281,10 @@ YAML;
     private function ensureSourceDir(string $service): void
     {
         $dir = $this->root() . '/server/' . PhpVersionId::sourceDirName($service);
+        // An existing dir may be the user's own source (SOURCE_DIR mount): leave it untouched.
+        if (is_dir($dir)) {
+            return;
+        }
         $this->mkdir($dir);
         $gitkeep = $dir . '/.gitkeep';
         if (!is_file($gitkeep)) {

@@ -7,7 +7,7 @@ services:
     image: multi-php-local:php-8.5
     container_name: php8.5_container
     volumes:
-      - ./server/source:/var/www/source
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./runtime/composer:/opt/composer:ro
@@ -32,7 +32,7 @@ services:
     image: multi-php-local:php-8.5
     container_name: supervisor85_container
     volumes:
-      - ./server/source:/var/www/source
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./configs/php8.5/php.ini:/usr/local/etc/php/php.ini

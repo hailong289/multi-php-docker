@@ -12,15 +12,25 @@
         <img src="icon.svg" alt="" width="56" height="56" />
         <div>
           <h1>Multi PHP</h1>
-          <p>Môi trường PHP chạy bằng Docker</p>
+          <p data-i18n="tagline"></p>
+        </div>
+        <div class="langs" role="group" aria-label="Language">
+          <button type="button" data-lang="vi">VI</button>
+          <button type="button" data-lang="en">EN</button>
         </div>
       </header>
 
+      <div id="update" class="update" hidden>
+        <span id="update-text"></span>
+        <button id="update-btn" class="btn" type="button" data-i18n="update.install"></button>
+      </div>
+
       <section id="pick" class="pick" hidden>
-        <h2>Chọn thư mục dự án</h2>
-        <p>Thư mục chứa <code>docker-compose.yml</code> của Multi PHP, ví dụ <code>~/web</code>.</p>
+        <h2 data-i18n="pick.title"></h2>
+        <p data-i18n-html="pick.desc"></p>
         <p id="pick-error" class="error" hidden></p>
-        <button id="pick-btn" class="primary" type="button">Chọn thư mục…</button>
+        <button id="pick-btn" class="primary" type="button" data-i18n="pick.button"></button>
+        <button id="pick-repo" class="link pick-repo" type="button" data-i18n="pick.repo"></button>
       </section>
 
       <section id="main" hidden>
@@ -32,8 +42,8 @@
               <span id="docker-text" class="step-state"></span>
             </div>
             <span class="step-actions">
-              <a id="docker-download" class="btn" href="https://www.docker.com/products/docker-desktop/" hidden>Tải Docker Desktop</a>
-              <button id="docker-open" class="btn" type="button" hidden>Khởi động Docker</button>
+              <a id="docker-download" class="btn" href="https://www.docker.com/products/docker-desktop/" hidden data-i18n="docker.download"></a>
+              <button id="docker-open" class="btn" type="button" hidden data-i18n="docker.start"></button>
             </span>
           </li>
           <li id="manager-step" class="step" data-state="off">
@@ -43,27 +53,45 @@
               <span id="manager-text" class="step-state"></span>
             </div>
             <span class="step-actions">
-              <button id="build-btn" class="btn ghost" type="button" hidden title="docker compose build, rồi khởi động">Build lại</button>
-              <button id="up-btn" class="btn" type="button" hidden>Khởi động</button>
+              <button id="build-btn" class="btn ghost" type="button" hidden data-i18n="manager.build" data-i18n-title="manager.build_title"></button>
+              <button id="up-btn" class="btn" type="button" hidden data-i18n="manager.start"></button>
+              <button id="restart-btn" class="btn ghost" type="button" hidden data-i18n="manager.restart"></button>
             </span>
           </li>
         </ol>
 
-        <button id="open-btn" class="primary open" type="button" disabled>Mở Manager</button>
+        <button id="open-btn" class="primary open" type="button" disabled data-i18n="open"></button>
         <p id="open-hint" class="open-hint"></p>
 
+        <section id="services" class="services" hidden>
+          <h2 data-i18n="services.title"></h2>
+          <ul id="service-list"></ul>
+        </section>
+
         <div id="log-wrap" class="log-wrap" hidden>
+          <div id="follow-bar" class="follow-bar" hidden>
+            <span id="follow-text"></span>
+            <button id="follow-stop" class="link" type="button" data-i18n="services.stop_follow"></button>
+          </div>
           <pre id="log" class="log" aria-live="polite"></pre>
           <p id="log-result" class="log-result"></p>
         </div>
 
         <footer class="dir">
-          <span>Thư mục</span>
+          <span id="dir-label"></span>
           <code id="dir"></code>
-          <button id="change-dir" class="link" type="button">Đổi</button>
+          <button id="change-dir" class="link" type="button" data-i18n="dir.change"></button>
+          <button id="switch-mode" class="link" type="button"></button>
+          <span class="tools">
+            <button id="open-folder" class="link" type="button" data-i18n="tools.folder"></button>
+            <button id="open-code" class="link" type="button" data-i18n="tools.code"></button>
+            <button id="prune-btn" class="link" type="button" data-i18n="tools.prune"></button>
+          </span>
+          <label class="autostart"><input id="autostart" type="checkbox" /> <span data-i18n="autostart.label"></span></label>
         </footer>
       </section>
     </main>
+    <script src="i18n.js"></script>
     <script src="main.js"></script>
   </body>
 </html>

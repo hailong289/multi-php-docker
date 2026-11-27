@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "identifier": "vn.posapp.multiphp",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../src",
+    "beforeBuildCommand": "node scripts/copy-stack.mjs",
+    "beforeDevCommand": "node scripts/copy-stack.mjs"
   },
   "app": {
     "withGlobalTauri": true,
@@ -37,6 +39,21 @@
           "Vietnamese",
           "English"
         ]
+      }
+    },
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "stack/": "stack/"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMzRURDQjIxMjJENUY3NUUKUldSZTk5VWlJY3Z0dzJIQXdQaFVtYU00TUQyNjU4Z2dlNHB2d1FCNTFBRjFnQVVOVjFUUHJhaTMK",
+      "endpoints": [
+        "https://github.com/hailong289/multi-php-docker/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

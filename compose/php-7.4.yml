@@ -7,7 +7,7 @@ services:
       dockerfile: ./docker_files/php7.Dockerfile
     container_name: php7.4_container
     volumes:
-      - ./server/source:/var/www/source
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./runtime/composer:/opt/composer:ro
@@ -31,7 +31,7 @@ services:
     image: multi-php-local:php-7.4
     container_name: supervisor74_container
     volumes:
-      - ./server/source:/var/www/source
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./configs/php7.4/php.ini:/usr/local/etc/php/php.ini

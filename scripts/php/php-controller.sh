@@ -203,6 +203,7 @@ prepare_compose_tmp() {
         sed \
             -e "s|- \\./|- ${repl}/|g" \
             -e "s|- \\.:|- ${repl}:|g" \
+            -e "s|:-\\./|:-${repl}/|g" \
             -e 's|project_directory:[[:space:]]*\.[[:space:]]*$|project_directory: /project|' \
             -e 's|context:[[:space:]]*\.[[:space:]]*$|context: /project|' \
             -e 's|context:[[:space:]]*"\."[[:space:]]*$|context: /project|' \

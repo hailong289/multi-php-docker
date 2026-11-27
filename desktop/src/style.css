@@ -46,6 +46,11 @@
   box-sizing: border-box;
 }
 
+/* Classes that set display (.update, …) would otherwise override the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   min-height: 100%;
@@ -76,6 +81,37 @@ body {
 
 .brand img {
   filter: drop-shadow(0 6px 14px rgba(79, 91, 147, 0.35));
+}
+
+.langs {
+  display: flex;
+  align-self: flex-start;
+  gap: 2px;
+  margin-left: auto;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.langs button {
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.langs button[aria-pressed='true'] {
+  background: var(--brand);
+  color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .langs button[aria-pressed='true'] {
+    color: #12131c;
+  }
 }
 
 h1 {
@@ -290,6 +326,120 @@ button.link {
   text-align: center;
 }
 
+/* ---------- update banner ---------- */
+
+.update {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: -24px 0 32px;
+  padding: 12px 16px;
+  border: 1px solid var(--brand);
+  border-radius: 12px;
+  background: var(--brand-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ---------- containers ---------- */
+
+.services {
+  margin-top: 32px;
+}
+
+.services h2 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.services ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.services li {
+  --tone: var(--wait);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
+.services li + li {
+  border-top: 1px solid var(--line);
+}
+
+.services li[data-state='ok'] {
+  --tone: var(--ok);
+}
+
+.services li[data-state='bad'] {
+  --tone: var(--bad);
+}
+
+.services li::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.svc-name {
+  font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.svc-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.svc-usage {
+  color: var(--muted);
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+}
+
+.svc-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.follow-bar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tools {
+  display: flex;
+  flex-basis: 100%;
+  gap: 16px;
+}
+
+.services li[data-state='bad'] .svc-status {
+  color: var(--bad);
+}
+
 /* ---------- log ---------- */
 
 .log-wrap {
@@ -343,6 +493,19 @@ button.link {
   color: var(--text);
 }
 
+.autostart {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.autostart input {
+  margin: 0;
+  accent-color: var(--brand);
+}
+
 .pick {
   padding: 24px;
   border: 1px solid var(--line);
@@ -362,6 +525,22 @@ button.link {
 
 .pick .primary {
   margin-top: 16px;
+}
+
+.pick-repo {
+  display: block;
+  margin-top: 14px;
+}
+
+@media (max-width: 620px) {
+  .services li {
+    flex-wrap: wrap;
+  }
+
+  .svc-actions {
+    width: 100%;
+    padding-left: 18px;
+  }
 }
 
 @media (max-width: 520px) {

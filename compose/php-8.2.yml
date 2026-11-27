@@ -7,7 +7,7 @@ services:
       dockerfile: ./docker_files/php8.2.Dockerfile
     container_name: php8.2_container
     volumes:
-      - ./server/source:/var/www/source
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./runtime/composer:/opt/composer:ro
@@ -32,7 +32,7 @@ services:
     image: multi-php-local:php-8.2
     container_name: supervisor82_container
     volumes:
-      - ./server/source:/var/www/source
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
       - ./scripts:/var/scripts
       - ./nginx/ssl:/var/nginx-ssl:ro
       - ./configs/php8/php.ini:/usr/local/etc/php/php.ini

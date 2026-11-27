@@ -1741,6 +1741,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./scripts:/scripts:ro
       - .:/var/host-project
+      - ${SOURCE_DIR:-./server/source}:/var/www/source
 YAML);
 $rewriteScript = <<<'SH'
 host_project="$1"
@@ -1749,6 +1750,7 @@ repl=$(printf '%s' "$host_project" | sed -e 's/[\\&|]/\\&/g')
 sed \
   -e "s|- \\./|- ${repl}/|g" \
   -e "s|- \\.:|- ${repl}:|g" \
+  -e "s|:-\\./|:-${repl}/|g" \
   "$in_file"
 SH;
 $rewriteOut = [];
@@ -1759,6 +1761,7 @@ assert_true($rewriteCode === 0, 'compose path rewrite runs');
 assert_true(str_contains($rewritten, '- /opt/project/scripts:/scripts:ro'), 'compose rewrite keeps list marker for ./');
 assert_true(str_contains($rewritten, '- /opt/project:/var/host-project'), 'compose rewrite keeps list marker for .:');
 assert_true(!preg_match('/^ {6}\//m', $rewritten), 'compose rewrite does not drop the dash');
+assert_true(str_contains($rewritten, '- ${SOURCE_DIR:-/opt/project/server/source}:/var/www/source'), 'compose rewrite makes the SOURCE_DIR fallback a host path');
 $rewriteSources = array_values(array_unique(array_filter([
     dirname(__DIR__, 4) . '/scripts/php/php-controller.sh',
     '/var/host-project/scripts/php/php-controller.sh',
@@ -1768,6 +1771,7 @@ foreach ($rewriteSources as $rewriteSource) {
     $rewriteBody = (string) file_get_contents($rewriteSource);
     assert_true(str_contains($rewriteBody, 's|- \\\\./|- ${repl}/|'), basename($rewriteSource) . ' rewrite keeps list marker');
     assert_true(!str_contains($rewriteBody, 's|- \\\\./|${repl}/|'), basename($rewriteSource) . ' rewrite does not drop the dash');
+    assert_true(str_contains($rewriteBody, 's|:-\\\\./|:-${repl}/|'), basename($rewriteSource) . ' rewrite covers ${VAR:-./…} fallbacks');
 }
 
 $statsBody = [
