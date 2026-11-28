@@ -12,7 +12,3 @@ services:
       - "${MAILPIT_WEB_HOST_PORT:-8025}:8025"
     networks:
       - app-network
-
-networks:
-  app-network:
-    driver: bridge

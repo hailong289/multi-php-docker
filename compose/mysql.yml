@@ -22,7 +22,3 @@ volumes:
   mysql-data:
     driver: local
     name: mysql-data
-
-networks:
-  app-network:
-    driver: bridge

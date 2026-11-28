@@ -17,7 +17,3 @@ volumes:
   redis-data:
     driver: local
     name: redis-data
-
-networks:
-  app-network:
-    driver: bridge

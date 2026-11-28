@@ -23,7 +23,3 @@ volumes:
   minio-data:
     driver: local
     name: minio-data
-
-networks:
-  app-network:
-    driver: bridge

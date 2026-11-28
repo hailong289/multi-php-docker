@@ -893,6 +893,28 @@ Optional: run `scripts\hosts\ensure_hosts_env.ps1` once so `.env` gets `HOST_PRO
 
 If Docker once bind-mounted a missing `env.json` as a **directory**, delete that folder, then let `env-init` recreate the file (`docker compose up -d` or copy from `env.example.json`). Compose mounts the project directory (not the file alone) to avoid this.
 
+### Error `networks.app-network conflicts with imported resource`
+
+**Cause:** The root `docker-compose.yml` defines `networks.app-network` with custom `ipam` settings (fixed subnet `10.213.53.0/24` for internal DNS), while included fragments (`compose/*.yml`) redeclared `networks: app-network: driver: bridge` without `ipam`. Docker Compose v2 detects conflicting definitions between the parent project and imported resources.
+
+**Fix:** Define `networks: app-network:` only once in the root `docker-compose.yml`. In `compose/*.yml` fragments, services only need to join the network via `networks: - app-network`; do not redeclare the top-level `networks:` block at the end of fragment files.
+
+### Error `no configured subnet or ip-range contain the IP address 10.213.53.53`
+
+**Cause:** The network `multi-php-docker-serve_app-network` already existed on the Docker daemon with an auto-assigned subnet (e.g. `172.19.0.0/16`) from before the project introduced fixed subnet routing. Docker daemon does not automatically update the subnet of an existing network, so assigning the static IP `10.213.53.53` fails.
+
+**Fix:** Remove the outdated network so Docker Compose recreates it with the configured `10.213.53.0/24` subnet:
+
+```bash
+docker network rm multi-php-docker-serve_app-network
+```
+
+Then bring the stack back up:
+
+```bash
+docker compose up -d
+```
+
 ## Repository structure
 
 ```text

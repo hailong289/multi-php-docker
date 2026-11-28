@@ -254,10 +254,6 @@ services:
       - \${APP_DNS_IP:-10.213.53.53}
     networks:
       - app-network
-
-networks:
-  app-network:
-    driver: bridge
 YAML;
         $this->writeFile($this->root() . '/compose/' . $service . '.yml', $content);
     }

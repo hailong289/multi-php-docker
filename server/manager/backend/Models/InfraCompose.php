@@ -211,10 +211,6 @@ services:
     container_name: example_container
     networks:
       - app-network
-
-networks:
-  app-network:
-    driver: bridge
 YAML;
     }
 
@@ -234,10 +230,6 @@ services:
     container_name: {$stem}_container
     networks:
       - app-network
-
-networks:
-  app-network:
-    driver: bridge
 YAML;
     }
 

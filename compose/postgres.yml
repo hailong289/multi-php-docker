@@ -24,7 +24,3 @@ volumes:
   postgres-data:
     driver: local
     name: postgres-data
-
-networks:
-  app-network:
-    driver: bridge

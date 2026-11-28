@@ -109,9 +109,6 @@ services:
       - ./configs/coredns:/etc/coredns:ro
       - ./runtime/coredns:/etc/coredns-records:ro
     restart: unless-stopped
-    # Upstream for names Docker does not know (set from Manager > DNS); empty keeps the host's resolver.
-    dns:
-      - ${DNS_UPSTREAM:-}
     networks:
       app-network:
         # PHP services list this IP under `dns:`; Docker only accepts an IP there.

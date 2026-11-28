@@ -775,6 +775,28 @@ Tùy chọn: chạy một lần `scripts\hosts\ensure_hosts_env.ps1` để `.env
 
 Nếu Docker từng bind-mount khi chưa có `env.json` và tạo ra **thư mục** cùng tên, hãy xóa thư mục đó rồi để `env-init` tạo lại file (`docker compose up -d` hoặc copy từ `env.example.json`). Compose mount cả thư mục project (không mount riêng file) để tránh lỗi này.
 
+### Lỗi `networks.app-network conflicts with imported resource`
+
+**Nguyên nhân:** Root `docker-compose.yml` khai báo `networks.app-network` kèm cấu hình `ipam` (subnet cố định `10.213.53.0/24` cho DNS), trong khi các file fragment được include (`compose/*.yml`) lại khai báo `networks: app-network: driver: bridge` không có `ipam`. Docker Compose v2 phát hiện xung đột cấu hình giữa file root và các file con import.
+
+**Cách xử lý:** Chỉ khai báo `networks: app-network:` duy nhất tại root `docker-compose.yml`. Trong các file `compose/*.yml`, dịch vụ chỉ cần chỉ định `networks: - app-network` mà không cần khai báo lại block `networks:` ở cuối file.
+
+### Lỗi `no configured subnet or ip-range contain the IP address 10.213.53.53`
+
+**Nguyên nhân:** Network `multi-php-docker-serve_app-network` đã được tạo trên Docker daemon từ trước khi project cấu hình subnet cố định `10.213.53.0/24` (Docker daemon lúc trước tự cấp dải mạng mặc định như `172.19.0.0/16`). Khi khởi động container `dns` với IP tĩnh `10.213.53.53`, Docker daemon không tự động cập nhật dải subnet của network đã tồn tại nên báo lỗi IP nằm ngoài subnet.
+
+**Cách xử lý:** Xóa network cũ để Docker Compose tự động tạo lại network mới với subnet `10.213.53.0/24`:
+
+```bash
+docker network rm multi-php-docker-serve_app-network
+```
+
+Sau đó chạy lại lệnh khởi động:
+
+```bash
+docker compose up -d
+```
+
 ## Cấu trúc repository
 
 ```text

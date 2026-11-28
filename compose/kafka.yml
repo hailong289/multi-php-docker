@@ -33,7 +33,3 @@ volumes:
   kafka-data:
     driver: local
     name: kafka-data
-
-networks:
-  app-network:
-    driver: bridge
